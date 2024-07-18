@@ -57,6 +57,12 @@ pub fn run_fltk_backend(main: fn() -> u16, receiver: Receiver<DialogMessageReque
 
 fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     let mut wind = Window::new(0, 0, 400, 300, data.title.as_str()).center_screen();
+
+    wind.set_callback(move |wnd| {
+        wnd.hide();
+        insert_result(id, MessageBoxResult::WindowClosed);
+    });
+
     wind.set_color(Color::White);
 
     // Start Root column
@@ -173,8 +179,8 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     wind.end();
 
     // Before showing the window, try and compute the optimal window size.
-    let xpad = if has_icon { 70 } else { 20 };
-    let wind_size = calculate_ideal_window_size(data.message.as_str(), xpad, 100);
+    let pad_x = if has_icon { 70 } else { 20 };
+    let wind_size = calculate_ideal_window_size(data.message.as_str(), pad_x, 100);
     wind.set_size(wind_size.0, wind_size.1);
     let mut wind = wind.center_screen();
     flex_root_col.size_of_parent();
