@@ -63,8 +63,6 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
         insert_result(id, MessageBoxResult::WindowClosed);
     });
 
-    wind.set_color(Color::White);
-
     // Start Root column
     let mut flex_root_col = Flex::default().size_of_parent().column();
 
@@ -163,7 +161,6 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
             insert_result(id, MessageBoxResult::ButtonPressed(index));
         });
     }
-
 
     // End Button row
     flex_button_row.end();
