@@ -6,7 +6,7 @@ use fltk::{
     frame::Frame, group::Flex, image::SvgImage, prelude::*, window::Window,
 };
 use fltk::window::DoubleWindow;
-use crate::backends::fltk_theme::get_theme_icon_svg;
+use crate::backends::fltk_theme::{DialogSpacing, get_theme_icon_svg};
 
 use crate::model::{DialogMessageRequest, MessageBoxData, MessageBoxResult};
 use crate::state::insert_result;
@@ -14,8 +14,9 @@ use super::fltk_fonts::*;
 
 pub fn run_fltk_backend(main: fn() -> u16, receiver: Receiver<DialogMessageRequest>)
 {
-    app::App::default();
-    super::fltk_theme::apply_windows_theme();
+    let app_instance = app::App::default();
+    
+    let spacing = super::fltk_theme::apply_ubuntu_theme(&app_instance);
 
     let t = thread::spawn(move || {
         main();
@@ -43,7 +44,7 @@ pub fn run_fltk_backend(main: fn() -> u16, receiver: Receiver<DialogMessageReque
 
             match message {
                 DialogMessageRequest::ShowMessageBox(id, data) => {
-                    create_messagebox(id, data);
+                    create_messagebox(id, data, &spacing);
                 }
                 DialogMessageRequest::ExitEventLoop => {
                     app::quit();
@@ -55,7 +56,7 @@ pub fn run_fltk_backend(main: fn() -> u16, receiver: Receiver<DialogMessageReque
     }
 }
 
-fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
+fn create_messagebox(id: usize, data: MessageBoxData, spacing: &DialogSpacing) -> DoubleWindow {
     let mut wind = Window::new(0, 0, 400, 300, data.title.as_str()).center_screen();
 
     wind.set_callback(move |wnd| {
@@ -120,8 +121,8 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
 
     // Start Button row
     let mut flex_button_row = Flex::default().row();
-    flex_button_row.set_spacing(10);
-    flex_button_row.set_margin(10);
+    flex_button_row.set_spacing(spacing.button_spacing);
+    flex_button_row.set_margin(spacing.button_spacing);
 
     // Padding frame
     let _ = Frame::default();
@@ -167,7 +168,7 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
 
     // End Button background
     flex_button_background.end();
-    flex_root_col.fixed(&mut flex_button_background, 42);
+    flex_root_col.fixed(&mut flex_button_background, spacing.button_panel_height);
 
     // End Root column
     flex_root_col.end();

@@ -1,6 +1,8 @@
 use std::sync::OnceLock;
+use fltk::app::{App, fonts};
 use fltk::enums::Font;
 use font_kit::family_name::FamilyName;
+use font_kit::font;
 use font_kit::handle::Handle;
 use font_kit::properties::{Properties, Stretch, Weight};
 
@@ -37,13 +39,15 @@ pub fn get_body_size() -> i32 {
     12
 }
 
-fn try_load_font<S: font_kit::source::Source>(font_source: &S, font_families: &[FamilyName], font_properties_thin: &Properties, target: &OnceLock<String>)
+fn try_load_font<S: font_kit::source::Source>(app: &App, font_source: &S, font_families: &[FamilyName], font_properties_thin: &Properties, target: &OnceLock<String>)
 {
     if let Ok(font_handle) = font_source.select_best_match(&font_families, &font_properties_thin)
     {
         match font_handle {
             Handle::Path { path, .. } => {
-                if let Ok(font) = Font::load_font(path) {
+                if let Ok(font) = app.load_font(path) {
+                    println!("Loaded font: {:?}", &font);
+                    println!("{:?}", fonts());
                     let _ = target.set(font);
                 }
             }
@@ -51,11 +55,12 @@ fn try_load_font<S: font_kit::source::Source>(font_source: &S, font_families: &[
         }
     }
 
-    // fails if already set (fine)
-    let _ = target.set(Font::Helvetica.get_name());
+    if target.get().is_none() {
+        let _ = target.set(Font::Helvetica.get_name());
+    }
 }
 
-pub fn load_windows_fonts() {
+pub fn load_windows_fonts(app: &App) {
     let font_source = font_kit::source::SystemSource::new();
 
     let font_properties_main = Properties {
@@ -75,8 +80,33 @@ pub fn load_windows_fonts() {
         FamilyName::Title("Segoe UI".to_string()),
     ];
 
-    try_load_font(&font_source, &font_families, &font_properties_main, &MAIN_FONT_NAME);
+    try_load_font(app, &font_source, &font_families, &font_properties_main, &MAIN_FONT_NAME);
     let _ = MAIN_FONT_SIZE.set(16);
-    try_load_font(&font_source, &font_families, &font_properties_body, &BODY_FONT_NAME);
+    try_load_font(app, &font_source, &font_families, &font_properties_body, &BODY_FONT_NAME);
+    let _ = BODY_FONT_SIZE.set(12);
+}
+
+pub fn load_ubuntu_fonts(app: &App) {
+    let font_source = font_kit::source::SystemSource::new();
+
+    let font_properties_main = Properties {
+        weight: Weight::NORMAL,
+        stretch: Stretch::NORMAL,
+        style: font_kit::properties::Style::Normal,
+    };
+
+    let font_properties_body = Properties {
+        weight: Weight::NORMAL,
+        stretch: Stretch::NORMAL,
+        style: font_kit::properties::Style::Normal,
+    };
+
+    let font_families = [
+        FamilyName::Title("Ubuntu".to_string()),
+    ];
+
+    try_load_font(app, &font_source, &font_families, &font_properties_main, &MAIN_FONT_NAME);
+    let _ = MAIN_FONT_SIZE.set(16);
+    try_load_font(app, &font_source, &font_families, &font_properties_body, &BODY_FONT_NAME);
     let _ = BODY_FONT_SIZE.set(12);
 }
