@@ -14,11 +14,19 @@ pub fn get_main_instruction_font() -> Font {
     Font::Helvetica
 }
 
+pub fn get_main_instruction_size() -> i32 {
+    16
+}
+
 pub fn get_body_font() -> Font {
     if let Some(f) = BODY_FONT_NAME.get() {
         return Font::by_name(f);
     }
     Font::Helvetica
+}
+
+pub fn get_body_size() -> i32 {
+    12
 }
 
 pub fn load_fonts() {

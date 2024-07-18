@@ -49,7 +49,7 @@ pub fn run_fltk_backend(main: fn() -> u16, receiver: Receiver<DialogMessageReque
             app::quit();
             break;
         }
-        
+
         // TODO: clean up finished message box windows with window::Window::delete(hWnd);
 
         loop {
@@ -79,7 +79,7 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
 
     // Start Root column
     let mut flex_root_col = Flex::default().size_of_parent().column();
-    
+
     // Start Icon row
     let mut flex_icon_row = Flex::default().row();
     flex_icon_row.set_margin(10);
@@ -105,7 +105,7 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     // Main instruction
     let mut main_instr = Frame::default();
     main_instr.set_label(data.main_instruction.as_str());
-    main_instr.set_label_size(16);
+    main_instr.set_label_size(get_main_instruction_size());
     main_instr.set_label_font(get_main_instruction_font());
     main_instr.set_label_color(Color::from_hex(0x003399));
     main_instr.set_align(Align::Left | Align::Inside);
@@ -115,12 +115,12 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     let mut body_text = Frame::default();
     body_text.set_label(data.message.as_str());
     body_text.set_label_font(get_body_font());
-    body_text.set_label_size(12);
+    body_text.set_label_size(get_body_size());
     body_text.set_align(Align::Inside | Align::Wrap | Align::TopLeft);
 
     // End Main column
     flex_main_col.end();
-    
+
     // End Icon row
     flex_icon_row.end();
 
@@ -162,21 +162,22 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
         });
     }
 
+
     // End Button row
     flex_button_row.end();
-    
+
     // End Button background
     flex_button_background.end();
     flex_root_col.fixed(&mut flex_button_background, 42);
 
     // End Root column
     flex_root_col.end();
-    
+
     // End Window
     wind.end();
-    
+
     // Before showing the window, try and compute the optimal window size.
-    let wind_size = calculate_ideal_window_size(body_text.measure_label());
+    let wind_size = calculate_ideal_window_size(data.message.as_str());
     wind.set_size(wind_size.0, wind_size.1);
     let mut wind = wind.center_screen();
     flex_root_col.size_of_parent();
@@ -186,37 +187,32 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     wind
 }
 
-fn calculate_ideal_window_size(body_text_size: (i32, i32)) -> (i32, i32) {
-    let (text_width, text_height) = body_text_size;
+fn calculate_ideal_window_size(body_text: &str) -> (i32, i32) {
+    let (_, line_height) = draw::measure("A", true);
 
-    // Determine the window width based on the text width using linear interpolation
-    let window_width = if text_width <= 600 {
+    draw::set_font(get_body_font(), get_body_size());
+    let (initial_width, initial_height) = draw::measure(body_text, true);
+
+    let window_width = if initial_width <= 600 {
         300
-    } else if text_width >= 4000 {
+    } else if initial_width >= 4000 {
         600
     } else {
         // New linear interpolation between 300 (at 600px) and 600 (at 4000px)
-        300 + (((text_width - 600) as f32 / 3400.0) * 300.0) as i32
+        300 + (((initial_width - 600) as f32 / 3400.0) * 300.0) as i32
     };
 
-    // Adjust window width for horizontal padding
-    let effective_width = window_width - 70;
+    // Adjust window width if the initial height is very large
+    // For instance, increase width by a percentage if height exceeds a certain number of line heights
+    let height_threshold = 5 * line_height;  // Arbitrary threshold: adjust based on your UI needs
+    let extra_width = if initial_height > height_threshold {
+        (initial_height as f32 / height_threshold as f32 * 50.0).min(300.0) as i32
+    } else {
+        0
+    };
 
-    // Calculate how many lines the text will occupy
-    let num_lines = (text_width as f32 / effective_width as f32).ceil() as i32;
-
-    // Calculate the total height needed for the text
-    let text_total_height = num_lines * text_height;
-    
-    // Add at least one more text row in case of unfortunate line breaks
-    let text_total_height = text_total_height + text_height;
-
-    // Adjust the window height for vertical padding
-    let window_height = text_total_height + 100; // Assuming padding is 97 pixels total
-
-    // Ensure minimum and maximum constraints
-    let final_width = window_width.max(300).min(600);
-    let final_height = window_height.max(130);
-
-    (final_width, final_height)
+    let final_window_width = (window_width + extra_width).min(600).min(initial_width + 100).max(300);
+    let (_, wrapped_height) = draw::wrap_measure(body_text, final_window_width - 70, true);
+    let final_window_height = (wrapped_height + 100 + line_height).max(130);
+    (final_window_width, final_window_height)
 }
