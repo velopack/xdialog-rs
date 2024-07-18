@@ -178,6 +178,7 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     // Before showing the window, try and compute the optimal window size.
     let wind_size = calculate_ideal_window_size(body_text.measure_label());
     wind.set_size(wind_size.0, wind_size.1);
+    let mut wind = wind.center_screen();
     flex_root_col.size_of_parent();
 
     // Show window
@@ -189,13 +190,13 @@ fn calculate_ideal_window_size(body_text_size: (i32, i32)) -> (i32, i32) {
     let (text_width, text_height) = body_text_size;
 
     // Determine the window width based on the text width using linear interpolation
-    let window_width = if text_width < 1000 {
-        400
-    } else if text_width > 4000 {
+    let window_width = if text_width <= 600 {
+        300
+    } else if text_width >= 4000 {
         600
     } else {
-        // Linear interpolation between 400 (at 1000px) and 600 (at 4000px)
-        400 + ((text_width - 1000) / 15) as i32
+        // New linear interpolation between 300 (at 600px) and 600 (at 4000px)
+        300 + (((text_width - 600) as f32 / 3400.0) * 300.0) as i32
     };
 
     // Adjust window width for horizontal padding
@@ -214,7 +215,7 @@ fn calculate_ideal_window_size(body_text_size: (i32, i32)) -> (i32, i32) {
     let window_height = text_total_height + 100; // Assuming padding is 97 pixels total
 
     // Ensure minimum and maximum constraints
-    let final_width = window_width.max(400).min(600);
+    let final_width = window_width.max(300).min(600);
     let final_height = window_height.max(130);
 
     (final_width, final_height)
