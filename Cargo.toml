@@ -7,7 +7,6 @@ description = "A small native-ish cross platform dialogs library with zero runti
 
 [dependencies]
 fltk = { version = "1.4", features = ["fltk-bundled"] }
-fltk-theme = "0.7"
 log = "0.4"
 atomic-counter = "1.0"
 lazy_static = "1.5"

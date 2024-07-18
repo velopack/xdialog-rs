@@ -6,34 +6,16 @@ use fltk::{
     frame::Frame, group::Flex, image::SvgImage, prelude::*, window::Window,
 };
 use fltk::window::DoubleWindow;
-use fltk_theme::{ThemeType, WidgetTheme};
+use crate::backends::fltk_theme::get_theme_icon_svg;
 
 use crate::model::{DialogMessageRequest, MessageBoxData, MessageBoxResult};
 use crate::state::insert_result;
 use super::fltk_fonts::*;
 
-fn down_box_windows(x: i32, y: i32, w: i32, h: i32, c: Color) {
-    draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::from_hex(0xF0F0F0));
-    draw::begin_line();
-    draw::set_draw_color(Color::from_hex(0xDFDFDF));
-    draw::draw_line(x, y, x + w, y);
-    draw::end_line();
-}
-
 pub fn run_fltk_backend(main: fn() -> u16, receiver: Receiver<DialogMessageRequest>)
 {
-    #[cfg(windows)]
-    {
-        app::App::default();
-        let widget_theme = WidgetTheme::new(ThemeType::Metro);
-        widget_theme.apply();
-        app::set_frame_type_cb(FrameType::PlasticDownBox, down_box_windows, 0, 0, 0, 0);
-    }
-
-    #[cfg(target_os = "linux")]
-    app::App::default().with_scheme(app::Scheme::Gtk);
-
-    load_fonts();
+    app::App::default();
+    super::fltk_theme::apply_windows_theme();
 
     let t = thread::spawn(move || {
         main();
@@ -85,18 +67,22 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     flex_icon_row.set_margin(10);
 
     // Svg Icon
-    let icon_data = crate::images::IMAGE_INFO_SVG;
-    let mut icon_frame = Frame::default();
-    if let Ok(mut svg_img) = SvgImage::from_data(icon_data) {
-        let svg2 = svg_img.clone();
-        svg_img.scale(36, 36, true, true);
-        icon_frame.set_image(Some(svg_img));
-        flex_icon_row.fixed(&mut icon_frame, 36);
-        wind.set_icon(Some(svg2));
-    } else {
-        flex_icon_row.fixed(&mut icon_frame, 0);
+    let mut has_icon = true;
+    if let Some(icon_data) = get_theme_icon_svg(data.icon)
+    {
+        let mut icon_frame = Frame::default();
+        if let Ok(mut svg_img) = SvgImage::from_data(icon_data) {
+            let svg2 = svg_img.clone();
+            svg_img.scale(36, 36, true, true);
+            icon_frame.set_image(Some(svg_img));
+            flex_icon_row.fixed(&mut icon_frame, 36);
+            wind.set_icon(Some(svg2));
+            has_icon = true;
+        } else {
+            flex_icon_row.fixed(&mut icon_frame, 0);
+        }
+        icon_frame.set_align(Align::Top | Align::Center | Align::Inside);
     }
-    icon_frame.set_align(Align::Top | Align::Center | Align::Inside);
 
     // Start Main column
     let mut flex_main_col = Flex::default().column();
@@ -126,7 +112,7 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
 
     // Start Button background
     let mut flex_button_background = Flex::default().column();
-    flex_button_background.set_frame(FrameType::PlasticDownBox);
+    flex_button_background.set_frame(FrameType::ThinUpBox);
 
     // Start Button row
     let mut flex_button_row = Flex::default().row();
@@ -140,17 +126,27 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     for (index, button_text) in data.buttons.iter().enumerate() {
         let mut button = Button::default();
         button.set_label(button_text.as_str());
+        button.set_label_size(get_body_size());
+        button.set_label_font(get_body_font());
+        button.set_frame(FrameType::UpBox);
+        button.set_down_frame(FrameType::DownBox);
         let (w, _) = button.measure_label();
-        flex_button_row.fixed(&mut button, w + 40);
+        flex_button_row.fixed(&mut button, w + 46);
 
         // handle hover cursor events
         let mut wnd_btn_hover = wind.clone();
-        button.handle(move |_, event| {
+        button.handle(move |btn, event| {
             if event == Event::Enter {
                 wnd_btn_hover.set_cursor(Cursor::Hand);
+                btn.set_frame(FrameType::EngravedBox);
+                btn.set_down_frame(FrameType::DownBox);
+                btn.redraw();
             }
             if event == Event::Leave {
                 wnd_btn_hover.set_cursor(Cursor::Arrow);
+                btn.set_frame(FrameType::UpBox);
+                btn.set_down_frame(FrameType::DownBox);
+                btn.redraw();
             }
             false
         });
@@ -177,7 +173,8 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     wind.end();
 
     // Before showing the window, try and compute the optimal window size.
-    let wind_size = calculate_ideal_window_size(data.message.as_str());
+    let xpad = if has_icon { 70 } else { 20 };
+    let wind_size = calculate_ideal_window_size(data.message.as_str(), xpad, 100);
     wind.set_size(wind_size.0, wind_size.1);
     let mut wind = wind.center_screen();
     flex_root_col.size_of_parent();
@@ -187,7 +184,7 @@ fn create_messagebox(id: usize, data: MessageBoxData) -> DoubleWindow {
     wind
 }
 
-fn calculate_ideal_window_size(body_text: &str) -> (i32, i32) {
+fn calculate_ideal_window_size(body_text: &str, pad_x: i32, pad_y: i32) -> (i32, i32) {
     let (_, line_height) = draw::measure("A", true);
 
     draw::set_font(get_body_font(), get_body_size());
@@ -211,8 +208,8 @@ fn calculate_ideal_window_size(body_text: &str) -> (i32, i32) {
         0
     };
 
-    let final_window_width = (window_width + extra_width).min(600).min(initial_width + 100).max(300);
-    let (_, wrapped_height) = draw::wrap_measure(body_text, final_window_width - 70, true);
-    let final_window_height = (wrapped_height + 100 + line_height).max(130);
+    let final_window_width = (window_width + extra_width).min(600).min(initial_width + pad_y).max(300);
+    let (_, wrapped_height) = draw::wrap_measure(body_text, final_window_width - pad_x, true);
+    let final_window_height = (wrapped_height + pad_y + line_height).max(130);
     (final_window_width, final_window_height)
 }

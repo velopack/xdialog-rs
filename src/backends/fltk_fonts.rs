@@ -5,7 +5,9 @@ use font_kit::handle::Handle;
 use font_kit::properties::{Properties, Stretch, Weight};
 
 static MAIN_FONT_NAME: OnceLock<String> = OnceLock::new();
+static MAIN_FONT_SIZE: OnceLock<i32> = OnceLock::new();
 static BODY_FONT_NAME: OnceLock<String> = OnceLock::new();
+static BODY_FONT_SIZE: OnceLock<i32> = OnceLock::new();
 
 pub fn get_main_instruction_font() -> Font {
     if let Some(f) = MAIN_FONT_NAME.get() {
@@ -15,6 +17,9 @@ pub fn get_main_instruction_font() -> Font {
 }
 
 pub fn get_main_instruction_size() -> i32 {
+    if let Some(s) = MAIN_FONT_SIZE.get() {
+        return s.to_owned();
+    }
     16
 }
 
@@ -26,19 +31,40 @@ pub fn get_body_font() -> Font {
 }
 
 pub fn get_body_size() -> i32 {
+    if let Some(s) = BODY_FONT_SIZE.get() {
+        return s.to_owned();
+    }
     12
 }
 
-pub fn load_fonts() {
+fn try_load_font<S: font_kit::source::Source>(font_source: &S, font_families: &[FamilyName], font_properties_thin: &Properties, target: &OnceLock<String>)
+{
+    if let Ok(font_handle) = font_source.select_best_match(&font_families, &font_properties_thin)
+    {
+        match font_handle {
+            Handle::Path { path, .. } => {
+                if let Ok(font) = Font::load_font(path) {
+                    let _ = target.set(font);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // fails if already set (fine)
+    let _ = target.set(Font::Helvetica.get_name());
+}
+
+pub fn load_windows_fonts() {
     let font_source = font_kit::source::SystemSource::new();
 
-    let font_properties_thin = Properties {
+    let font_properties_main = Properties {
         weight: Weight::THIN,
         stretch: Stretch::NORMAL,
         style: font_kit::properties::Style::Normal,
     };
 
-    let font_properties_regular = Properties {
+    let font_properties_body = Properties {
         weight: Weight::NORMAL,
         stretch: Stretch::NORMAL,
         style: font_kit::properties::Style::Normal,
@@ -49,31 +75,8 @@ pub fn load_fonts() {
         FamilyName::Title("Segoe UI".to_string()),
     ];
 
-    if let Ok(font_handle) = font_source.select_best_match(&font_families, &font_properties_thin)
-    {
-        match font_handle {
-            Handle::Path { path, .. } => {
-                if let Ok(font) = Font::load_font(path) {
-                    let _ = MAIN_FONT_NAME.set(font);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if let Ok(font_handle) = font_source.select_best_match(&font_families, &font_properties_regular)
-    {
-        match font_handle {
-            Handle::Path { path, .. } => {
-                if let Ok(font) = Font::load_font(path) {
-                    let _ = BODY_FONT_NAME.set(font);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    // fails if already set (fine)
-    let _ = MAIN_FONT_NAME.set(Font::Helvetica.get_name());
-    let _ = BODY_FONT_NAME.set(Font::Helvetica.get_name());
+    try_load_font(&font_source, &font_families, &font_properties_main, &MAIN_FONT_NAME);
+    let _ = MAIN_FONT_SIZE.set(16);
+    try_load_font(&font_source, &font_families, &font_properties_body, &BODY_FONT_NAME);
+    let _ = BODY_FONT_SIZE.set(12);
 }

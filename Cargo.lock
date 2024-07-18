@@ -186,15 +186,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fltk-theme"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3539d27a815514b56af2afa6b8e7c6d6b9274a103239487d5a60daa6340a4868"
-dependencies = [
- "fltk",
-]
-
-[[package]]
 name = "font-kit"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -646,7 +637,6 @@ version = "0.0.1"
 dependencies = [
  "atomic-counter",
  "fltk",
- "fltk-theme",
  "font-kit",
  "lazy_static",
  "log",
