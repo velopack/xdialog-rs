@@ -2,6 +2,8 @@
 name = "xdialog"
 version = "0.0.1"
 edition = "2021"
+license = "MIT"
+description = "A small native-ish cross platform dialogs library with zero runtime dependencies."
 
 [dependencies]
 fltk = { version = "1.4", features = ["fltk-bundled"] }
