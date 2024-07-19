@@ -5,7 +5,9 @@ use fltk::{
     *, app, button::Button, enums::*,
     frame::Frame, group::Flex, image::SvgImage, prelude::*, window::Window,
 };
+use fltk::misc::Progress;
 use fltk::window::DoubleWindow;
+use crate::backends::fltk_progress::CustomProgressBar;
 
 use crate::backends::fltk_theme::{DialogSpacing, get_theme_icon_svg};
 use crate::backends::XDialogBackendImpl;
@@ -48,7 +50,7 @@ impl XDialogBackendImpl for FltkBackend {
 
                 match message {
                     DialogMessageRequest::ShowMessageBox(id, data) => {
-                        create_messagebox(id, data, &spacing);
+                        create_messagebox(id, data, &spacing, true);
                     }
                     DialogMessageRequest::ExitEventLoop => {
                         app::quit();
@@ -61,7 +63,7 @@ impl XDialogBackendImpl for FltkBackend {
     }
 }
 
-fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing) -> DoubleWindow {
+fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing, has_progress: bool) -> DoubleWindow {
     let mut wind = Window::new(0, 0, 400, 300, data.title.as_str()).center_screen();
 
     wind.set_callback(move |wnd| {
@@ -96,7 +98,7 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
 
     // Start Main column
     let mut flex_main_col = Flex::default().column();
-    // flex_main_col.set_spacing(spacing.content_margin);
+    flex_main_col.set_spacing(spacing.content_margin);
 
     // Main instruction
     let mut main_instr = Frame::default();
@@ -106,6 +108,36 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
     main_instr.set_label_color(Color::Selection);
     main_instr.set_align(Align::Left | Align::Inside | Align::Wrap);
     flex_main_col.fixed(&mut main_instr, spacing.icon_size);
+
+    if has_progress {
+        let mut flex_progress_col = Flex::default().column();
+        let mut progress = CustomProgressBar::new();
+        flex_progress_col.end();
+        // let mut progress = Progress::default();
+        // progress.set_frame(FrameType::FlatBox);
+        // progress.set_maximum(1.0);
+        // progress.set_minimum(0.0);
+        // progress.set_value(0.5);
+        // // progress.set_color(Color::from_hex(0x9A9A9A));
+        // // progress.set_selection_color(Color::from_hex(0xDB9EE5));
+        // progress.draw(move |p| {
+        //     draw::set_draw_color(Color::BackGround);
+        //     draw::draw_rectf(p.x(), p.y(), p.w(), p.h());
+        //     const pad: i32 = 4;
+        //     const pad2: i32 = 8;
+        //     draw::set_draw_color(Color::from_hex(0xA7CAED));
+        //     draw::draw_rectf(p.x() + pad, p.y(), p.w() - pad2, p.h());
+        // 
+        //     let bar_width = ((p.w() - pad2) as f64 * p.value()) as i32;
+        //     draw::set_draw_color(Color::from_hex(0x1976D2));
+        //     draw::draw_rectf(p.x() + pad, p.y(), bar_width, p.h());
+        // 
+        //     // app::add_timeout3(0.016, move |handle| {
+        //     //     asd
+        //     // });
+        // });
+        flex_main_col.fixed(&mut flex_progress_col, 5);
+    }
 
     // Body text
     let mut body_text = Frame::default();
@@ -183,8 +215,9 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
 
     // Before showing the window, try and compute the optimal window size.
     let icon_width = if has_icon { spacing.icon_size + spacing.content_margin } else { 0 };
+    let progress_height = if has_progress { 5 + spacing.content_margin } else { 0 };
     let pad_x = icon_width + (spacing.content_margin * 2);
-    let pad_y = spacing.content_margin + spacing.button_panel_height + spacing.icon_size;
+    let pad_y = (spacing.content_margin * 2) + spacing.button_panel_height + spacing.icon_size + progress_height;
 
     let wind_size = calculate_ideal_window_size(data.message.as_str(), pad_x, pad_y);
     wind.set_size(wind_size.0, wind_size.1);
@@ -193,6 +226,7 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
 
     // Show window
     wind.show();
+    // wind.set_on_top();
     wind
     
     // wind.set_on_top() - currently has bugs. https://github.com/fltk-rs/fltk-rs/issues/1573

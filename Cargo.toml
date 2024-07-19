@@ -7,8 +7,11 @@ description = "A small native-ish cross platform dialogs library with zero runti
 
 [dependencies]
 fltk = { version = "1.4", features = ["fltk-bundled"] }
+fltk-sys = { version = "1.4", features = ["fltk-bundled"] }
 log = "0.4"
 atomic-counter = "1.0"
 lazy_static = "1.5"
 font-kit = "0.14"
-dark-light = "1.1.1"
+dark-light = "1.1"
+mina = "0.1"
+paste = "1"
