@@ -9,7 +9,8 @@ pub enum XDialogTheme {
     SystemDefault = 0,
     Windows,
     Ubuntu,
-    MacOS,
+    MacOSLight,
+    MacOSDark,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

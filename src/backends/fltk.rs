@@ -19,7 +19,7 @@ pub struct FltkBackend;
 impl XDialogBackendImpl for FltkBackend {
     fn run(main: fn() -> u16, receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) -> u16 {
         let app_instance = app::App::default();
-
+        
         let spacing = super::fltk_theme::apply_theme(&app_instance, theme);
 
         let t = thread::spawn(move || {
@@ -126,8 +126,8 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
 
     // Start Button row
     let mut flex_button_row = Flex::default().row();
-    flex_button_row.set_spacing(spacing.button_spacing);
-    flex_button_row.set_margin(spacing.button_spacing);
+    flex_button_row.set_spacing(spacing.button_between_spacing);
+    flex_button_row.set_margin(spacing.button_outer_spacing);
 
     // Padding frame
     let _ = Frame::default();
@@ -194,6 +194,8 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
     // Show window
     wind.show();
     wind
+    
+    // wind.set_on_top() - currently has bugs. https://github.com/fltk-rs/fltk-rs/issues/1573
 }
 
 fn calculate_ideal_window_size(body_text: &str, pad_x: i32, pad_y: i32) -> (i32, i32) {

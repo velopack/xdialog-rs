@@ -6,31 +6,48 @@ use fltk::enums::{Color, FrameType};
 use crate::model::{XDialogIcon, XDialogTheme};
 use super::fltk_fonts::*;
 
-pub fn apply_theme(app_instance: &App, theme: XDialogTheme) -> DialogSpacing {
-    match theme {
-        XDialogTheme::SystemDefault => {
-            if cfg!(target_os = "windows") {
-                apply_windows_theme(app_instance)
-            } else {
-                apply_ubuntu_theme(app_instance)
-            }
-        }
-        XDialogTheme::Windows => apply_windows_theme(app_instance),
-        XDialogTheme::Ubuntu => apply_ubuntu_theme(app_instance),
-        XDialogTheme::MacOS => todo!("macOS theme not implemented"),
-    }
-}
-
 const WINDOWS_BUTTON_BORDER_RADIUS: i32 = 4;
 const UBUNTU_BUTTON_BORDER_RADIUS: i32 = 6;
 
 #[derive(Debug, Clone)]
 pub struct DialogSpacing {
     pub button_panel_height: i32,
-    pub button_spacing: i32,
+    pub button_between_spacing: i32,
+    pub button_outer_spacing: i32,
     pub button_x_padding: i32,
     pub icon_size: i32,
     pub content_margin: i32,
+}
+
+pub fn apply_theme(app_instance: &App, theme: XDialogTheme) -> DialogSpacing {
+    match theme {
+        XDialogTheme::SystemDefault => {
+            let mode = dark_light::detect();
+            let is_dark = mode == dark_light::Mode::Dark;
+            if cfg!(target_os = "windows") {
+                apply_windows_theme(app_instance)
+            } else if cfg!(target_os = "macos") {
+                apply_macos_theme(app_instance, is_dark)
+            } else {
+                apply_ubuntu_theme(app_instance)
+            }
+        }
+        XDialogTheme::Windows => apply_windows_theme(app_instance),
+        XDialogTheme::Ubuntu => apply_ubuntu_theme(app_instance),
+        XDialogTheme::MacOSLight => apply_macos_theme(app_instance, false),
+        XDialogTheme::MacOSDark => apply_macos_theme(app_instance, true)
+    }
+}
+
+pub fn get_theme_icon_svg(icon: XDialogIcon) -> Option<&'static str>
+{
+    match icon {
+        XDialogIcon::None => None,
+        XDialogIcon::Error => Some(crate::images::IMAGE_ERROR_SVG),
+        XDialogIcon::Warning => Some(crate::images::IMAGE_WARNING_SVG),
+        XDialogIcon::Question => Some(crate::images::IMAGE_INFO_SVG),
+        XDialogIcon::Information => Some(crate::images::IMAGE_INFO_SVG),
+    }
 }
 
 fn thin_up_box_windows(x: i32, y: i32, w: i32, h: i32, _: Color) {
@@ -72,7 +89,8 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogSpacing {
 
     DialogSpacing {
         button_panel_height: 41,
-        button_spacing: 10,
+        button_outer_spacing: 10,
+        button_between_spacing: 10,
         button_x_padding: 24,
         icon_size: 32,
         content_margin: 10,
@@ -118,20 +136,69 @@ pub fn apply_ubuntu_theme(app_instance: &App) -> DialogSpacing {
 
     DialogSpacing {
         button_panel_height: 48,
-        button_spacing: 7,
+        button_between_spacing: 7,
+        button_outer_spacing: 7,
         button_x_padding: 24,
         icon_size: 48,
         content_margin: 12,
     }
 }
 
-pub fn get_theme_icon_svg(icon: XDialogIcon) -> Option<&'static str>
-{
-    match icon {
-        XDialogIcon::None => None,
-        XDialogIcon::Error => Some(crate::images::IMAGE_ERROR_SVG),
-        XDialogIcon::Warning => Some(crate::images::IMAGE_WARNING_SVG),
-        XDialogIcon::Question => Some(crate::images::IMAGE_INFO_SVG),
-        XDialogIcon::Information => Some(crate::images::IMAGE_INFO_SVG),
+fn thin_up_box_macos(_: i32, _: i32, _: i32, _: i32, _: Color) {
+    // no-op
+}
+
+fn up_box_macos_light(x: i32, y: i32, w: i32, h: i32, _: Color) {
+    draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
+    draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0xFFFFFF));
+    draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, false, Color::from_hex(0xDCDBDA));
+    
+}
+
+fn up_box_macos_dark(x: i32, y: i32, w: i32, h: i32, _: Color) {
+    draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
+    draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0x656565));
+}
+
+fn down_box_macos(x: i32, y: i32, w: i32, h: i32, _: Color) {
+    draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
+    draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0x146DCC));
+}
+
+fn engraved_box_macos(x: i32, y: i32, w: i32, h: i32, _: Color) {
+    draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
+    draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0x2482E7));
+}
+
+pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogSpacing {
+    load_macos_fonts(app_instance);
+    app::set_visible_focus(false);
+    
+    if dark {
+        app::background(0x2A, 0x29, 0x26);
+        app::background2(0x2A, 0x29, 0x26);
+        app::foreground(0xFF, 0xFF, 0xFF);
+        app::set_color(Color::Selection, 0xFF, 0xFF, 0xFF);
+        app::set_frame_type_cb(FrameType::UpBox, up_box_macos_dark, 0, 0, 0, 0);
+        
+    } else {
+        app::background(0xEC, 0xEB, 0xEA);
+        app::background2(0xEC, 0xEB, 0xEA);
+        app::foreground(0x00, 0x00, 0x00);
+        app::set_color(Color::Selection, 0x00, 0x00, 0x00);
+        app::set_frame_type_cb(FrameType::UpBox, up_box_macos_light, 0, 0, 0, 0);
+    }
+    
+    app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_macos, 0, 0, 0, 0);
+    app::set_frame_type_cb(FrameType::DownBox, down_box_macos, 0, 0, 0, 0);
+    app::set_frame_type_cb(FrameType::EngravedBox, engraved_box_macos, 0, 0, 0, 0);
+
+    DialogSpacing {
+        button_panel_height: 54,
+        button_between_spacing: 10,
+        button_outer_spacing: 15,
+        button_x_padding: 24,
+        icon_size: 48,
+        content_margin: 15,
     }
 }
