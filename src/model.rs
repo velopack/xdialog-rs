@@ -1,6 +1,20 @@
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub enum XDialogBackend {
+    Automatic = 0,
+    Fltk,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum XDialogTheme {
+    SystemDefault = 0,
+    Windows,
+    Ubuntu,
+    MacOS,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MessageBoxIcon {
-    None,
+    None = 0,
     Error,
     Warning,
     Information,

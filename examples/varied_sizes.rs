@@ -1,6 +1,6 @@
 fn main() {
     println!("Showing OK/Cancel Dialog!");
-    xdialog::run(run)
+    xdialog::XDialogBuilder::new().run(run);
 }
 
 fn run() -> u16 {

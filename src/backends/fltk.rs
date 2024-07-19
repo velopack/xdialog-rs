@@ -6,51 +6,56 @@ use fltk::{
     frame::Frame, group::Flex, image::SvgImage, prelude::*, window::Window,
 };
 use fltk::window::DoubleWindow;
-use crate::backends::fltk_theme::{DialogSpacing, get_theme_icon_svg};
 
-use crate::model::{DialogMessageRequest, MessageBoxData, MessageBoxResult};
+use crate::backends::fltk_theme::{DialogSpacing, get_theme_icon_svg};
+use crate::backends::XDialogBackendImpl;
+use crate::model::*;
 use crate::state::insert_result;
+
 use super::fltk_fonts::*;
 
-pub fn run_fltk_backend(main: fn() -> u16, receiver: Receiver<DialogMessageRequest>)
-{
-    let app_instance = app::App::default();
+pub struct FltkBackend;
 
-    let spacing = super::fltk_theme::apply_ubuntu_theme(&app_instance);
+impl XDialogBackendImpl for FltkBackend {
+    fn run(main: fn() -> u16, receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) -> u16 {
+        let app_instance = app::App::default();
 
-    let t = thread::spawn(move || {
-        main();
-    });
+        let spacing = super::fltk_theme::apply_theme(&app_instance, theme);
 
-    loop {
-        if let Err(e) = app::wait_for(0.1) {
-            error!("xdialog event loop fatal error: {:?}", e);
-            break;
-        }
-
-        if t.is_finished() {
-            app::quit();
-            break;
-        }
-
-        // TODO: clean up finished message box windows with window::Window::delete(hWnd);
+        let t = thread::spawn(move || {
+            return main();
+        });
 
         loop {
-            // read all messages until there are no more queued
-            let message = receiver.try_recv().unwrap_or(DialogMessageRequest::None);
-            if message == DialogMessageRequest::None {
-                break;
+            if let Err(e) = app::wait_for(0.1) {
+                error!("xdialog event loop fatal error: {:?}", e);
+                return t.join().unwrap();
             }
 
-            match message {
-                DialogMessageRequest::ShowMessageBox(id, data) => {
-                    create_messagebox(id, data, &spacing);
-                }
-                DialogMessageRequest::ExitEventLoop => {
-                    app::quit();
+            if t.is_finished() {
+                app::quit();
+                return t.join().unwrap();
+            }
+
+            // TODO: clean up finished message box windows with window::Window::delete(hWnd);
+
+            loop {
+                // read all messages until there are no more queued
+                let message = receiver.try_recv().unwrap_or(DialogMessageRequest::None);
+                if message == DialogMessageRequest::None {
                     break;
                 }
-                _ => debug!("Unhandled xdialog message type: {:?}", message),
+
+                match message {
+                    DialogMessageRequest::ShowMessageBox(id, data) => {
+                        create_messagebox(id, data, &spacing);
+                    }
+                    DialogMessageRequest::ExitEventLoop => {
+                        app::quit();
+                        break;
+                    }
+                    _ => debug!("Unhandled xdialog message type: {:?}", message),
+                }
             }
         }
     }

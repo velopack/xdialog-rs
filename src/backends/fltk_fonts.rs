@@ -1,8 +1,8 @@
 use std::sync::OnceLock;
-use fltk::app::{App, fonts};
+
+use fltk::app::App;
 use fltk::enums::Font;
 use font_kit::family_name::FamilyName;
-use font_kit::font;
 use font_kit::handle::Handle;
 use font_kit::properties::{Properties, Stretch, Weight};
 

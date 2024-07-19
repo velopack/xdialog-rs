@@ -2,8 +2,24 @@ use fltk::{app, draw};
 use fltk::app::App;
 use fltk::draw::LineStyle;
 use fltk::enums::{Color, FrameType};
-use crate::model::MessageBoxIcon;
+
+use crate::model::{MessageBoxIcon, XDialogTheme};
 use super::fltk_fonts::*;
+
+pub fn apply_theme(app_instance: &App, theme: XDialogTheme) -> DialogSpacing {
+    match theme {
+        XDialogTheme::SystemDefault => {
+            if cfg!(target_os = "windows") {
+                apply_windows_theme(app_instance)
+            } else {
+                apply_ubuntu_theme(app_instance)
+            }
+        }
+        XDialogTheme::Windows => apply_windows_theme(app_instance),
+        XDialogTheme::Ubuntu => apply_ubuntu_theme(app_instance),
+        XDialogTheme::MacOS => todo!("macOS theme not implemented"),
+    }
+}
 
 const WINDOWS_BUTTON_BORDER_RADIUS: i32 = 4;
 const UBUNTU_BUTTON_BORDER_RADIUS: i32 = 6;
@@ -62,7 +78,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogSpacing {
     }
 }
 
-fn thin_up_box_ubuntu(x: i32, y: i32, w: i32, h: i32, _: Color) {
+fn thin_up_box_ubuntu(_: i32, _: i32, _: i32, _: i32, _: Color) {
     // no-op
 }
 
