@@ -209,20 +209,19 @@ fn calculate_ideal_window_size(body_text: &str, pad_x: i32, pad_y: i32) -> (i32,
     } else if initial_width >= 4000 {
         600
     } else {
-        // New linear interpolation between 300 (at 600px) and 600 (at 4000px)
+        // linear interpolation between 300 (at 600px) and 600 (at 4000px)
         300 + (((initial_width - 600) as f32 / 3400.0) * 300.0) as i32
     };
 
     // Adjust window width if the initial height is very large
-    // For instance, increase width by a percentage if height exceeds a certain number of line heights
-    let height_threshold = 5 * line_height;  // Arbitrary threshold: adjust based on your UI needs
+    let height_threshold = 5 * line_height; 
     let extra_width = if initial_height > height_threshold {
         (initial_height as f32 / height_threshold as f32 * 50.0).min(300.0) as i32
     } else {
         0
     };
 
-    let final_window_width = (window_width + extra_width).min(600).min(initial_width + pad_y).max(300);
+    let final_window_width = (window_width + extra_width).min(600).min(initial_width + pad_y).max(350);
     let (_, wrapped_height) = draw::wrap_measure(body_text, final_window_width - pad_x, true);
     let final_window_height = (wrapped_height + pad_y + line_height).max(130);
     (final_window_width, final_window_height)
