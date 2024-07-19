@@ -64,6 +64,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogSpacing {
     app::set_visible_focus(false);
     app::background(255, 255, 255);
     app::background2(0xF0, 0xF0, 0xF0);
+    app::set_color(Color::Selection, 0x00, 0x33, 0x99);
     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_windows, 0, 0, 0, 0);
     app::set_frame_type_cb(FrameType::UpBox, up_box_windows, 0, 0, 0, 0);
     app::set_frame_type_cb(FrameType::DownBox, down_box_windows, 0, 0, 0, 0);
@@ -109,6 +110,7 @@ pub fn apply_ubuntu_theme(app_instance: &App) -> DialogSpacing {
     app::background(0xFA, 0xFA, 0xFA);
     app::background2(0xFA, 0xFA, 0xFA);
     app::foreground(0x3D, 0x3D, 0x3D);
+    app::set_color(Color::Selection, 0x3D, 0x3D, 0x3D);
     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_ubuntu, 0, 0, 0, 0);
     app::set_frame_type_cb(FrameType::UpBox, up_box_ubuntu, 0, 0, 0, 0);
     app::set_frame_type_cb(FrameType::DownBox, down_box_ubuntu, 0, 0, 0, 0);

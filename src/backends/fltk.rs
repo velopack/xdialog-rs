@@ -103,7 +103,7 @@ fn create_messagebox(id: usize, data: MessageBoxData, spacing: &DialogSpacing) -
     main_instr.set_label(data.main_instruction.as_str());
     main_instr.set_label_size(get_main_instruction_size());
     main_instr.set_label_font(get_main_instruction_font());
-    // main_instr.set_label_color(Color::from_hex(0x003399));
+    main_instr.set_label_color(Color::Selection);
     main_instr.set_align(Align::Left | Align::Inside | Align::Wrap);
     flex_main_col.fixed(&mut main_instr, spacing.icon_size);
 
