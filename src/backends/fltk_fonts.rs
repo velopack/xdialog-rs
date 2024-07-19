@@ -90,7 +90,7 @@ pub fn load_ubuntu_fonts(app: &App) {
     let font_source = font_kit::source::SystemSource::new();
 
     let font_properties_main = Properties {
-        weight: Weight::NORMAL,
+        weight: Weight::BOLD,
         stretch: Stretch::NORMAL,
         style: font_kit::properties::Style::Normal,
     };
@@ -106,7 +106,7 @@ pub fn load_ubuntu_fonts(app: &App) {
     ];
 
     try_load_font(app, &font_source, &font_families, &font_properties_main, &MAIN_FONT_NAME);
-    let _ = MAIN_FONT_SIZE.set(16);
+    let _ = MAIN_FONT_SIZE.set(18);
     try_load_font(app, &font_source, &font_families, &font_properties_body, &BODY_FONT_NAME);
-    let _ = BODY_FONT_SIZE.set(12);
+    let _ = BODY_FONT_SIZE.set(15);
 }

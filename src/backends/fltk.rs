@@ -15,7 +15,7 @@ use super::fltk_fonts::*;
 pub fn run_fltk_backend(main: fn() -> u16, receiver: Receiver<DialogMessageRequest>)
 {
     let app_instance = app::App::default();
-    
+
     let spacing = super::fltk_theme::apply_ubuntu_theme(&app_instance);
 
     let t = thread::spawn(move || {
@@ -69,7 +69,7 @@ fn create_messagebox(id: usize, data: MessageBoxData, spacing: &DialogSpacing) -
 
     // Start Icon row
     let mut flex_icon_row = Flex::default().row();
-    flex_icon_row.set_margin(10);
+    flex_icon_row.set_margin(spacing.content_margin);
 
     // Svg Icon
     let mut has_icon = true;
@@ -78,9 +78,9 @@ fn create_messagebox(id: usize, data: MessageBoxData, spacing: &DialogSpacing) -
         let mut icon_frame = Frame::default();
         if let Ok(mut svg_img) = SvgImage::from_data(icon_data) {
             let svg2 = svg_img.clone();
-            svg_img.scale(36, 36, true, true);
+            svg_img.scale(spacing.icon_size, spacing.icon_size, true, true);
             icon_frame.set_image(Some(svg_img));
-            flex_icon_row.fixed(&mut icon_frame, 36);
+            flex_icon_row.fixed(&mut icon_frame, spacing.icon_size);
             wind.set_icon(Some(svg2));
             has_icon = true;
         } else {
@@ -91,16 +91,16 @@ fn create_messagebox(id: usize, data: MessageBoxData, spacing: &DialogSpacing) -
 
     // Start Main column
     let mut flex_main_col = Flex::default().column();
-    flex_main_col.set_spacing(10);
+    // flex_main_col.set_spacing(spacing.content_margin);
 
     // Main instruction
     let mut main_instr = Frame::default();
     main_instr.set_label(data.main_instruction.as_str());
     main_instr.set_label_size(get_main_instruction_size());
     main_instr.set_label_font(get_main_instruction_font());
-    main_instr.set_label_color(Color::from_hex(0x003399));
-    main_instr.set_align(Align::Left | Align::Inside);
-    flex_main_col.fixed(&mut main_instr, 32);
+    // main_instr.set_label_color(Color::from_hex(0x003399));
+    main_instr.set_align(Align::Left | Align::Inside | Align::Wrap);
+    flex_main_col.fixed(&mut main_instr, spacing.icon_size);
 
     // Body text
     let mut body_text = Frame::default();
@@ -136,7 +136,7 @@ fn create_messagebox(id: usize, data: MessageBoxData, spacing: &DialogSpacing) -
         button.set_frame(FrameType::UpBox);
         button.set_down_frame(FrameType::DownBox);
         let (w, _) = button.measure_label();
-        flex_button_row.fixed(&mut button, w + 46);
+        flex_button_row.fixed(&mut button, w + spacing.button_x_padding + spacing.button_x_padding);
 
         // handle hover cursor events
         let mut wnd_btn_hover = wind.clone();
@@ -177,8 +177,11 @@ fn create_messagebox(id: usize, data: MessageBoxData, spacing: &DialogSpacing) -
     wind.end();
 
     // Before showing the window, try and compute the optimal window size.
-    let pad_x = if has_icon { 70 } else { 20 };
-    let wind_size = calculate_ideal_window_size(data.message.as_str(), pad_x, 100);
+    let icon_width = if has_icon { spacing.icon_size + spacing.content_margin } else { 0 };
+    let pad_x = icon_width + (spacing.content_margin * 2);
+    let pad_y = spacing.content_margin + spacing.button_panel_height + spacing.icon_size;
+
+    let wind_size = calculate_ideal_window_size(data.message.as_str(), pad_x, pad_y);
     wind.set_size(wind_size.0, wind_size.1);
     let mut wind = wind.center_screen();
     flex_root_col.size_of_parent();

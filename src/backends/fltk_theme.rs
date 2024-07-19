@@ -12,6 +12,9 @@ const UBUNTU_BUTTON_BORDER_RADIUS: i32 = 6;
 pub struct DialogSpacing {
     pub button_panel_height: i32,
     pub button_spacing: i32,
+    pub button_x_padding: i32,
+    pub icon_size: i32,
+    pub content_margin: i32,
 }
 
 fn thin_up_box_windows(x: i32, y: i32, w: i32, h: i32, _: Color) {
@@ -53,6 +56,9 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogSpacing {
     DialogSpacing {
         button_panel_height: 41,
         button_spacing: 10,
+        button_x_padding: 24,
+        icon_size: 32,
+        content_margin: 10,
     }
 }
 
@@ -91,10 +97,13 @@ pub fn apply_ubuntu_theme(app_instance: &App) -> DialogSpacing {
     app::set_frame_type_cb(FrameType::UpBox, up_box_ubuntu, 0, 0, 0, 0);
     app::set_frame_type_cb(FrameType::DownBox, down_box_ubuntu, 0, 0, 0, 0);
     app::set_frame_type_cb(FrameType::EngravedBox, engraved_box_ubuntu, 0, 0, 0, 0);
-    
+
     DialogSpacing {
         button_panel_height: 48,
         button_spacing: 7,
+        button_x_padding: 24,
+        icon_size: 48,
+        content_margin: 12,
     }
 }
 
