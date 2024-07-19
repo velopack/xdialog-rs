@@ -61,12 +61,12 @@ impl XDialogBackendImpl for FltkBackend {
     }
 }
 
-fn create_messagebox(id: usize, data: MessageBoxData, spacing: &DialogSpacing) -> DoubleWindow {
+fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing) -> DoubleWindow {
     let mut wind = Window::new(0, 0, 400, 300, data.title.as_str()).center_screen();
 
     wind.set_callback(move |wnd| {
         wnd.hide();
-        insert_result(id, MessageBoxResult::WindowClosed);
+        insert_result(id, XDialogResult::WindowClosed);
     });
 
     // Start Root column
@@ -164,7 +164,7 @@ fn create_messagebox(id: usize, data: MessageBoxData, spacing: &DialogSpacing) -
         let mut wnd_btn_click = wind.clone();
         button.set_callback(move |_| {
             wnd_btn_click.hide();
-            insert_result(id, MessageBoxResult::ButtonPressed(index));
+            insert_result(id, XDialogResult::ButtonPressed(index));
         });
     }
 

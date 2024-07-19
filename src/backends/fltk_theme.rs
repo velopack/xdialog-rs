@@ -3,7 +3,7 @@ use fltk::app::App;
 use fltk::draw::LineStyle;
 use fltk::enums::{Color, FrameType};
 
-use crate::model::{MessageBoxIcon, XDialogTheme};
+use crate::model::{XDialogIcon, XDialogTheme};
 use super::fltk_fonts::*;
 
 pub fn apply_theme(app_instance: &App, theme: XDialogTheme) -> DialogSpacing {
@@ -125,13 +125,13 @@ pub fn apply_ubuntu_theme(app_instance: &App) -> DialogSpacing {
     }
 }
 
-pub fn get_theme_icon_svg(icon: MessageBoxIcon) -> Option<&'static str>
+pub fn get_theme_icon_svg(icon: XDialogIcon) -> Option<&'static str>
 {
     match icon {
-        MessageBoxIcon::None => None,
-        MessageBoxIcon::Error => Some(crate::images::IMAGE_ERROR_SVG),
-        MessageBoxIcon::Warning => Some(crate::images::IMAGE_WARNING_SVG),
-        MessageBoxIcon::Question => Some(crate::images::IMAGE_INFO_SVG),
-        MessageBoxIcon::Information => Some(crate::images::IMAGE_INFO_SVG),
+        XDialogIcon::None => None,
+        XDialogIcon::Error => Some(crate::images::IMAGE_ERROR_SVG),
+        XDialogIcon::Warning => Some(crate::images::IMAGE_WARNING_SVG),
+        XDialogIcon::Question => Some(crate::images::IMAGE_INFO_SVG),
+        XDialogIcon::Information => Some(crate::images::IMAGE_INFO_SVG),
     }
 }

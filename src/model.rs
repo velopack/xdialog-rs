@@ -13,7 +13,7 @@ pub enum XDialogTheme {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum MessageBoxIcon {
+pub enum XDialogIcon {
     None = 0,
     Error,
     Warning,
@@ -22,16 +22,16 @@ pub enum MessageBoxIcon {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct MessageBoxData {
+pub struct XDialogMessageBox {
     pub title: String,
     pub main_instruction: String,
     pub message: String,
-    pub icon: MessageBoxIcon,
+    pub icon: XDialogIcon,
     pub buttons: Vec<String>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum MessageBoxResult {
+pub enum XDialogResult {
     WindowClosed,
     SilentMode,
     ButtonPressed(usize),
@@ -40,7 +40,7 @@ pub enum MessageBoxResult {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum DialogMessageRequest {
     None,
-    ShowMessageBox(usize, MessageBoxData),
+    ShowMessageBox(usize, XDialogMessageBox),
     ShowProgressDialog(usize),
     SetProgressDialogIndeterminate(usize),
     SetProgressDialogValue(usize, usize),
