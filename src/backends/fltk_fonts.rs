@@ -46,8 +46,6 @@ fn try_load_font<S: font_kit::source::Source>(app: &App, font_source: &S, font_f
         match font_handle {
             Handle::Path { path, .. } => {
                 if let Ok(font) = app.load_font(path) {
-                    println!("Loaded font: {:?}", &font);
-                    println!("{:?}", fonts());
                     let _ = target.set(font);
                 }
             }
