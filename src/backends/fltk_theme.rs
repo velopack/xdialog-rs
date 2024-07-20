@@ -250,7 +250,6 @@ pub fn get_theme_icon_svg(icon: XDialogIcon) -> Option<&'static str>
         XDialogIcon::None => None,
         XDialogIcon::Error => Some(crate::images::IMAGE_ERROR_SVG),
         XDialogIcon::Warning => Some(crate::images::IMAGE_WARNING_SVG),
-        XDialogIcon::Question => Some(crate::images::IMAGE_INFO_SVG),
         XDialogIcon::Information => Some(crate::images::IMAGE_INFO_SVG),
     }
 }

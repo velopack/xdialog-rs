@@ -19,10 +19,10 @@ fn run() -> i32 {
         title: "This is a title".to_string(),
     };
     let _ = xdialog::show_message(data.clone());
-    
+
     data.message = medium_text.to_string();
     let _ = xdialog::show_message(data.clone());
-    
+
     data.message = small_text.to_string();
     data.main_instruction = long_instruction.to_string();
     let _ = xdialog::show_message(data.clone());
@@ -34,22 +34,22 @@ fn run() -> i32 {
     data.title = "".to_string();
     let _ = xdialog::show_message(data.clone());
 
-    let d = show_progress(XDialogIcon::None, "Title", "This is an instruction", small_text).unwrap();
-    d.set_indeterminate().unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(3));
-    d.close().unwrap();
-    
-    let d = show_progress(XDialogIcon::None, "Title", "", medium_text).unwrap();
-    d.set_indeterminate().unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(3));
-    d.close().unwrap();
-    
-    let d = show_progress(XDialogIcon::Error, "Title", long_instruction, medium_text).unwrap();
+    let d = show_progress("Title", "This is an instruction", small_text, XDialogIcon::None).unwrap();
     d.set_indeterminate().unwrap();
     std::thread::sleep(std::time::Duration::from_secs(3));
     d.close().unwrap();
 
-    let d = show_progress(XDialogIcon::Error, "Title", "", small_text).unwrap();
+    let d = show_progress("Title", "", medium_text, XDialogIcon::None).unwrap();
+    d.set_indeterminate().unwrap();
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    d.close().unwrap();
+
+    let d = show_progress("Title", long_instruction, medium_text, XDialogIcon::Error).unwrap();
+    d.set_indeterminate().unwrap();
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    d.close().unwrap();
+
+    let d = show_progress("Title", "", small_text, XDialogIcon::Error).unwrap();
     d.set_indeterminate().unwrap();
     std::thread::sleep(std::time::Duration::from_secs(3));
     d.close().unwrap();

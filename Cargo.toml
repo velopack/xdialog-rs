@@ -1,12 +1,20 @@
 [package]
 name = "xdialog"
-version = "0.0.1"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "A small native-ish cross platform dialogs library with zero runtime dependencies."
+authors = ["Caelan Sayler <git@caesay.com>"]
+repository = "https://github.com/velopack/xdialog"
+keywords = ["dialog", "message-box", "messagebox", "cross-platform"]
+categories = ["graphics", "gui", "visualization"]
+
+[features]
+default = ["fltk-bundled"]
+fltk-bundled = ["fltk/fltk-bundled"]
 
 [dependencies]
-fltk = { version = "1.4", features = ["fltk-bundled"] }
+fltk = "1.4"
 log = "0.4"
 atomic-counter = "1.0"
 lazy_static = "1.5"

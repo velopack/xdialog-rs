@@ -4,10 +4,10 @@ fn main() {
 
 fn run() -> i32 {
     let result = xdialog::show_progress(
-        xdialog::XDialogIcon::Warning,
         "My App Incorporated",
         "Doing some hard thing",
-        "Solving string theory...").unwrap();
+        "Solving string theory...",
+        xdialog::XDialogIcon::Warning).unwrap();
 
     std::thread::sleep(std::time::Duration::from_secs(1));
     result.set_value(0.2).unwrap();

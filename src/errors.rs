@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 use std::fmt;
 use std::sync::mpsc::SendError;
 use crate::model::DialogMessageRequest;
