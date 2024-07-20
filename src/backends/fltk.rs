@@ -7,9 +7,10 @@ use fltk::{
 };
 use fltk::misc::Progress;
 use fltk::window::DoubleWindow;
+use crate::backends::fltk_button::CustomButton;
 use crate::backends::fltk_progress::CustomProgressBar;
 
-use crate::backends::fltk_theme::{DialogSpacing, get_theme_icon_svg};
+use crate::backends::fltk_theme::{DialogTheme, get_theme_icon_svg};
 use crate::backends::XDialogBackendImpl;
 use crate::model::*;
 use crate::state::insert_result;
@@ -21,7 +22,7 @@ pub struct FltkBackend;
 impl XDialogBackendImpl for FltkBackend {
     fn run(main: fn() -> u16, receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) -> u16 {
         let app_instance = app::App::default();
-        
+
         let spacing = super::fltk_theme::apply_theme(&app_instance, theme);
 
         let t = thread::spawn(move || {
@@ -63,7 +64,7 @@ impl XDialogBackendImpl for FltkBackend {
     }
 }
 
-fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing, has_progress: bool) -> DoubleWindow {
+fn create_messagebox(id: usize, data: XDialogMessageBox, theme: &DialogTheme, has_progress: bool) -> DoubleWindow {
     let mut wind = Window::new(0, 0, 400, 300, data.title.as_str()).center_screen();
 
     wind.set_callback(move |wnd| {
@@ -76,7 +77,7 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
 
     // Start Icon row
     let mut flex_icon_row = Flex::default().row();
-    flex_icon_row.set_margin(spacing.content_margin);
+    flex_icon_row.set_margin(theme.default_content_margin);
 
     // Svg Icon
     let mut has_icon = true;
@@ -85,9 +86,9 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
         let mut icon_frame = Frame::default();
         if let Ok(mut svg_img) = SvgImage::from_data(icon_data) {
             let svg2 = svg_img.clone();
-            svg_img.scale(spacing.icon_size, spacing.icon_size, true, true);
+            svg_img.scale(theme.main_icon_size, theme.main_icon_size, true, true);
             icon_frame.set_image(Some(svg_img));
-            flex_icon_row.fixed(&mut icon_frame, spacing.icon_size);
+            flex_icon_row.fixed(&mut icon_frame, theme.main_icon_size);
             wind.set_icon(Some(svg2));
             has_icon = true;
         } else {
@@ -98,19 +99,20 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
 
     // Start Main column
     let mut flex_main_col = Flex::default().column();
-    flex_main_col.set_spacing(spacing.content_margin);
+    flex_main_col.set_spacing(theme.default_content_margin);
 
     // Main instruction
     let mut main_instr = Frame::default();
     main_instr.set_label(data.main_instruction.as_str());
     main_instr.set_label_size(get_main_instruction_size());
     main_instr.set_label_font(get_main_instruction_font());
-    main_instr.set_label_color(Color::Selection);
+    main_instr.set_label_color(theme.color_title_text);
     main_instr.set_align(Align::Left | Align::Inside | Align::Wrap);
-    flex_main_col.fixed(&mut main_instr, spacing.icon_size);
+    flex_main_col.fixed(&mut main_instr, theme.main_icon_size);
 
     if has_progress {
         let mut flex_progress_col = Flex::default().column();
+        flex_progress_col.set_margin(3);
         let mut progress = CustomProgressBar::new();
         flex_progress_col.end();
         // let mut progress = Progress::default();
@@ -136,7 +138,7 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
         //     //     asd
         //     // });
         // });
-        flex_main_col.fixed(&mut flex_progress_col, 5);
+        flex_main_col.fixed(&mut flex_progress_col, 11);
     }
 
     // Body text
@@ -158,46 +160,56 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
 
     // Start Button row
     let mut flex_button_row = Flex::default().row();
-    flex_button_row.set_spacing(spacing.button_between_spacing);
-    flex_button_row.set_margin(spacing.button_outer_spacing);
+    flex_button_row.set_spacing(theme.button_panel_spacing);
+    flex_button_row.set_margin(theme.button_panel_margin);
 
     // Padding frame
     let _ = Frame::default();
 
     // Buttons
-    for (index, button_text) in data.buttons.iter().enumerate() {
-        let mut button = Button::default();
+    let button_iter: Vec<(usize, &String)> = if theme.button_order_reversed { 
+        data.buttons.iter().enumerate().rev().collect()
+    } else { 
+        data.buttons.iter().enumerate().collect()
+    };
+    for (index, button_text) in button_iter {
+        let mut wnd_btn_click = wind.clone();
+        let mut flex_button_wrapper = Flex::default().column();
+        let mut button = CustomButton::new(theme);
         button.set_label(button_text.as_str());
         button.set_label_size(get_body_size());
         button.set_label_font(get_body_font());
-        button.set_frame(FrameType::UpBox);
-        button.set_down_frame(FrameType::DownBox);
-        let (w, _) = button.measure_label();
-        flex_button_row.fixed(&mut button, w + spacing.button_x_padding + spacing.button_x_padding);
-
-        // handle hover cursor events
-        let mut wnd_btn_hover = wind.clone();
-        button.handle(move |btn, event| {
-            if event == Event::Enter {
-                wnd_btn_hover.set_cursor(Cursor::Hand);
-                btn.set_frame(FrameType::EngravedBox);
-                btn.set_down_frame(FrameType::DownBox);
-                btn.redraw();
-            }
-            if event == Event::Leave {
-                wnd_btn_hover.set_cursor(Cursor::Arrow);
-                btn.set_frame(FrameType::UpBox);
-                btn.set_down_frame(FrameType::DownBox);
-                btn.redraw();
-            }
-            false
-        });
-
-        let mut wnd_btn_click = wind.clone();
         button.set_callback(move |_| {
             wnd_btn_click.hide();
             insert_result(id, XDialogResult::ButtonPressed(index));
         });
+        flex_button_wrapper.end();
+        let (w, _) = button.measure_label();
+        flex_button_row.fixed(&mut flex_button_wrapper, w + (theme.button_text_padding * 2));
+
+        // handle hover cursor events
+        // let mut wnd_btn_hover = wind.clone();
+        // button.handle(move |btn, event| {
+        //     if event == Event::Enter {
+        //         wnd_btn_hover.set_cursor(Cursor::Hand);
+        //         btn.set_frame(FrameType::EngravedBox);
+        //         btn.set_down_frame(FrameType::DownBox);
+        //         btn.redraw();
+        //     }
+        //     if event == Event::Leave {
+        //         wnd_btn_hover.set_cursor(Cursor::Arrow);
+        //         btn.set_frame(FrameType::UpBox);
+        //         btn.set_down_frame(FrameType::DownBox);
+        //         btn.redraw();
+        //     }
+        //     false
+        // });
+        // 
+        // let mut wnd_btn_click = wind.clone();
+        // button.set_callback(move |_| {
+        //     wnd_btn_click.hide();
+        //     insert_result(id, XDialogResult::ButtonPressed(index));
+        // });
     }
 
     // End Button row
@@ -205,7 +217,7 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
 
     // End Button background
     flex_button_background.end();
-    flex_root_col.fixed(&mut flex_button_background, spacing.button_panel_height);
+    flex_root_col.fixed(&mut flex_button_background, theme.button_panel_height);
 
     // End Root column
     flex_root_col.end();
@@ -214,10 +226,10 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
     wind.end();
 
     // Before showing the window, try and compute the optimal window size.
-    let icon_width = if has_icon { spacing.icon_size + spacing.content_margin } else { 0 };
-    let progress_height = if has_progress { 5 + spacing.content_margin } else { 0 };
-    let pad_x = icon_width + (spacing.content_margin * 2);
-    let pad_y = (spacing.content_margin * 2) + spacing.button_panel_height + spacing.icon_size + progress_height;
+    let icon_width = if has_icon { theme.main_icon_size + theme.default_content_margin } else { 0 };
+    let progress_height = if has_progress { 5 + theme.default_content_margin } else { 0 };
+    let pad_x = icon_width + (theme.default_content_margin * 2);
+    let pad_y = (theme.default_content_margin * 2) + theme.button_panel_height + theme.main_icon_size + progress_height;
 
     let wind_size = calculate_ideal_window_size(data.message.as_str(), pad_x, pad_y);
     wind.set_size(wind_size.0, wind_size.1);
@@ -228,7 +240,7 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, spacing: &DialogSpacing
     wind.show();
     // wind.set_on_top();
     wind
-    
+
     // wind.set_on_top() - currently has bugs. https://github.com/fltk-rs/fltk-rs/issues/1573
 }
 
@@ -248,7 +260,7 @@ fn calculate_ideal_window_size(body_text: &str, pad_x: i32, pad_y: i32) -> (i32,
     };
 
     // Adjust window width if the initial height is very large
-    let height_threshold = 5 * line_height; 
+    let height_threshold = 5 * line_height;
     let extra_width = if initial_height > height_threshold {
         (initial_height as f32 / height_threshold as f32 * 50.0).min(300.0) as i32
     } else {

@@ -1637,13 +1637,12 @@ version = "0.0.1"
 dependencies = [
  "atomic-counter",
  "dark-light",
+ "enum-map",
  "fltk",
- "fltk-sys",
  "font-kit",
  "lazy_static",
  "log",
  "mina",
- "paste",
 ]
 
 [[package]]
