@@ -23,7 +23,7 @@ pub enum XDialogIcon {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct XDialogMessageBox {
+pub struct XDialogOptions {
     pub title: String,
     pub main_instruction: String,
     pub message: String,
@@ -38,13 +38,14 @@ pub enum XDialogResult {
     ButtonPressed(usize),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DialogMessageRequest {
     None,
-    ShowMessageBox(usize, XDialogMessageBox),
-    ShowProgressDialog(usize),
-    SetProgressDialogIndeterminate(usize),
-    SetProgressDialogValue(usize, usize),
-    SetProgressDialogText(usize, String),
+    ShowMessageWindow(usize, XDialogOptions),
+    ShowProgressWindow(usize, XDialogOptions),
+    CloseWindow(usize),
+    SetProgressIndeterminate(usize),
+    SetProgressValue(usize, f32),
+    SetProgressText(usize, String),
     ExitEventLoop,
 }

@@ -6,6 +6,8 @@ use fltk::enums::{Color, Event, FrameType, Key};
 use fltk::prelude::{WidgetBase, WidgetExt};
 use mina::{Animate, prelude::*};
 
+use crate::backends::fltk::Tick;
+
 use super::fltk_theme::DialogTheme;
 
 #[derive(Animate, Clone, Debug, Default, PartialEq)]
@@ -26,16 +28,17 @@ struct ButtonColorState {
     text_b: u8,
 }
 
-pub struct CustomButton {
-    inner: widget::Widget,
-}
-
 #[derive(Clone, Default, PartialEq, State)]
 enum ButtonState {
     #[default] Idle,
     Hovered,
     Pressed,
     Focused,
+}
+
+pub struct CustomButton {
+    inner: widget::Widget,
+    animator: Rc<RefCell<Box<dyn StateAnimator<State=ButtonState, Values=ButtonColorState>>>>,
 }
 
 fn calculate_offsets(rs: f64, num_points: usize) -> Vec<f64> {
@@ -53,6 +56,7 @@ pub fn draw_improved_rbox(x: i32, y: i32, w: i32, h: i32, max_radius: i32, fill:
     if rs > max_radius {
         rs = max_radius;
     }
+
     rs = rs.max(1); // Ensure radius isn't zero
 
     let rs_f64 = rs as f64;
@@ -115,7 +119,6 @@ impl CustomButton {
     pub fn new(dialog_theme: &DialogTheme) -> Self {
         let mut inner = widget::Widget::default();
         inner.set_frame(FrameType::FlatBox);
-        let mut inner2 = inner.clone();
 
         let animator = animator!(ButtonColorState {
             default(ButtonState::Idle, {
@@ -173,7 +176,8 @@ impl CustomButton {
             },
         });
 
-        let animator_cell1 = Rc::new(RefCell::new(animator));
+        let animator_cell1: Rc<RefCell<Box<dyn StateAnimator<State=ButtonState, Values=ButtonColorState>>>>
+            = Rc::new(RefCell::new(Box::new(animator)));
         let animator_cell2 = animator_cell1.clone();
         let animator_cell3 = animator_cell1.clone();
 
@@ -258,7 +262,7 @@ impl CustomButton {
 
             draw_box(FrameType::FlatBox, i.x(), i.y(), i.w(), i.h(), Color::Background2);
             draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, true, Color::from_rgb(state.fill_r, state.fill_g, state.fill_b));
-            
+
             if state.border_width > 0 {
                 set_line_style(LineStyle::Solid, state.border_width);
                 let w = i.w() - (state.border_width - 1);
@@ -274,16 +278,18 @@ impl CustomButton {
             draw_text2(&i.label(), i.x(), i.y(), i.w(), i.h(), i.align());
         });
 
-        app::add_timeout3(0.016, move |handle| {
-            let mut animator = animator_cell3.borrow_mut();
-            animator.advance(0.016);
-            inner2.redraw();
-            app::repeat_timeout3(0.016, handle);
-        });
-
         Self {
             inner,
+            animator: animator_cell3,
         }
+    }
+}
+
+impl Tick for CustomButton {
+    fn tick(&mut self, elapsed: f32) {
+        let mut animator = self.animator.borrow_mut();
+        animator.advance(elapsed);
+        self.inner.clone().redraw();
     }
 }
 

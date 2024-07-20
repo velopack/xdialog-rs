@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 
 use atomic_counter::{AtomicCounter, RelaxedCounter};
-use lazy_static::lazy_static;
 
 use crate::errors::{NotInitializedError, XDialogError};
 use crate::model::{DialogMessageRequest, XDialogResult};

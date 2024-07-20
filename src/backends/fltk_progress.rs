@@ -1,11 +1,11 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::SystemTime;
 
 use fltk::{*, prelude::*};
 use fltk::enums::{Color, FrameType};
 use mina::prelude::*;
-use crate::backends::fltk_theme::DialogTheme;
+
+use super::{fltk::Tick, fltk_theme::DialogTheme};
 
 #[derive(Animate, Clone, Debug, Default, PartialEq)]
 struct ProgressIndeterminateState {
@@ -15,34 +15,31 @@ struct ProgressIndeterminateState {
 
 pub struct CustomProgressBar {
     inner: widget::Widget,
-    // current_value: RwLock<f32>,
-    indeterminate: Rc<RefCell<ProgressIndeterminateState>>,
+    state: Rc<RefCell<ProgressIndeterminateState>>,
+    is_indeterminate: bool,
+    current_time: f32,
+}
+
+lazy_static! {
+    static ref INDETERMINATE_TIMELINE: ProgressIndeterminateStateTimeline = timeline!(
+        ProgressIndeterminateState 2.50s
+        // first expanding cycle
+        from { x1: 0.0, x2: 0.0 }
+        10% { x1: 0.0, x2: 0.3 }
+        30% { x1: 0.5, x2: 1.0 }
+        50% { x1: 1.0, x2: 1.0 }
+        // second contracting cycle
+        60% { x1: 0.0, x2: 0.0 }
+        70% { x1: 0.0, x2: 0.5 }
+        80% { x1: 0.5, x2: 0.8 }
+        90% { x1: 0.85, x2: 1.0 }
+        to { x1: 1.0, x2: 1.0 }
+    );
 }
 
 impl CustomProgressBar {
     // our constructor
     pub fn new(dialog_theme: &DialogTheme) -> Self {
-        // let indeterminate_timeline = timeline!(
-        //     ProgressIndeterminateState 1.15s 
-        //     from { x1: 0.0, x2: 0.0 }
-        //     20% { x1: 0.0, x2: 0.3 }
-        //     60% { x1: 0.5, x2: 1.0 }
-        //     to { x1: 1.0, x2: 1.0 }
-        // );
-
-        let indeterminate_timeline = timeline!(
-            ProgressIndeterminateState 2.50s
-            from { x1: 0.0, x2: 0.0 }
-            10% { x1: 0.0, x2: 0.3 }
-            30% { x1: 0.5, x2: 1.0 }
-            50% { x1: 1.0, x2: 1.0 }
-            60% { x1: 0.0, x2: 0.0 }
-            70% { x1: 0.0, x2: 0.5 }
-            80% { x1: 0.5, x2: 0.8 }
-            90% { x1: 0.85, x2: 1.0 }
-            to { x1: 1.0, x2: 1.0 }
-        );
-
         let mut inner = widget::Widget::default();
         inner.set_frame(FrameType::FlatBox);
 
@@ -73,46 +70,46 @@ impl CustomProgressBar {
             }
         });
 
-        // let root_state = Rc::new(RefCell::new(ProgressIndeterminateState::default()));
-
-        // get animation start time (current time)
-        let start_time = Rc::new(RefCell::new(SystemTime::now()));
-
-        let mut inner_clone = inner.clone();
-        let rs2 = root_state.clone();
-        let st1 = start_time.clone();
-        app::add_timeout3(0.008, move |handle| {
-            let mut indeterminate_state = rs2.borrow_mut();
-            let indeterminate_state = &mut *indeterminate_state;
-
-            let mut start = st1.borrow_mut();
-            let elapsed = start.elapsed().unwrap().as_secs_f32();
-            if elapsed > 2.6 {
-                *start = SystemTime::now();
-            }
-
-            indeterminate_timeline.update(indeterminate_state, elapsed);
-            inner_clone.redraw();
-
-            app::repeat_timeout3(0.008, handle);
-        });
-
         Self {
             inner,
-            // current_value,
-            indeterminate: root_state,
+            state: root_state,
+            current_time: 0.0,
+            is_indeterminate: true,
         }
     }
 
-    // get the times our button was clicked
-    // pub fn set_value(&mut self, value: f32) {
-    //     *self.current_value.borrow_mut() = value;
-    // }
+    pub fn set_value(&mut self, value: f32) {
+        let mut state = self.state.borrow_mut();
+        state.x1 = 0.0;
+        state.x2 = value;
+        self.is_indeterminate = false;
+        self.current_time = 0.0;
+        self.inner.redraw();
+    }
+
+    pub fn set_indeterminate(&mut self) {
+        self.is_indeterminate = true;
+        self.current_time = 0.0;
+        self.inner.redraw();
+    }
 }
 
 widget_extends!(CustomProgressBar, widget::Widget, inner);
 
-// fltk::macros::widget::impl_widget_base!(CustomProgressBar, Fl_Box);
-// fltk::macros::widget::impl_widget_default!(CustomProgressBar);
-// fltk::macros::widget::impl_widget_ext!(CustomProgressBar, Fl_Box);
+impl Tick for CustomProgressBar {
+    fn tick(&mut self, elapsed_secs: f32) {
+        if !self.is_indeterminate {
+            return;
+        }
 
+        let mut state = self.state.borrow_mut();
+        INDETERMINATE_TIMELINE.update(&mut *state, self.current_time);
+        self.current_time += elapsed_secs;
+
+        if self.current_time > 2.6 {
+            self.current_time = 0.0;
+        }
+
+        self.inner.redraw();
+    }
+}

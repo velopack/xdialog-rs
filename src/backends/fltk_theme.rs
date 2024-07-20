@@ -227,20 +227,20 @@ pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
             border_width: 0,
         },
     };
-    
+
     if dark {
         light_theme.color_background = Color::from_hex(0x2A2926);
         light_theme.color_background_alt = Color::from_hex(0x2A2926);
         light_theme.color_body_text = Color::from_hex(0xFFFFFF);
         light_theme.color_title_text = Color::from_hex(0xFFFFFF);
         light_theme.color_progress_background = Color::from_hex(0x027BFF).darker();
-        
+
         light_theme.style_button_inactive.color_button_border = Color::from_hex(0x656565);
         light_theme.style_button_inactive.color_button_background = Color::from_hex(0x656565);
         light_theme.style_button_inactive.color_button_text = Color::from_hex(0xFFFFFF);
         light_theme.style_button_inactive.border_width = 0;
     }
-    
+
     light_theme
 }
 
@@ -263,150 +263,6 @@ fn thin_up_box_windows_cb(x: i32, y: i32, w: i32, h: i32, _: Color) {
     draw::end_line();
 }
 
-fn thin_up_box_noop_cb(x: i32, y: i32, w: i32, h: i32, _: Color) {
+fn thin_up_box_noop_cb(_: i32, _: i32, _: i32, _: i32, _: Color) {
     // noop
 }
-
-// 
-// fn up_box_windows(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, WINDOWS_BUTTON_BORDER_RADIUS, true, Color::from_hex(0xFDFDFD));
-//     draw::draw_rbox(x, y, w, h, WINDOWS_BUTTON_BORDER_RADIUS, false, Color::from_hex(0xD0D0D0));
-// }
-// 
-// fn down_box_windows(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, WINDOWS_BUTTON_BORDER_RADIUS, true, Color::from_hex(0xCCE4F7));
-//     draw::draw_rbox(x, y, w, h, WINDOWS_BUTTON_BORDER_RADIUS, false, Color::from_hex(0x005499));
-// }
-// 
-// fn engraved_box_windows(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, WINDOWS_BUTTON_BORDER_RADIUS, true, Color::from_hex(0xE0EEF9));
-//     draw::draw_rbox(x, y, w, h, WINDOWS_BUTTON_BORDER_RADIUS, false, Color::from_hex(0x0078D4));
-// }
-// 
-// pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
-//     load_windows_fonts(app_instance);
-//     app::set_visible_focus(false);
-//     app::background(255, 255, 255);
-//     app::background2(0xF0, 0xF0, 0xF0);
-//     app::set_color(Color::Selection, 0x00, 0x33, 0x99);
-//     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_windows, 0, 0, 0, 0);
-//     app::set_frame_type_cb(FrameType::UpBox, up_box_windows, 0, 0, 0, 0);
-//     app::set_frame_type_cb(FrameType::DownBox, down_box_windows, 0, 0, 0, 0);
-//     app::set_frame_type_cb(FrameType::EngravedBox, engraved_box_windows, 0, 0, 0, 0);
-// 
-//     DialogTheme {
-//         button_panel_height: 41,
-//         button_panel_margin: 10,
-//         button_panel_spacing: 10,
-//         button_x_padding: 24,
-//         main_icon_size: 32,
-//         default_content_margin: 10,
-//     }
-// }
-// 
-// fn thin_up_box_ubuntu(_: i32, _: i32, _: i32, _: i32, _: Color) {
-//     // no-op
-// }
-// 
-// fn up_box_ubuntu(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0xFFFFFF));
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, false, Color::from_hex(0xC7C7C7));
-// }
-// 
-// fn down_box_ubuntu(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0xE0E0E0));
-//     draw::set_line_style(LineStyle::Solid, 2);
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, false, Color::from_hex(0xE2997F));
-//     draw::set_line_style(LineStyle::Solid, 1);
-//     draw::draw_rbox(x + 1, y + 1, w - 2, h - 2, UBUNTU_BUTTON_BORDER_RADIUS, false, Color::from_hex(0xF3AA90));
-// }
-// 
-// fn engraved_box_ubuntu(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0xF5F5F5));
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, false, Color::from_hex(0xC7C7C7));
-// }
-// 
-// pub fn apply_ubuntu_theme(app_instance: &App) -> DialogTheme {
-//     load_ubuntu_fonts(app_instance);
-//     app::set_visible_focus(false);
-//     app::background(0xFA, 0xFA, 0xFA);
-//     app::background2(0xFA, 0xFA, 0xFA);
-//     app::foreground(0x3D, 0x3D, 0x3D);
-//     app::set_color(Color::Selection, 0x3D, 0x3D, 0x3D);
-//     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_ubuntu, 0, 0, 0, 0);
-//     app::set_frame_type_cb(FrameType::UpBox, up_box_ubuntu, 0, 0, 0, 0);
-//     app::set_frame_type_cb(FrameType::DownBox, down_box_ubuntu, 0, 0, 0, 0);
-//     app::set_frame_type_cb(FrameType::EngravedBox, engraved_box_ubuntu, 0, 0, 0, 0);
-// 
-//     DialogTheme {
-//         button_panel_height: 48,
-//         button_panel_spacing: 7,
-//         button_panel_margin: 7,
-//         button_x_padding: 24,
-//         main_icon_size: 48,
-//         default_content_margin: 12,
-//     }
-// }
-// 
-// fn thin_up_box_macos(_: i32, _: i32, _: i32, _: i32, _: Color) {
-//     // no-op
-// }
-// 
-// fn up_box_macos_light(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0xFFFFFF));
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, false, Color::from_hex(0xDCDBDA));
-// }
-// 
-// fn up_box_macos_dark(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0x656565));
-// }
-// 
-// fn down_box_macos(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0x146DCC));
-// }
-// 
-// fn engraved_box_macos(x: i32, y: i32, w: i32, h: i32, _: Color) {
-//     draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
-//     draw::draw_rbox(x, y, w, h, UBUNTU_BUTTON_BORDER_RADIUS, true, Color::from_hex(0x2482E7));
-// }
-// 
-// pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
-//     load_macos_fonts(app_instance);
-//     app::set_visible_focus(false);
-// 
-//     if dark {
-//         app::background(0x2A, 0x29, 0x26);
-//         app::background2(0x2A, 0x29, 0x26);
-//         app::foreground(0xFF, 0xFF, 0xFF);
-//         app::set_color(Color::Selection, 0xFF, 0xFF, 0xFF);
-//         app::set_frame_type_cb(FrameType::UpBox, up_box_macos_dark, 0, 0, 0, 0);
-//     } else {
-//         app::background(0xEC, 0xEB, 0xEA);
-//         app::background2(0xEC, 0xEB, 0xEA);
-//         app::foreground(0x00, 0x00, 0x00);
-//         app::set_color(Color::Selection, 0x00, 0x00, 0x00);
-//         app::set_frame_type_cb(FrameType::UpBox, up_box_macos_light, 0, 0, 0, 0);
-//     }
-// 
-//     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_macos, 0, 0, 0, 0);
-//     app::set_frame_type_cb(FrameType::DownBox, down_box_macos, 0, 0, 0, 0);
-//     app::set_frame_type_cb(FrameType::EngravedBox, engraved_box_macos, 0, 0, 0, 0);
-// 
-//     DialogTheme {
-//         button_panel_height: 54,
-//         button_panel_spacing: 10,
-//         button_panel_margin: 15,
-//         button_x_padding: 24,
-//         main_icon_size: 48,
-//         default_content_margin: 15,
-//     }
-// }

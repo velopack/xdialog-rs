@@ -1,10 +1,13 @@
 #[macro_use]
+extern crate lazy_static;
+#[macro_use]
 extern crate log;
 
 use std::sync::mpsc::channel;
 
 use errors::*;
 pub use model::*;
+pub use progress::*;
 use state::*;
 
 use crate::backends::XDialogBackendImpl;
@@ -14,6 +17,7 @@ mod model;
 mod backends;
 mod state;
 mod images;
+mod progress;
 
 #[derive(Debug)]
 pub struct XDialogBuilder
@@ -73,7 +77,7 @@ pub fn set_silent_mode(silent: bool) {
 }
 
 pub fn show_message_box_info_ok_cancel<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(title: P1, main_instruction: P2, message: P3) -> Result<bool, XDialogError> {
-    let data = XDialogMessageBox {
+    let data = XDialogOptions {
         title: title.as_ref().to_string(),
         main_instruction: main_instruction.as_ref().to_string(),
         message: message.as_ref().to_string(),
@@ -84,13 +88,13 @@ pub fn show_message_box_info_ok_cancel<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef
     Ok(result == XDialogResult::ButtonPressed(1))
 }
 
-pub fn show_message_box(info: XDialogMessageBox) -> Result<XDialogResult, XDialogError> {
+pub fn show_message_box(info: XDialogOptions) -> Result<XDialogResult, XDialogError> {
     if get_silent() {
         return Ok(XDialogResult::SilentMode);
     }
 
     let id = get_next_id();
-    send_request(DialogMessageRequest::ShowMessageBox(id, info))?;
+    send_request(DialogMessageRequest::ShowMessageWindow(id, info))?;
     loop {
         if let Some(result) = get_result(id) {
             return Ok(result);
