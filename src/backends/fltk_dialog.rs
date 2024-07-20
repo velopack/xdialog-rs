@@ -21,6 +21,9 @@ pub struct CustomFltkDialog
     progress: Option<CustomProgressBar>,
     buttons: Vec<CustomButton>,
     body_text: Frame,
+    title_text: Frame,
+    main_col: Flex,
+    theme: DialogTheme,
 }
 
 impl CustomFltkDialog {
@@ -63,13 +66,13 @@ impl CustomFltkDialog {
         // flex_main_col.set_spacing(theme.default_content_margin);
 
         // Main instruction
-        let mut main_instr = Frame::default();
-        main_instr.set_label(data.main_instruction.as_str());
-        main_instr.set_label_size(get_main_instruction_size());
-        main_instr.set_label_font(get_main_instruction_font());
-        main_instr.set_label_color(theme.color_title_text);
-        main_instr.set_align(Align::Left | Align::Inside | Align::Wrap);
-        flex_main_col.fixed(&mut main_instr, theme.main_icon_size);
+        let mut title_text = Frame::default();
+        title_text.set_label(data.main_instruction.as_str());
+        title_text.set_label_size(get_main_instruction_size());
+        title_text.set_label_font(get_main_instruction_font());
+        title_text.set_label_color(theme.color_title_text);
+        title_text.set_align(Align::Left | Align::Inside | Align::Wrap);
+        flex_main_col.fixed(&mut title_text, 10);
 
         let mut progress_option: Option<CustomProgressBar> = None;
 
@@ -81,7 +84,7 @@ impl CustomFltkDialog {
             progress_option = Some(progress_bar);
 
             flex_progress_col.end();
-            flex_main_col.fixed(&mut flex_progress_col, 11);
+            flex_main_col.fixed(&mut flex_progress_col, 12);
         }
 
         // Body text
@@ -98,7 +101,7 @@ impl CustomFltkDialog {
         flex_icon_row.end();
 
         let mut btn_vec = Vec::new();
-        
+
         if !data.buttons.is_empty() {
             // Start Button background
             let mut flex_button_background = Flex::default().column();
@@ -152,14 +155,14 @@ impl CustomFltkDialog {
         wind.end();
 
         // Before showing the window, try and compute the optimal window size.
-        let mut pad_y = theme.default_content_margin * 2 + theme.main_icon_size;
+        let mut pad_y = theme.default_content_margin * 2;
         if !data.buttons.is_empty() {
             pad_y += theme.button_panel_height;
         }
         if has_progress {
             pad_y += 10;
         }
-        
+
         let mut pad_x = theme.default_content_margin * 2;
         if has_icon {
             pad_x += theme.main_icon_size + theme.default_content_margin;
@@ -175,6 +178,9 @@ impl CustomFltkDialog {
             progress: progress_option,
             buttons: btn_vec,
             body_text,
+            title_text,
+            main_col: flex_main_col,
+            theme: theme.clone(),
         };
 
         ret.auto_size();
@@ -182,21 +188,77 @@ impl CustomFltkDialog {
         ret
     }
 
-    pub fn auto_size(&mut self) {
-        let wind_size = calculate_ideal_window_size(self.data.message.as_str(), self.pad_x, self.pad_y);
-        let new_width = wind_size.0.max(self.wind.width());
-        let new_height = wind_size.1.max(self.wind.height());
-        self.wind.set_size(new_width, new_height);
+    fn auto_size(&mut self) {
+        let pad_x = self.pad_x;
+        let pad_y = self.pad_y;
+
+        // measure the main instruction
+        let title_text = self.data.main_instruction.as_str();
+        draw::set_font(get_main_instruction_font(), get_main_instruction_size());
+        let (_, title_line_height) = draw::measure("A", true);
+        let (title_width, title_height) = draw::measure(title_text, true);
+
+        // measure body text
+        let body_text = self.data.message.as_str();
+        draw::set_font(get_body_font(), get_body_size());
+        let (_, body_line_height) = draw::measure("A", true);
+        let (body_width, body_height) = draw::measure(body_text, true);
+
+        // calculate ideal window width from the longest line of text
+        let initial_width = body_width.max(title_width);
+        let window_width = if initial_width <= 600 {
+            300
+        } else if initial_width >= 4000 {
+            600
+        } else {
+            // linear interpolation between 300 (at 600px) and 600 (at 4000px)
+            300 + (((initial_width - 600) as f32 / 3400.0) * 300.0) as i32
+        };
+
+        // Adjust window width if the initial height is very large
+        let initial_height = title_height + body_height + title_line_height;
+        let height_threshold = 5 * body_line_height;
+        let extra_width = if initial_height > height_threshold {
+            (initial_height as f32 / height_threshold as f32 * 50.0).min(300.0) as i32
+        } else {
+            0
+        };
+
+        // final window width based on the above calculations
+        let final_window_width = (window_width + extra_width)
+            .min(600)
+            .min(initial_width + pad_y)
+            .max(350);
+
+        // calculate the height based on wrapping the title and body text.
+        draw::set_font(get_main_instruction_font(), get_main_instruction_size());
+        let (_, wrapped_title_height) = draw::wrap_measure(title_text, final_window_width - pad_x, true);
+
+        draw::set_font(get_body_font(), get_body_size());
+        let (_, wrapped_body_height) = draw::wrap_measure(body_text, final_window_width - pad_x, true);
+
+        let mut final_window_height = pad_y;
+        if !title_text.is_empty() {
+            final_window_height += wrapped_title_height + title_line_height;
+        }
+        if !body_text.is_empty() {
+            final_window_height += wrapped_body_height + body_line_height;
+        }
+
+        // update components with the new size
+        let ideal_title_size = if title_text.is_empty() {
+            1
+        } else {
+            (wrapped_title_height + title_line_height).max(self.theme.main_icon_size)
+        };
+        self.wind.set_size(final_window_width, final_window_height);
         self.root.clone().size_of_parent();
+        self.main_col.fixed(&mut self.title_text, ideal_title_size);
     }
 
-    pub fn center_screen(&mut self) {
+    fn center_screen(&mut self) {
         self.wind.clone().center_screen();
     }
-
-    // pub fn hide(&mut self) {
-    //     self.wind.clone().hide();
-    // }
 
     pub fn show(&mut self) {
         self.wind.clone().show();
@@ -236,33 +298,4 @@ impl Tick for CustomFltkDialog {
             b.tick(elapsed_secs);
         }
     }
-}
-
-fn calculate_ideal_window_size(body_text: &str, pad_x: i32, pad_y: i32) -> (i32, i32) {
-    let (_, line_height) = draw::measure("A", true);
-
-    draw::set_font(get_body_font(), get_body_size());
-    let (initial_width, initial_height) = draw::measure(body_text, true);
-
-    let window_width = if initial_width <= 600 {
-        300
-    } else if initial_width >= 4000 {
-        600
-    } else {
-        // linear interpolation between 300 (at 600px) and 600 (at 4000px)
-        300 + (((initial_width - 600) as f32 / 3400.0) * 300.0) as i32
-    };
-
-    // Adjust window width if the initial height is very large
-    let height_threshold = 5 * line_height;
-    let extra_width = if initial_height > height_threshold {
-        (initial_height as f32 / height_threshold as f32 * 50.0).min(300.0) as i32
-    } else {
-        0
-    };
-
-    let final_window_width = (window_width + extra_width).min(600).min(initial_width + pad_y).max(350);
-    let (_, wrapped_height) = draw::wrap_measure(body_text, final_window_width - pad_x, true);
-    let final_window_height = (wrapped_height + pad_y + line_height).max(110);
-    (final_window_width, final_window_height)
 }
