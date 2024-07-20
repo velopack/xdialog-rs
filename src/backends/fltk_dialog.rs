@@ -97,50 +97,53 @@ impl CustomFltkDialog {
         // End Icon row
         flex_icon_row.end();
 
-        // Start Button background
-        let mut flex_button_background = Flex::default().column();
-        flex_button_background.set_frame(FrameType::ThinUpBox);
-
-        // Start Button row
-        let mut flex_button_row = Flex::default().row();
-        flex_button_row.set_spacing(theme.button_panel_spacing);
-        flex_button_row.set_margin(theme.button_panel_margin);
-
-        // Padding frame
-        let _ = Frame::default();
-
         let mut btn_vec = Vec::new();
+        
+        if !data.buttons.is_empty() {
+            // Start Button background
+            let mut flex_button_background = Flex::default().column();
+            flex_button_background.set_frame(FrameType::ThinUpBox);
 
-        // Buttons
-        let button_iter: Vec<(usize, &String)> = if theme.button_order_reversed {
-            data.buttons.iter().enumerate().rev().collect()
-        } else {
-            data.buttons.iter().enumerate().collect()
-        };
-        for (index, button_text) in button_iter {
-            let mut wnd_btn_click = wind.clone();
-            let mut flex_button_wrapper = Flex::default().column();
-            let mut button = CustomButton::new(theme);
-            button.set_label(button_text.as_str());
-            button.set_label_size(get_body_size());
-            button.set_label_font(get_body_font());
-            button.set_callback(move |_| {
-                wnd_btn_click.hide();
-                insert_result(id, XDialogResult::ButtonPressed(index));
-            });
-            flex_button_wrapper.end();
-            let (w, _) = button.measure_label();
-            flex_button_row.fixed(&mut flex_button_wrapper, w + (theme.button_text_padding * 2));
+            // Start Button row
+            let mut flex_button_row = Flex::default().row();
+            flex_button_row.set_spacing(theme.button_panel_spacing);
+            flex_button_row.set_margin(theme.button_panel_margin);
 
-            btn_vec.push(button);
+            // Padding frame
+            let _ = Frame::default();
+
+
+            // Buttons
+            let button_iter: Vec<(usize, &String)> = if theme.button_order_reversed {
+                data.buttons.iter().enumerate().rev().collect()
+            } else {
+                data.buttons.iter().enumerate().collect()
+            };
+            for (index, button_text) in button_iter {
+                let mut wnd_btn_click = wind.clone();
+                let mut flex_button_wrapper = Flex::default().column();
+                let mut button = CustomButton::new(theme);
+                button.set_label(button_text.as_str());
+                button.set_label_size(get_body_size());
+                button.set_label_font(get_body_font());
+                button.set_callback(move |_| {
+                    wnd_btn_click.hide();
+                    insert_result(id, XDialogResult::ButtonPressed(index));
+                });
+                flex_button_wrapper.end();
+                let (w, _) = button.measure_label();
+                flex_button_row.fixed(&mut flex_button_wrapper, w + (theme.button_text_padding * 2));
+
+                btn_vec.push(button);
+            }
+
+            // End Button row
+            flex_button_row.end();
+
+            // End Button background
+            flex_button_background.end();
+            flex_root_col.fixed(&mut flex_button_background, theme.button_panel_height);
         }
-
-        // End Button row
-        flex_button_row.end();
-
-        // End Button background
-        flex_button_background.end();
-        flex_root_col.fixed(&mut flex_button_background, theme.button_panel_height);
 
         // End Root column
         flex_root_col.end();
@@ -149,10 +152,18 @@ impl CustomFltkDialog {
         wind.end();
 
         // Before showing the window, try and compute the optimal window size.
-        let icon_width = if has_icon { theme.main_icon_size + theme.default_content_margin } else { 0 };
-        let progress_height = if has_progress { 5 + theme.default_content_margin } else { 0 };
-        let pad_x = icon_width + (theme.default_content_margin * 2);
-        let pad_y = (theme.default_content_margin * 2) + theme.button_panel_height + theme.main_icon_size + progress_height;
+        let mut pad_y = theme.default_content_margin * 2 + theme.main_icon_size;
+        if !data.buttons.is_empty() {
+            pad_y += theme.button_panel_height;
+        }
+        if has_progress {
+            pad_y += 10;
+        }
+        
+        let mut pad_x = theme.default_content_margin * 2;
+        if has_icon {
+            pad_x += theme.main_icon_size + theme.default_content_margin;
+        }
 
         let mut ret = Self {
             id,
@@ -252,6 +263,6 @@ fn calculate_ideal_window_size(body_text: &str, pad_x: i32, pad_y: i32) -> (i32,
 
     let final_window_width = (window_width + extra_width).min(600).min(initial_width + pad_y).max(350);
     let (_, wrapped_height) = draw::wrap_measure(body_text, final_window_width - pad_x, true);
-    let final_window_height = (wrapped_height + pad_y + line_height).max(130);
+    let final_window_height = (wrapped_height + pad_y + line_height).max(110);
     (final_window_width, final_window_height)
 }
