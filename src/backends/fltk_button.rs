@@ -261,7 +261,11 @@ impl CustomButton {
             
             if state.border_width > 0 {
                 set_line_style(LineStyle::Solid, state.border_width);
-                draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
+                let w = i.w() - (state.border_width - 1);
+                let h = i.h() - (state.border_width - 1);
+                draw_improved_rbox(i.x(), i.y(), w, h, state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
+                draw_improved_rbox(i.x(), i.y(), w, h, state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
+                draw_improved_rbox(i.x(), i.y(), w, h, state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
                 set_line_style(LineStyle::Solid, 1);
             }
 

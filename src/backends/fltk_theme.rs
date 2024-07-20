@@ -140,7 +140,7 @@ pub fn apply_ubuntu_theme(app_instance: &App) -> DialogTheme {
             color_button_background: Color::from_hex(0xFFFFFF),
             color_button_text: Color::from_hex(0x3D3D3D),
             border_radius: 6,
-            border_width: 1,
+            border_width: 2,
         },
 
         style_button_hover: DialogButtonStyle {
@@ -164,7 +164,7 @@ pub fn apply_ubuntu_theme(app_instance: &App) -> DialogTheme {
             color_button_background: Color::from_hex(0xFFFFFF),
             color_button_text: Color::from_hex(0x3D3D3D),
             border_radius: 6,
-            border_width: 1,
+            border_width: 2,
         },
     }
 }
