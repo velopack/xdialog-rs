@@ -18,6 +18,7 @@ pub struct CustomProgressBar {
     state: Rc<RefCell<ProgressIndeterminateState>>,
     is_indeterminate: bool,
     current_time: f32,
+    value_animator: Option<ProgressIndeterminateStateTimeline>,
 }
 
 lazy_static! {
@@ -75,15 +76,22 @@ impl CustomProgressBar {
             state: root_state,
             current_time: 0.0,
             is_indeterminate: false,
+            value_animator: None,
         }
     }
 
     pub fn set_value(&mut self, value: f32) {
-        let mut state = self.state.borrow_mut();
-        state.x1 = 0.0;
-        state.x2 = value;
+        let state = self.state.borrow();
+
+        let animation: ProgressIndeterminateStateTimeline = timeline!(
+            ProgressIndeterminateState 0.3s Easing::OutCubic
+            from { x1: 0.0, x2: state.x2 }
+            to { x1: 0.0, x2: value }
+        );
+
         self.is_indeterminate = false;
         self.current_time = 0.0;
+        self.value_animator = Some(animation);
         self.inner.redraw();
     }
 
@@ -98,18 +106,23 @@ widget_extends!(CustomProgressBar, widget::Widget, inner);
 
 impl Tick for CustomProgressBar {
     fn tick(&mut self, elapsed_secs: f32) {
-        if !self.is_indeterminate {
-            return;
-        }
-
         let mut state = self.state.borrow_mut();
-        INDETERMINATE_TIMELINE.update(&mut *state, self.current_time);
-        self.current_time += elapsed_secs;
+        if self.is_indeterminate {
+            INDETERMINATE_TIMELINE.update(&mut *state, self.current_time);
+            self.current_time += elapsed_secs;
 
-        if self.current_time > 2.6 {
-            self.current_time = 0.0;
+            if self.current_time > 2.6 {
+                self.current_time = 0.0;
+            }
+            self.inner.redraw();
+        } else if let Some(ref mut animator) = self.value_animator {
+            animator.update(&mut *state, self.current_time);
+            self.current_time += elapsed_secs;
+
+            if self.current_time > 0.3 {
+                self.value_animator = None;
+            }
+            self.inner.redraw();
         }
-
-        self.inner.redraw();
     }
 }
