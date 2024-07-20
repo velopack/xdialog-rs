@@ -29,6 +29,8 @@ pub struct DialogTheme {
     pub color_background_alt: Color,
     pub color_body_text: Color,
     pub color_title_text: Color,
+    pub color_progress_background: Color,
+    pub color_progress_foreground: Color,
 
     pub style_button_inactive: DialogButtonStyle,
     pub style_button_hover: DialogButtonStyle,
@@ -82,6 +84,8 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
         color_background_alt: Color::from_hex(0xF0F0F0),
         color_body_text: Color::from_hex(0x000000),
         color_title_text: Color::from_hex(0x003399),
+        color_progress_background: Color::from_hex(0xA7CAED),
+        color_progress_foreground: Color::from_hex(0x1976D2),
 
         style_button_inactive: DialogButtonStyle {
             color_button_border: Color::from_hex(0xD0D0D0),
@@ -134,6 +138,8 @@ pub fn apply_ubuntu_theme(app_instance: &App) -> DialogTheme {
         color_background_alt: Color::from_hex(0xFAFAFA),
         color_body_text: Color::from_hex(0x3D3D3D),
         color_title_text: Color::from_hex(0x3D3D3D),
+        color_progress_background: Color::from_hex(0xE2997F).lighter(),
+        color_progress_foreground: Color::from_hex(0xE2997F),
 
         style_button_inactive: DialogButtonStyle {
             color_button_border: Color::from_hex(0xC7C7C7),
@@ -186,6 +192,8 @@ pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
         color_background_alt: Color::from_hex(0xECEDEB),
         color_body_text: Color::from_hex(0x242424),
         color_title_text: Color::from_hex(0x242424),
+        color_progress_background: Color::from_hex(0x027BFF).lighter(),
+        color_progress_foreground: Color::from_hex(0xE2997F),
 
         style_button_inactive: DialogButtonStyle {
             color_button_border: Color::from_hex(0xD5D6D5),
@@ -225,6 +233,8 @@ pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
         light_theme.color_background_alt = Color::from_hex(0x2A2926);
         light_theme.color_body_text = Color::from_hex(0xFFFFFF);
         light_theme.color_title_text = Color::from_hex(0xFFFFFF);
+        light_theme.color_progress_background = Color::from_hex(0x027BFF).darker();
+        
         light_theme.style_button_inactive.color_button_border = Color::from_hex(0x656565);
         light_theme.style_button_inactive.color_button_background = Color::from_hex(0x656565);
         light_theme.style_button_inactive.color_button_text = Color::from_hex(0xFFFFFF);

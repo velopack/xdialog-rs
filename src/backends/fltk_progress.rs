@@ -5,6 +5,7 @@ use std::time::SystemTime;
 use fltk::{*, prelude::*};
 use fltk::enums::{Color, FrameType};
 use mina::prelude::*;
+use crate::backends::fltk_theme::DialogTheme;
 
 #[derive(Animate, Clone, Debug, Default, PartialEq)]
 struct ProgressIndeterminateState {
@@ -20,7 +21,7 @@ pub struct CustomProgressBar {
 
 impl CustomProgressBar {
     // our constructor
-    pub fn new() -> Self {
+    pub fn new(dialog_theme: &DialogTheme) -> Self {
         // let indeterminate_timeline = timeline!(
         //     ProgressIndeterminateState 1.15s 
         //     from { x1: 0.0, x2: 0.0 }
@@ -49,13 +50,14 @@ impl CustomProgressBar {
         let root_state = Rc::new(RefCell::new(ProgressIndeterminateState::default()));
 
         let rs1 = root_state.clone();
+        let theme = dialog_theme.clone();
         inner.draw(move |i| { // we need a draw implementation
             draw::draw_box(FrameType::FlatBox, i.x(), i.y(), i.w(), i.h(), Color::BackGround);
 
             // just a hack to work around anti-aliasing
-            draw::draw_rbox(i.x(), i.y(), i.w(), i.h(), 2, true, Color::from_hex(0xA7CAED));
-            draw::draw_rbox(i.x(), i.y(), i.w(), i.h(), 2, true, Color::from_hex(0xA7CAED));
-            draw::draw_rbox(i.x(), i.y(), i.w(), i.h(), 2, true, Color::from_hex(0xA7CAED));
+            draw::draw_rbox(i.x(), i.y(), i.w(), i.h(), 2, true, theme.color_progress_background);
+            draw::draw_rbox(i.x(), i.y(), i.w(), i.h(), 2, true, theme.color_progress_background);
+            draw::draw_rbox(i.x(), i.y(), i.w(), i.h(), 2, true, theme.color_progress_background);
 
             let state = rs1.borrow();
 
@@ -65,9 +67,9 @@ impl CustomProgressBar {
 
             if width > 0 {
                 // just a hack to work around anti-aliasing
-                draw::draw_rbox(start, i.y(), width, i.h(), 2, true, Color::from_hex(0x1976D2));
-                draw::draw_rbox(start, i.y(), width, i.h(), 2, true, Color::from_hex(0x1976D2));
-                draw::draw_rbox(start, i.y(), width, i.h(), 2, true, Color::from_hex(0x1976D2));
+                draw::draw_rbox(start, i.y(), width, i.h(), 2, true, theme.color_progress_foreground);
+                draw::draw_rbox(start, i.y(), width, i.h(), 2, true, theme.color_progress_foreground);
+                draw::draw_rbox(start, i.y(), width, i.h(), 2, true, theme.color_progress_foreground);
             }
         });
 

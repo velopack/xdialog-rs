@@ -48,7 +48,7 @@ impl XDialogBackendImpl for FltkBackend {
 
                 match message {
                     DialogMessageRequest::ShowMessageBox(id, data) => {
-                        create_messagebox(id, data, &spacing, false);
+                        create_messagebox(id, data, &spacing, true);
                     }
                     DialogMessageRequest::ExitEventLoop => {
                         app::quit();
@@ -110,7 +110,7 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, theme: &DialogTheme, ha
     if has_progress {
         let mut flex_progress_col = Flex::default().column();
         flex_progress_col.set_margin(3);
-        let mut progress = CustomProgressBar::new();
+        let mut progress = CustomProgressBar::new(&theme);
         flex_progress_col.end();
         flex_main_col.fixed(&mut flex_progress_col, 11);
     }
