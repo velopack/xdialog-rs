@@ -2,7 +2,7 @@ fn main() {
     xdialog::XDialogBuilder::new().run(run);
 }
 
-fn run() -> u16 {
+fn run() -> i32 {
     let result = xdialog::show_progress_dialog(
         xdialog::XDialogIcon::Warning,
         "My App Incorporated",

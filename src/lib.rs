@@ -56,7 +56,7 @@ impl XDialogBuilder
         self
     }
 
-    pub fn run(self, main: fn() -> u16) -> u16
+    pub fn run(self, main: fn() -> i32) -> i32
     {
         let (send_message, receive_message) = channel::<DialogMessageRequest>();
         init_sender(send_message);

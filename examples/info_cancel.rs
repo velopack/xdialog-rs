@@ -3,7 +3,7 @@ fn main() {
     xdialog::XDialogBuilder::new().run(run);
 }
 
-fn run() -> u16 {
+fn run() -> i32 {
     let result = xdialog::show_message_box_info_ok_cancel(
         "Title",
         "Main instruction",

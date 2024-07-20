@@ -9,5 +9,5 @@ mod fltk_button;
 mod fltk_dialog;
 
 pub trait XDialogBackendImpl {
-    fn run(main: fn() -> u16, receiver: Receiver<DialogMessageRequest>, xdialog_theme: XDialogTheme) -> u16;
+    fn run(main: fn() -> i32, receiver: Receiver<DialogMessageRequest>, xdialog_theme: XDialogTheme) -> i32;
 }
