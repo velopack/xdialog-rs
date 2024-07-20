@@ -87,7 +87,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
             color_button_border: Color::from_hex(0xD0D0D0),
             color_button_background: (Color::from_hex(0xFDFDFD), Color::from_hex(0xFDFDFD)),
             color_button_text: Color::from_hex(0x000000),
-            border_radius: 4,
+            border_radius: 3,
             border_width: 1,
         },
 
@@ -95,7 +95,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
             color_button_border: Color::from_hex(0x0078D4),
             color_button_background: (Color::from_hex(0xE0EEF9), Color::from_hex(0xE0EEF9)),
             color_button_text: Color::from_hex(0x000000),
-            border_radius: 4,
+            border_radius: 3,
             border_width: 1,
         },
 
@@ -103,7 +103,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
             color_button_border: Color::from_hex(0x005499),
             color_button_background: (Color::from_hex(0xCCE4F7), Color::from_hex(0xCCE4F7)),
             color_button_text: Color::from_hex(0x000000),
-            border_radius: 4,
+            border_radius: 3,
             border_width: 1,
         },
 
@@ -111,7 +111,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
             color_button_border: Color::from_hex(0x0078D4),
             color_button_background: (Color::from_hex(0xFDFDFD), Color::from_hex(0xFDFDFD)),
             color_button_text: Color::from_hex(0x000000),
-            border_radius: 4,
+            border_radius: 3,
             border_width: 1,
         },
     }

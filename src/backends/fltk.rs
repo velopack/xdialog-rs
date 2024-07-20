@@ -2,20 +2,17 @@ use std::sync::mpsc::Receiver;
 use std::thread;
 
 use fltk::{
-    *, app, button::Button, enums::*,
-    frame::Frame, group::Flex, image::SvgImage, prelude::*, window::Window,
+    *, app, enums::*, frame::Frame, group::Flex, image::SvgImage, prelude::*,
+    window::DoubleWindow, window::Window,
 };
-use fltk::misc::Progress;
-use fltk::window::DoubleWindow;
-use crate::backends::fltk_button::CustomButton;
-use crate::backends::fltk_progress::CustomProgressBar;
 
-use crate::backends::fltk_theme::{DialogTheme, get_theme_icon_svg};
-use crate::backends::XDialogBackendImpl;
 use crate::model::*;
 use crate::state::insert_result;
 
-use super::fltk_fonts::*;
+use super::{
+    fltk_fonts::*, fltk_button::CustomButton, fltk_progress::CustomProgressBar,
+    fltk_theme::{DialogTheme, get_theme_icon_svg}, XDialogBackendImpl,
+};
 
 pub struct FltkBackend;
 
@@ -115,29 +112,6 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, theme: &DialogTheme, ha
         flex_progress_col.set_margin(3);
         let mut progress = CustomProgressBar::new();
         flex_progress_col.end();
-        // let mut progress = Progress::default();
-        // progress.set_frame(FrameType::FlatBox);
-        // progress.set_maximum(1.0);
-        // progress.set_minimum(0.0);
-        // progress.set_value(0.5);
-        // // progress.set_color(Color::from_hex(0x9A9A9A));
-        // // progress.set_selection_color(Color::from_hex(0xDB9EE5));
-        // progress.draw(move |p| {
-        //     draw::set_draw_color(Color::BackGround);
-        //     draw::draw_rectf(p.x(), p.y(), p.w(), p.h());
-        //     const pad: i32 = 4;
-        //     const pad2: i32 = 8;
-        //     draw::set_draw_color(Color::from_hex(0xA7CAED));
-        //     draw::draw_rectf(p.x() + pad, p.y(), p.w() - pad2, p.h());
-        // 
-        //     let bar_width = ((p.w() - pad2) as f64 * p.value()) as i32;
-        //     draw::set_draw_color(Color::from_hex(0x1976D2));
-        //     draw::draw_rectf(p.x() + pad, p.y(), bar_width, p.h());
-        // 
-        //     // app::add_timeout3(0.016, move |handle| {
-        //     //     asd
-        //     // });
-        // });
         flex_main_col.fixed(&mut flex_progress_col, 11);
     }
 
@@ -167,9 +141,9 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, theme: &DialogTheme, ha
     let _ = Frame::default();
 
     // Buttons
-    let button_iter: Vec<(usize, &String)> = if theme.button_order_reversed { 
+    let button_iter: Vec<(usize, &String)> = if theme.button_order_reversed {
         data.buttons.iter().enumerate().rev().collect()
-    } else { 
+    } else {
         data.buttons.iter().enumerate().collect()
     };
     for (index, button_text) in button_iter {
@@ -186,30 +160,6 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, theme: &DialogTheme, ha
         flex_button_wrapper.end();
         let (w, _) = button.measure_label();
         flex_button_row.fixed(&mut flex_button_wrapper, w + (theme.button_text_padding * 2));
-
-        // handle hover cursor events
-        // let mut wnd_btn_hover = wind.clone();
-        // button.handle(move |btn, event| {
-        //     if event == Event::Enter {
-        //         wnd_btn_hover.set_cursor(Cursor::Hand);
-        //         btn.set_frame(FrameType::EngravedBox);
-        //         btn.set_down_frame(FrameType::DownBox);
-        //         btn.redraw();
-        //     }
-        //     if event == Event::Leave {
-        //         wnd_btn_hover.set_cursor(Cursor::Arrow);
-        //         btn.set_frame(FrameType::UpBox);
-        //         btn.set_down_frame(FrameType::DownBox);
-        //         btn.redraw();
-        //     }
-        //     false
-        // });
-        // 
-        // let mut wnd_btn_click = wind.clone();
-        // button.set_callback(move |_| {
-        //     wnd_btn_click.hide();
-        //     insert_result(id, XDialogResult::ButtonPressed(index));
-        // });
     }
 
     // End Button row
@@ -238,7 +188,6 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, theme: &DialogTheme, ha
 
     // Show window
     wind.show();
-    // wind.set_on_top();
     wind
 
     // wind.set_on_top() - currently has bugs. https://github.com/fltk-rs/fltk-rs/issues/1573

@@ -21,11 +21,24 @@ pub struct CustomProgressBar {
 impl CustomProgressBar {
     // our constructor
     pub fn new() -> Self {
+        // let indeterminate_timeline = timeline!(
+        //     ProgressIndeterminateState 1.15s 
+        //     from { x1: 0.0, x2: 0.0 }
+        //     20% { x1: 0.0, x2: 0.3 }
+        //     60% { x1: 0.5, x2: 1.0 }
+        //     to { x1: 1.0, x2: 1.0 }
+        // );
+
         let indeterminate_timeline = timeline!(
-            ProgressIndeterminateState 1.15s 
+            ProgressIndeterminateState 2.50s
             from { x1: 0.0, x2: 0.0 }
-            20% { x1: 0.0, x2: 0.3 }
-            60% { x1: 0.5, x2: 1.0 }
+            10% { x1: 0.0, x2: 0.3 }
+            30% { x1: 0.5, x2: 1.0 }
+            50% { x1: 1.0, x2: 1.0 }
+            60% { x1: 0.0, x2: 0.0 }
+            70% { x1: 0.0, x2: 0.5 }
+            80% { x1: 0.5, x2: 0.8 }
+            90% { x1: 0.85, x2: 1.0 }
             to { x1: 1.0, x2: 1.0 }
         );
 
@@ -66,20 +79,20 @@ impl CustomProgressBar {
         let mut inner_clone = inner.clone();
         let rs2 = root_state.clone();
         let st1 = start_time.clone();
-        app::add_timeout3(0.016, move |handle| {
+        app::add_timeout3(0.008, move |handle| {
             let mut indeterminate_state = rs2.borrow_mut();
             let indeterminate_state = &mut *indeterminate_state;
 
             let mut start = st1.borrow_mut();
             let elapsed = start.elapsed().unwrap().as_secs_f32();
-            if elapsed > 1.30 {
+            if elapsed > 2.6 {
                 *start = SystemTime::now();
             }
 
             indeterminate_timeline.update(indeterminate_state, elapsed);
             inner_clone.redraw();
 
-            app::repeat_timeout3(0.016, handle);
+            app::repeat_timeout3(0.008, handle);
         });
 
         Self {

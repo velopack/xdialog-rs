@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use fltk::{app, widget, widget_extends, draw::*};
-use fltk::enums::{Color, Event, FrameType};
+use fltk::enums::{Color, Event, FrameType, Key};
 use fltk::prelude::{WidgetBase, WidgetExt};
 use mina::{Animate, prelude::*};
 
@@ -43,31 +43,32 @@ enum ButtonState {
     Focused,
 }
 
+fn calculate_offsets(rs: f64, num_points: usize) -> Vec<f64> {
+    let mut offsets = Vec::with_capacity(num_points);
+    for i in 0..num_points {
+        let angle = std::f64::consts::PI * 0.5 * (i as f64 / (num_points - 1) as f64);
+        offsets.push(rs - angle.sin() * rs); // Calculate outward arc
+    }
+    offsets
+}
+
 pub fn draw_improved_rbox(x: i32, y: i32, w: i32, h: i32, max_radius: i32, fill: bool, col: Color) {
     let max_radius = if max_radius < 0 { 0 } else { max_radius };
-    let offset: [f64; 5] = [0.0, 0.07612, 0.29289, 0.61732, 1.0];
-    let mut rs = w * 2 / 5;
-    let rsy = h * 2 / 5;
-    if rs > rsy {
-        rs = rsy;
-    }
+    let mut rs = w.min(h) * 2 / 5;  // Smallest side divided by 5
     if rs > max_radius {
         rs = max_radius;
     }
-    if rs == 5 {
-        rs = 4;
-    }
-    if rs == 7 {
-        rs = 8;
-    }
+    rs = rs.max(1); // Ensure radius isn't zero
 
-    let rs = rs as f64;
-    let x = x as f64;
-    let y = y as f64;
-    let w = w as f64;
-    let h = h as f64;
+    let rs_f64 = rs as f64;
+    let num_points = 5 + (rs_f64.sqrt() as usize); // Adjust number of points based on sqrt of radius
+    let offsets = calculate_offsets(rs_f64, num_points);
+
+    let x_f64 = x as f64;
+    let y_f64 = y as f64;
+    let w_f64 = w as f64;
+    let h_f64 = h as f64;
     let old_col = get_color();
-    let len = offset.len();
 
     set_draw_color(col);
     if fill {
@@ -75,32 +76,38 @@ pub fn draw_improved_rbox(x: i32, y: i32, w: i32, h: i32, max_radius: i32, fill:
     } else {
         begin_loop();
     }
-    unsafe {
-        for i in 0..len {
-            vertex(
-                0.5 + x + offset.get_unchecked(len - i - 1) * rs,
-                0.5 + y + offset.get_unchecked(i) * rs,
-            );
-        }
-        for i in 0..len {
-            vertex(
-                0.5 + x + offset.get_unchecked(i) * rs,
-                0.5 + y + h - 1.0 - offset.get_unchecked(len - i - 1) * rs,
-            );
-        }
-        for i in 0..len {
-            vertex(
-                0.5 + x + w - 1.0 - offset.get_unchecked(len - i - 1) * rs,
-                0.5 + y + h - 1.0 - offset.get_unchecked(i) * rs,
-            );
-        }
-        for i in 0..len {
-            vertex(
-                0.5 + x + w - 1.0 - offset.get_unchecked(i) * rs,
-                0.5 + y + offset.get_unchecked(len - i - 1) * rs,
-            );
-        }
+    // Upper left corner
+    for i in 0..num_points {
+        vertex(
+            0.5 + x_f64 + offsets[num_points - i - 1],
+            0.5 + y_f64 + offsets[i],
+        );
     }
+
+    // Upper right corner
+    for i in 0..num_points {
+        vertex(
+            0.5 + x_f64 + w_f64 - 1.0 - offsets[i],
+            0.5 + y_f64 + offsets[num_points - i - 1],
+        );
+    }
+
+    // Lower right corner
+    for i in 0..num_points {
+        vertex(
+            0.5 + x_f64 + w_f64 - 1.0 - offsets[num_points - i - 1],
+            0.5 + y_f64 + h_f64 - 1.0 - offsets[i],
+        );
+    }
+
+    // Lower left corner
+    for i in 0..num_points {
+        vertex(
+            0.5 + x_f64 + offsets[i],
+            0.5 + y_f64 + h_f64 - 1.0 - offsets[num_points - i - 1],
+        );
+    }
+
     if fill {
         end_polygon();
     } else {
@@ -227,6 +234,14 @@ impl CustomButton {
                 i.do_callback();
                 true
             }
+            Event::KeyDown => {
+                if app::event_key() == Key::Enter {
+                    i.do_callback();
+                    true
+                } else {
+                    false
+                }
+            }
             Event::Enter => {
                 let mut animator = animator_cell1.borrow_mut();
                 let new_state = update_interaction_state(Some(true), None, i.has_focus());
@@ -259,8 +274,8 @@ impl CustomButton {
             let state = animator.current_values();
 
             draw_box(FrameType::FlatBox, i.x(), i.y(), i.w(), i.h(), Color::Background2);
-            draw_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, true, Color::from_rgb(state.fill1_r, state.fill1_g, state.fill1_b));
-            draw_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
+            draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, true, Color::from_rgb(state.fill1_r, state.fill1_g, state.fill1_b));
+            draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
 
             set_font(i.label_font(), i.label_size());
             set_draw_color(Color::from_rgb(state.text_r, state.text_g, state.text_b));
