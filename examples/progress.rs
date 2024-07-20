@@ -3,7 +3,7 @@ fn main() {
 }
 
 fn run() -> i32 {
-    let result = xdialog::show_progress_dialog(
+    let result = xdialog::show_progress(
         xdialog::XDialogIcon::Warning,
         "My App Incorporated",
         "Doing some hard thing",

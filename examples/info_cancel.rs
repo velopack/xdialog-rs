@@ -4,10 +4,12 @@ fn main() {
 }
 
 fn run() -> i32 {
-    let result = xdialog::show_message_box_info_ok_cancel(
+    let result = xdialog::show_message_ok_cancel(
         "Title",
         "Main instruction",
-        "Are you happy with things?").unwrap();
+        "Are you happy with things?",
+        xdialog::XDialogIcon::Information,
+    ).unwrap();
 
     if result {
         println!("OK button pressed")

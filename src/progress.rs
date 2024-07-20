@@ -2,7 +2,7 @@ use crate::{DialogMessageRequest, XDialogIcon, XDialogOptions};
 use crate::errors::XDialogError;
 use crate::state::{get_next_id, send_request};
 
-pub fn show_progress_dialog<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
+pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
     icon: XDialogIcon, title: P1, main_instruction: P2, message: P3) -> Result<ProgressDialogProxy, XDialogError> {
     let id = get_next_id();
 

@@ -5,7 +5,7 @@ extern crate log;
 
 use std::sync::mpsc::channel;
 
-use errors::*;
+pub use message::*;
 pub use model::*;
 pub use progress::*;
 use state::*;
@@ -18,6 +18,7 @@ mod backends;
 mod state;
 mod images;
 mod progress;
+mod message;
 
 #[derive(Debug)]
 pub struct XDialogBuilder
@@ -74,31 +75,5 @@ impl XDialogBuilder
 
 pub fn set_silent_mode(silent: bool) {
     set_silent(silent);
-}
-
-pub fn show_message_box_info_ok_cancel<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(title: P1, main_instruction: P2, message: P3) -> Result<bool, XDialogError> {
-    let data = XDialogOptions {
-        title: title.as_ref().to_string(),
-        main_instruction: main_instruction.as_ref().to_string(),
-        message: message.as_ref().to_string(),
-        icon: XDialogIcon::Information,
-        buttons: vec!["Cancel".to_string(), "OK".to_string()],
-    };
-    let result = show_message_box(data)?;
-    Ok(result == XDialogResult::ButtonPressed(1))
-}
-
-pub fn show_message_box(info: XDialogOptions) -> Result<XDialogResult, XDialogError> {
-    if get_silent() {
-        return Ok(XDialogResult::SilentMode);
-    }
-
-    let id = get_next_id();
-    send_request(DialogMessageRequest::ShowMessageWindow(id, info))?;
-    loop {
-        if let Some(result) = get_result(id) {
-            return Ok(result);
-        }
-    }
 }
 
