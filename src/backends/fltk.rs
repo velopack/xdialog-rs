@@ -48,7 +48,7 @@ impl XDialogBackendImpl for FltkBackend {
 
                 match message {
                     DialogMessageRequest::ShowMessageBox(id, data) => {
-                        create_messagebox(id, data, &spacing, true);
+                        create_messagebox(id, data, &spacing, false);
                     }
                     DialogMessageRequest::ExitEventLoop => {
                         app::quit();
@@ -96,7 +96,7 @@ fn create_messagebox(id: usize, data: XDialogMessageBox, theme: &DialogTheme, ha
 
     // Start Main column
     let mut flex_main_col = Flex::default().column();
-    flex_main_col.set_spacing(theme.default_content_margin);
+    // flex_main_col.set_spacing(theme.default_content_margin);
 
     // Main instruction
     let mut main_instr = Frame::default();

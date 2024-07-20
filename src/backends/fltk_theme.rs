@@ -120,15 +120,118 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
 pub fn apply_ubuntu_theme(app_instance: &App) -> DialogTheme {
     load_ubuntu_fonts(app_instance);
     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_noop_cb, 0, 0, 0, 0);
+    DialogTheme {
+        button_panel_height: 48,
+        button_panel_spacing: 7,
+        button_panel_margin: 7,
+        button_text_padding: 24,
+        button_order_reversed: false,
 
-    todo!();
+        main_icon_size: 48,
+        default_content_margin: 12,
+
+        color_background: Color::from_hex(0xFAFAFA),
+        color_background_alt: Color::from_hex(0xFAFAFA),
+        color_body_text: Color::from_hex(0x3D3D3D),
+        color_title_text: Color::from_hex(0x3D3D3D),
+
+        style_button_inactive: DialogButtonStyle {
+            color_button_border: Color::from_hex(0xC7C7C7),
+            color_button_background: Color::from_hex(0xFFFFFF),
+            color_button_text: Color::from_hex(0x3D3D3D),
+            border_radius: 6,
+            border_width: 1,
+        },
+
+        style_button_hover: DialogButtonStyle {
+            color_button_border: Color::from_hex(0xF3AA90),
+            color_button_background: Color::from_hex(0xF5F5F5),
+            color_button_text: Color::from_hex(0x3D3D3D),
+            border_radius: 6,
+            border_width: 2,
+        },
+
+        style_button_pressed: DialogButtonStyle {
+            color_button_border: Color::from_hex(0xE2997F),
+            color_button_background: Color::from_hex(0xE0E0E0),
+            color_button_text: Color::from_hex(0x3D3D3D),
+            border_radius: 6,
+            border_width: 2,
+        },
+
+        style_button_focused: DialogButtonStyle {
+            color_button_border: Color::from_hex(0xE2997F),
+            color_button_background: Color::from_hex(0xFFFFFF),
+            color_button_text: Color::from_hex(0x3D3D3D),
+            border_radius: 6,
+            border_width: 1,
+        },
+    }
 }
 
 pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
     load_macos_fonts(app_instance);
     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_noop_cb, 0, 0, 0, 0);
+    let mut light_theme = DialogTheme {
+        button_panel_height: 54,
+        button_panel_spacing: 10,
+        button_panel_margin: 15,
+        button_text_padding: 24,
+        button_order_reversed: false,
 
-    todo!();
+        main_icon_size: 48,
+        default_content_margin: 15,
+
+        color_background: Color::from_hex(0xECEDEB),
+        color_background_alt: Color::from_hex(0xECEDEB),
+        color_body_text: Color::from_hex(0x242424),
+        color_title_text: Color::from_hex(0x242424),
+
+        style_button_inactive: DialogButtonStyle {
+            color_button_border: Color::from_hex(0xD5D6D5),
+            color_button_background: Color::from_hex(0xFFFFFF),
+            color_button_text: Color::from_hex(0x242424),
+            border_radius: 6,
+            border_width: 1,
+        },
+
+        style_button_hover: DialogButtonStyle {
+            color_button_border: Color::TransparentBg,
+            color_button_background: Color::from_hex(0x027BFF),
+            color_button_text: Color::from_hex(0xFFFFFF),
+            border_radius: 6,
+            border_width: 0,
+        },
+
+        style_button_pressed: DialogButtonStyle {
+            color_button_border: Color::TransparentBg,
+            color_button_background: Color::from_hex(0x027BFF).darker(),
+            color_button_text: Color::from_hex(0xFFFFFF),
+            border_radius: 6,
+            border_width: 0,
+        },
+
+        style_button_focused: DialogButtonStyle {
+            color_button_border: Color::TransparentBg,
+            color_button_background: Color::from_hex(0x2891FF),
+            color_button_text: Color::from_hex(0xFFFFFF),
+            border_radius: 6,
+            border_width: 0,
+        },
+    };
+    
+    if dark {
+        light_theme.color_background = Color::from_hex(0x2A2926);
+        light_theme.color_background_alt = Color::from_hex(0x2A2926);
+        light_theme.color_body_text = Color::from_hex(0xFFFFFF);
+        light_theme.color_title_text = Color::from_hex(0xFFFFFF);
+        light_theme.style_button_inactive.color_button_border = Color::from_hex(0x656565);
+        light_theme.style_button_inactive.color_button_background = Color::from_hex(0x656565);
+        light_theme.style_button_inactive.color_button_text = Color::from_hex(0xFFFFFF);
+        light_theme.style_button_inactive.border_width = 0;
+    }
+    
+    light_theme
 }
 
 pub fn get_theme_icon_svg(icon: XDialogIcon) -> Option<&'static str>
@@ -143,7 +246,7 @@ pub fn get_theme_icon_svg(icon: XDialogIcon) -> Option<&'static str>
 }
 
 fn thin_up_box_windows_cb(x: i32, y: i32, w: i32, h: i32, _: Color) {
-    draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::BackGround2);
+    draw::draw_box(FrameType::FlatBox, x, y, w, h, Color::Background2);
     draw::begin_line();
     draw::set_draw_color(Color::from_hex(0xDFDFDF));
     draw::draw_line(x, y, x + w, y);

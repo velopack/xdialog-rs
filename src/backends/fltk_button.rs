@@ -258,7 +258,12 @@ impl CustomButton {
 
             draw_box(FrameType::FlatBox, i.x(), i.y(), i.w(), i.h(), Color::Background2);
             draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, true, Color::from_rgb(state.fill_r, state.fill_g, state.fill_b));
-            draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
+            
+            if state.border_width > 0 {
+                set_line_style(LineStyle::Solid, state.border_width);
+                draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
+                set_line_style(LineStyle::Solid, 1);
+            }
 
             set_font(i.label_font(), i.label_size());
             set_draw_color(Color::from_rgb(state.text_r, state.text_g, state.text_b));
