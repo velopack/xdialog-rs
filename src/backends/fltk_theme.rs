@@ -9,7 +9,7 @@ use super::fltk_fonts::*;
 pub struct DialogButtonStyle {
     pub color_button_border: Color,
     pub color_button_text: Color,
-    pub color_button_background: (Color, Color),
+    pub color_button_background: Color,
     pub border_radius: i32,
     pub border_width: i32,
 }
@@ -85,7 +85,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
 
         style_button_inactive: DialogButtonStyle {
             color_button_border: Color::from_hex(0xD0D0D0),
-            color_button_background: (Color::from_hex(0xFDFDFD), Color::from_hex(0xFDFDFD)),
+            color_button_background: Color::from_hex(0xFDFDFD),
             color_button_text: Color::from_hex(0x000000),
             border_radius: 3,
             border_width: 1,
@@ -93,7 +93,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
 
         style_button_hover: DialogButtonStyle {
             color_button_border: Color::from_hex(0x0078D4),
-            color_button_background: (Color::from_hex(0xE0EEF9), Color::from_hex(0xE0EEF9)),
+            color_button_background: Color::from_hex(0xE0EEF9),
             color_button_text: Color::from_hex(0x000000),
             border_radius: 3,
             border_width: 1,
@@ -101,7 +101,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
 
         style_button_pressed: DialogButtonStyle {
             color_button_border: Color::from_hex(0x005499),
-            color_button_background: (Color::from_hex(0xCCE4F7), Color::from_hex(0xCCE4F7)),
+            color_button_background: Color::from_hex(0xCCE4F7),
             color_button_text: Color::from_hex(0x000000),
             border_radius: 3,
             border_width: 1,
@@ -109,7 +109,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
 
         style_button_focused: DialogButtonStyle {
             color_button_border: Color::from_hex(0x0078D4),
-            color_button_background: (Color::from_hex(0xFDFDFD), Color::from_hex(0xFDFDFD)),
+            color_button_background: Color::from_hex(0xFDFDFD),
             color_button_text: Color::from_hex(0x000000),
             border_radius: 3,
             border_width: 1,
@@ -120,14 +120,14 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
 pub fn apply_ubuntu_theme(app_instance: &App) -> DialogTheme {
     load_ubuntu_fonts(app_instance);
     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_noop_cb, 0, 0, 0, 0);
-    
+
     todo!();
 }
 
 pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
     load_macos_fonts(app_instance);
     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_noop_cb, 0, 0, 0, 0);
-    
+
     todo!();
 }
 

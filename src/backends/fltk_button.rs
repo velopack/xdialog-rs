@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use fltk::{app, widget, widget_extends, draw::*};
+use fltk::{app, draw::*, widget, widget_extends};
 use fltk::enums::{Color, Event, FrameType, Key};
 use fltk::prelude::{WidgetBase, WidgetExt};
 use mina::{Animate, prelude::*};
@@ -17,13 +17,9 @@ struct ButtonColorState {
     border_g: u8,
     border_b: u8,
 
-    fill1_r: u8,
-    fill1_g: u8,
-    fill1_b: u8,
-
-    fill2_r: u8,
-    fill2_g: u8,
-    fill2_b: u8,
+    fill_r: u8,
+    fill_g: u8,
+    fill_b: u8,
 
     text_r: u8,
     text_g: u8,
@@ -32,7 +28,6 @@ struct ButtonColorState {
 
 pub struct CustomButton {
     inner: widget::Widget,
-    // state: Rc<RefCell<ButtonColorState>>,
 }
 
 #[derive(Clone, Default, PartialEq, State)]
@@ -129,12 +124,9 @@ impl CustomButton {
                 border_r: dialog_theme.style_button_inactive.color_button_border.to_rgb().0,
                 border_g: dialog_theme.style_button_inactive.color_button_border.to_rgb().1,
                 border_b: dialog_theme.style_button_inactive.color_button_border.to_rgb().2,
-                fill1_r: dialog_theme.style_button_inactive.color_button_background.0.to_rgb().0,
-                fill1_g: dialog_theme.style_button_inactive.color_button_background.0.to_rgb().1,
-                fill1_b: dialog_theme.style_button_inactive.color_button_background.0.to_rgb().2,
-                fill2_r: dialog_theme.style_button_inactive.color_button_background.1.to_rgb().0,
-                fill2_g: dialog_theme.style_button_inactive.color_button_background.1.to_rgb().1,
-                fill2_b: dialog_theme.style_button_inactive.color_button_background.1.to_rgb().2,
+                fill_r: dialog_theme.style_button_inactive.color_button_background.to_rgb().0,
+                fill_g: dialog_theme.style_button_inactive.color_button_background.to_rgb().1,
+                fill_b: dialog_theme.style_button_inactive.color_button_background.to_rgb().2,
                 text_r: dialog_theme.style_button_inactive.color_button_text.to_rgb().0,
                 text_g: dialog_theme.style_button_inactive.color_button_text.to_rgb().1,
                 text_b: dialog_theme.style_button_inactive.color_button_text.to_rgb().2,
@@ -146,12 +138,9 @@ impl CustomButton {
                 border_r: dialog_theme.style_button_hover.color_button_border.to_rgb().0,
                 border_g: dialog_theme.style_button_hover.color_button_border.to_rgb().1,
                 border_b: dialog_theme.style_button_hover.color_button_border.to_rgb().2,
-                fill1_r: dialog_theme.style_button_hover.color_button_background.0.to_rgb().0,
-                fill1_g: dialog_theme.style_button_hover.color_button_background.0.to_rgb().1,
-                fill1_b: dialog_theme.style_button_hover.color_button_background.0.to_rgb().2,
-                fill2_r: dialog_theme.style_button_hover.color_button_background.1.to_rgb().0,
-                fill2_g: dialog_theme.style_button_hover.color_button_background.1.to_rgb().1,
-                fill2_b: dialog_theme.style_button_hover.color_button_background.1.to_rgb().2,
+                fill_r: dialog_theme.style_button_hover.color_button_background.to_rgb().0,
+                fill_g: dialog_theme.style_button_hover.color_button_background.to_rgb().1,
+                fill_b: dialog_theme.style_button_hover.color_button_background.to_rgb().2,
                 text_r: dialog_theme.style_button_hover.color_button_text.to_rgb().0,
                 text_g: dialog_theme.style_button_hover.color_button_text.to_rgb().1,
                 text_b: dialog_theme.style_button_hover.color_button_text.to_rgb().2,
@@ -162,12 +151,9 @@ impl CustomButton {
                 border_r: dialog_theme.style_button_pressed.color_button_border.to_rgb().0,
                 border_g: dialog_theme.style_button_pressed.color_button_border.to_rgb().1,
                 border_b: dialog_theme.style_button_pressed.color_button_border.to_rgb().2,
-                fill1_r: dialog_theme.style_button_pressed.color_button_background.0.to_rgb().0,
-                fill1_g: dialog_theme.style_button_pressed.color_button_background.0.to_rgb().1,
-                fill1_b: dialog_theme.style_button_pressed.color_button_background.0.to_rgb().2,
-                fill2_r: dialog_theme.style_button_pressed.color_button_background.1.to_rgb().0,
-                fill2_g: dialog_theme.style_button_pressed.color_button_background.1.to_rgb().1,
-                fill2_b: dialog_theme.style_button_pressed.color_button_background.1.to_rgb().2,
+                fill_r: dialog_theme.style_button_pressed.color_button_background.to_rgb().0,
+                fill_g: dialog_theme.style_button_pressed.color_button_background.to_rgb().1,
+                fill_b: dialog_theme.style_button_pressed.color_button_background.to_rgb().2,
                 text_r: dialog_theme.style_button_pressed.color_button_text.to_rgb().0,
                 text_g: dialog_theme.style_button_pressed.color_button_text.to_rgb().1,
                 text_b: dialog_theme.style_button_pressed.color_button_text.to_rgb().2,
@@ -178,12 +164,9 @@ impl CustomButton {
                 border_r: dialog_theme.style_button_focused.color_button_border.to_rgb().0,
                 border_g: dialog_theme.style_button_focused.color_button_border.to_rgb().1,
                 border_b: dialog_theme.style_button_focused.color_button_border.to_rgb().2,
-                fill1_r: dialog_theme.style_button_focused.color_button_background.0.to_rgb().0,
-                fill1_g: dialog_theme.style_button_focused.color_button_background.0.to_rgb().1,
-                fill1_b: dialog_theme.style_button_focused.color_button_background.0.to_rgb().2,
-                fill2_r: dialog_theme.style_button_focused.color_button_background.1.to_rgb().0,
-                fill2_g: dialog_theme.style_button_focused.color_button_background.1.to_rgb().1,
-                fill2_b: dialog_theme.style_button_focused.color_button_background.1.to_rgb().2,
+                fill_r: dialog_theme.style_button_focused.color_button_background.to_rgb().0,
+                fill_g: dialog_theme.style_button_focused.color_button_background.to_rgb().1,
+                fill_b: dialog_theme.style_button_focused.color_button_background.to_rgb().2,
                 text_r: dialog_theme.style_button_focused.color_button_text.to_rgb().0,
                 text_g: dialog_theme.style_button_focused.color_button_text.to_rgb().1,
                 text_b: dialog_theme.style_button_focused.color_button_text.to_rgb().2,
@@ -274,7 +257,7 @@ impl CustomButton {
             let state = animator.current_values();
 
             draw_box(FrameType::FlatBox, i.x(), i.y(), i.w(), i.h(), Color::Background2);
-            draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, true, Color::from_rgb(state.fill1_r, state.fill1_g, state.fill1_b));
+            draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, true, Color::from_rgb(state.fill_r, state.fill_g, state.fill_b));
             draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
 
             set_font(i.label_font(), i.label_size());
