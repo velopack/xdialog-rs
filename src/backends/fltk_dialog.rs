@@ -20,6 +20,7 @@ pub struct CustomFltkDialog
     data: XDialogOptions,
     progress: Option<CustomProgressBar>,
     buttons: Vec<CustomButton>,
+    body_text: Frame,
 }
 
 impl CustomFltkDialog {
@@ -162,6 +163,7 @@ impl CustomFltkDialog {
             root: flex_root_col,
             progress: progress_option,
             buttons: btn_vec,
+            body_text,
         };
 
         ret.auto_size();
@@ -205,6 +207,12 @@ impl CustomFltkDialog {
         if let Some(p) = &mut self.progress {
             p.set_indeterminate();
         }
+    }
+
+    pub fn set_body_text(&mut self, text: &str) {
+        self.body_text.set_label(text);
+        self.data.message = text.to_string();
+        self.auto_size();
     }
 }
 

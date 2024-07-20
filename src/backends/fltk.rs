@@ -8,12 +8,10 @@ use std::time::Instant;
 use fltk::app;
 
 use crate::model::*;
-use crate::state::insert_result;
 
 use super::{fltk_dialog::CustomFltkDialog, XDialogBackendImpl};
 
 pub struct FltkBackend;
-
 
 impl XDialogBackendImpl for FltkBackend {
     fn run(main: fn() -> u16, receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) -> u16 {
@@ -76,8 +74,9 @@ impl XDialogBackendImpl for FltkBackend {
                         break;
                     }
                     DialogMessageRequest::CloseWindow(id) => {
-                        // the window will be cleaned up by our GC routine
-                        insert_result(id, XDialogResult::WindowClosed);
+                        if let Some(dialog) = dialogs2.borrow_mut().get_mut(&id) {
+                            dialog.close();
+                        }
                     }
                     DialogMessageRequest::ShowProgressWindow(id, data) => {
                         let mut d = CustomFltkDialog::new(id, data, &spacing, true);
@@ -95,8 +94,9 @@ impl XDialogBackendImpl for FltkBackend {
                         }
                     }
                     DialogMessageRequest::SetProgressText(id, text) => {
-                        todo!();
-                        // also auto size
+                        if let Some(dialog) = dialogs2.borrow_mut().get_mut(&id) {
+                            dialog.set_body_text(&text);
+                        }
                     }
                 }
             }
@@ -104,41 +104,6 @@ impl XDialogBackendImpl for FltkBackend {
     }
 }
 
-
 pub trait Tick {
     fn tick(&mut self, elapsed_secs: f32);
 }
-// 
-// pub struct TickManager {
-//     subscribers: RefCell<VecDeque<Weak<RefCell<dyn Tick>>>>,
-//     last_time: Instant,
-// }
-// 
-// impl TickManager {
-//     pub fn new() -> Self {
-//         TickManager {
-//             subscribers: RefCell::new(VecDeque::new()),
-//             last_time: Instant::now(),
-//         }
-//     }
-// 
-//     pub fn register(&self, component: &Rc<RefCell<dyn Tick>>) {
-//         self.subscribers.borrow_mut().push_back(Rc::downgrade(component));
-//     }
-// 
-//     pub fn run_tick(&mut self) {
-//         let now = Instant::now();
-//         let elapsed = now.duration_since(self.last_time).as_secs_f32();
-//         self.last_time = now;
-// 
-//         self.subscribers.borrow_mut().retain(|weak_ref| {
-//             if let Some(component) = weak_ref.upgrade() {
-//                 let mut component = component.borrow_mut();
-//                 component.tick(elapsed);
-//                 true
-//             } else {
-//                 false // Automatically remove the dealloc'd components
-//             }
-//         });
-//     }
-// }
