@@ -193,7 +193,7 @@ pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
         color_body_text: Color::from_hex(0x242424),
         color_title_text: Color::from_hex(0x242424),
         color_progress_background: Color::from_hex(0x027BFF).lighter(),
-        color_progress_foreground: Color::from_hex(0xE2997F),
+        color_progress_foreground: Color::from_hex(0x027BFF),
 
         style_button_inactive: DialogButtonStyle {
             color_button_border: Color::from_hex(0xD5D6D5),
