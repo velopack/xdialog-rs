@@ -38,8 +38,8 @@
 //! ```rust
 //! use xdialog::*;
 //!
-//! fn main() -> i32 {
-//!   XDialogBuilder::new().run(your_main_logic)
+//! fn main() {
+//!   XDialogBuilder::new().run(your_main_logic);
 //! }
 //!
 //! fn your_main_logic() -> i32 {

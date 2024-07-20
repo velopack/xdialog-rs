@@ -9,14 +9,18 @@ use crate::state::{get_next_id, send_request};
 ///
 /// ### Example
 /// ```rust
-/// use xdialog::{show_progress, XDialogIcon};
+/// use xdialog::*;
 ///
 /// fn main() {
+///   XDialogBuilder::new().run(run);
+/// }
+///
+/// fn run() -> i32 {
 ///   let progress = show_progress(
-///     XDialogIcon::Information,
 ///     "Window Title",
 ///     "Main Instruction Text",
-///     "Body Text").unwrap();
+///     "Body Text",
+///      XDialogIcon::Information).unwrap();
 ///
 ///   progress.set_value(0.5).unwrap();
 ///   progress.set_text("Updating...").unwrap();
@@ -27,6 +31,7 @@ use crate::state::{get_next_id, send_request};
 ///   std::thread::sleep(std::time::Duration::from_secs(3));
 ///
 ///   progress.close().unwrap();
+///   0
 /// }
 pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
     title: P1, main_instruction: P2, message: P3, icon: XDialogIcon) -> Result<ProgressDialogProxy, XDialogError> {
