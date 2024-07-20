@@ -74,7 +74,7 @@ impl CustomProgressBar {
             inner,
             state: root_state,
             current_time: 0.0,
-            is_indeterminate: true,
+            is_indeterminate: false,
         }
     }
 
