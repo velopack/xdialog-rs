@@ -162,7 +162,7 @@ impl XDialogBuilder {
 
     /// Run the XDialog library with the specified configuration. This function will block the main
     /// thread and run the specified `main` function in a separate thread.
-    pub fn run(self, main: fn() -> i32) -> i32 {
+    pub fn run<T: Send + 'static>(self, main: fn() -> T) -> T {
         let (send_message, receive_message) = channel::<DialogMessageRequest>();
         init_sender(send_message);
 
@@ -172,6 +172,9 @@ impl XDialogBuilder {
             }
             XDialogBackend::Fltk => {
                 backends::fltk::FltkBackend::run(main, receive_message, self.theme)
+            }
+            XDialogBackend::XamlIsland => {
+                backends::xaml_island::XamlIslandBackend::run(main, receive_message, self.theme)
             }
         }
     }

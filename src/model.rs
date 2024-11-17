@@ -5,6 +5,8 @@ pub enum XDialogBackend {
     Automatic = 0,
     /// Use the FLTK backend
     Fltk,
+    /// Use Windows-only XAML Islands
+    XamlIsland,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

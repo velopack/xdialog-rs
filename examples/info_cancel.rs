@@ -1,9 +1,10 @@
 fn main() {
-    println!("Showing OK/Cancel Dialog!");
-    xdialog::XDialogBuilder::new().run(run);
+    println!("Starting Example...");
+    xdialog::XDialogBuilder::new().with_backend(xdialog::XDialogBackend::XamlIsland).run(run);
 }
 
 fn run() -> i32 {
+    println!("Showing OK/Cancel Dialog!");
     let result = xdialog::show_message_ok_cancel(
         "Title",
         "Main instruction",

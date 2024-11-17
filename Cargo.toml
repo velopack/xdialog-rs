@@ -14,11 +14,31 @@ default = ["fltk-bundled"]
 fltk-bundled = ["fltk/fltk-bundled"]
 
 [dependencies]
-fltk = "1.4"
 log = "0.4"
 atomic-counter = "1.0"
 lazy_static = "1.5"
+enum-map = "2.7"
+
+# fltk
+fltk = "1.4"
 font-kit = "0.14"
 dark-light = "1.1"
 mina = "0.1"
-enum-map = "2.7"
+
+# xaml islands
+winit = "0.30"
+[dependencies.windows]
+version = ">= 0.30, <= 0.35"
+features = [
+    "alloc",
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_WinRT_Xaml",
+    "UI_Xaml_Hosting",
+    "UI_Xaml_Controls",
+    "UI_Xaml_Markup",
+    "UI_Xaml",
+]
+
+[build-dependencies]
+winres = "0.1"

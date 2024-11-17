@@ -20,12 +20,12 @@ use super::{fltk::fltk_dialog::CustomFltkDialog, XDialogBackendImpl};
 
 pub struct FltkBackend;
 
-impl XDialogBackendImpl for FltkBackend {
+impl<T: Send + 'static> XDialogBackendImpl<T> for FltkBackend {
     fn run(
-        main: fn() -> i32,
+        main: fn() -> T,
         receiver: Receiver<DialogMessageRequest>,
         theme: XDialogTheme,
-    ) -> i32 {
+    ) -> T {
         let app_instance = app::App::default();
 
         let spacing = super::fltk::fltk_theme::apply_theme(&app_instance, theme);
