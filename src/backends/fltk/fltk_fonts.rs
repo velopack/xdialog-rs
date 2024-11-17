@@ -39,10 +39,14 @@ pub fn get_body_size() -> i32 {
     12
 }
 
-fn try_load_font<S: font_kit::source::Source>(app: &App, font_source: &S, font_families: &[FamilyName], font_properties_thin: &Properties, target: &OnceLock<String>)
-{
-    if let Ok(font_handle) = font_source.select_best_match(&font_families, &font_properties_thin)
-    {
+fn try_load_font<S: font_kit::source::Source>(
+    app: &App,
+    font_source: &S,
+    font_families: &[FamilyName],
+    font_properties_thin: &Properties,
+    target: &OnceLock<String>,
+) {
+    if let Ok(font_handle) = font_source.select_best_match(&font_families, &font_properties_thin) {
         match font_handle {
             Handle::Path { path, .. } => {
                 if let Ok(font) = app.load_font(path) {
@@ -78,9 +82,21 @@ pub fn load_windows_fonts(app: &App) {
         FamilyName::Title("Segoe UI".to_string()),
     ];
 
-    try_load_font(app, &font_source, &font_families, &font_properties_main, &MAIN_FONT_NAME);
+    try_load_font(
+        app,
+        &font_source,
+        &font_families,
+        &font_properties_main,
+        &MAIN_FONT_NAME,
+    );
     let _ = MAIN_FONT_SIZE.set(16);
-    try_load_font(app, &font_source, &font_families, &font_properties_body, &BODY_FONT_NAME);
+    try_load_font(
+        app,
+        &font_source,
+        &font_families,
+        &font_properties_body,
+        &BODY_FONT_NAME,
+    );
     let _ = BODY_FONT_SIZE.set(12);
 }
 
@@ -104,9 +120,21 @@ pub fn load_ubuntu_fonts(app: &App) {
         FamilyName::Title("Open Sans".to_string()),
     ];
 
-    try_load_font(app, &font_source, &font_families, &font_properties_main, &MAIN_FONT_NAME);
+    try_load_font(
+        app,
+        &font_source,
+        &font_families,
+        &font_properties_main,
+        &MAIN_FONT_NAME,
+    );
     let _ = MAIN_FONT_SIZE.set(18);
-    try_load_font(app, &font_source, &font_families, &font_properties_body, &BODY_FONT_NAME);
+    try_load_font(
+        app,
+        &font_source,
+        &font_families,
+        &font_properties_body,
+        &BODY_FONT_NAME,
+    );
     let _ = BODY_FONT_SIZE.set(15);
 }
 
@@ -130,8 +158,20 @@ pub fn load_macos_fonts(app: &App) {
         FamilyName::Title("Helvetica".to_string()),
     ];
 
-    try_load_font(app, &font_source, &font_families, &font_properties_main, &MAIN_FONT_NAME);
-    try_load_font(app, &font_source, &font_families, &font_properties_body, &BODY_FONT_NAME);
+    try_load_font(
+        app,
+        &font_source,
+        &font_families,
+        &font_properties_main,
+        &MAIN_FONT_NAME,
+    );
+    try_load_font(
+        app,
+        &font_source,
+        &font_families,
+        &font_properties_body,
+        &BODY_FONT_NAME,
+    );
     // let _ = MAIN_FONT_NAME.set(Font::HelveticaBold.get_name());
     // let _ = BODY_FONT_NAME.set(Font::Helvetica.get_name());
     let _ = MAIN_FONT_SIZE.set(15);

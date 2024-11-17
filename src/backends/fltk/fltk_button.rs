@@ -1,12 +1,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use fltk::{app, draw::*, widget, widget_extends};
 use fltk::enums::{Color, Event, FrameType, Key};
 use fltk::prelude::{WidgetBase, WidgetExt};
-use mina::{Animate, prelude::*};
+use fltk::{app, draw::*, widget, widget_extends};
+use mina::{prelude::*, Animate};
 
-use crate::backends::fltk::Tick;
+use crate::backends::Tick;
 
 use super::fltk_theme::DialogTheme;
 
@@ -30,7 +30,8 @@ struct ButtonColorState {
 
 #[derive(Clone, Default, PartialEq, State)]
 enum ButtonState {
-    #[default] Idle,
+    #[default]
+    Idle,
     Hovered,
     Pressed,
     Focused,
@@ -38,7 +39,7 @@ enum ButtonState {
 
 pub struct CustomButton {
     inner: widget::Widget,
-    animator: Rc<RefCell<Box<dyn StateAnimator<State=ButtonState, Values=ButtonColorState>>>>,
+    animator: Rc<RefCell<Box<dyn StateAnimator<State = ButtonState, Values = ButtonColorState>>>>,
 }
 
 fn calculate_offsets(rs: f64, num_points: usize) -> Vec<f64> {
@@ -52,7 +53,7 @@ fn calculate_offsets(rs: f64, num_points: usize) -> Vec<f64> {
 
 pub fn draw_improved_rbox(x: i32, y: i32, w: i32, h: i32, max_radius: i32, fill: bool, col: Color) {
     let max_radius = if max_radius < 0 { 0 } else { max_radius };
-    let mut rs = w.min(h) * 2 / 5;  // Smallest side divided by 5
+    let mut rs = w.min(h) * 2 / 5; // Smallest side divided by 5
     if rs > max_radius {
         rs = max_radius;
     }
@@ -135,7 +136,7 @@ impl CustomButton {
                 text_b: dialog_theme.style_button_inactive.color_button_text.to_rgb().2,
             }),
             ButtonState::Idle => 0.15s to default,
-            ButtonState::Hovered => 0.15s to { 
+            ButtonState::Hovered => 0.15s to {
                 border_radius: dialog_theme.style_button_hover.border_radius,
                 border_width: dialog_theme.style_button_hover.border_width,
                 border_r: dialog_theme.style_button_hover.color_button_border.to_rgb().0,
@@ -176,15 +177,19 @@ impl CustomButton {
             },
         });
 
-        let animator_cell1: Rc<RefCell<Box<dyn StateAnimator<State=ButtonState, Values=ButtonColorState>>>>
-            = Rc::new(RefCell::new(Box::new(animator)));
+        let animator_cell1: Rc<
+            RefCell<Box<dyn StateAnimator<State = ButtonState, Values = ButtonColorState>>>,
+        > = Rc::new(RefCell::new(Box::new(animator)));
         let animator_cell2 = animator_cell1.clone();
         let animator_cell3 = animator_cell1.clone();
 
         let hovered_cell1 = Rc::new(RefCell::new(false));
         let pressed_cell1 = Rc::new(RefCell::new(false));
 
-        let update_interaction_state = move |set_hovered: Option<bool>, set_pressed: Option<bool>, is_focused: bool| -> ButtonState {
+        let update_interaction_state = move |set_hovered: Option<bool>,
+                                             set_pressed: Option<bool>,
+                                             is_focused: bool|
+              -> ButtonState {
             let mut pressed = pressed_cell1.borrow_mut();
             let mut hovered = hovered_cell1.borrow_mut();
 
@@ -260,16 +265,55 @@ impl CustomButton {
             let animator = animator_cell2.borrow();
             let state = animator.current_values();
 
-            draw_box(FrameType::FlatBox, i.x(), i.y(), i.w(), i.h(), Color::Background2);
-            draw_improved_rbox(i.x(), i.y(), i.w(), i.h(), state.border_radius, true, Color::from_rgb(state.fill_r, state.fill_g, state.fill_b));
+            draw_box(
+                FrameType::FlatBox,
+                i.x(),
+                i.y(),
+                i.w(),
+                i.h(),
+                Color::Background2,
+            );
+            draw_improved_rbox(
+                i.x(),
+                i.y(),
+                i.w(),
+                i.h(),
+                state.border_radius,
+                true,
+                Color::from_rgb(state.fill_r, state.fill_g, state.fill_b),
+            );
 
             if state.border_width > 0 {
                 set_line_style(LineStyle::Solid, state.border_width);
                 let w = i.w() - (state.border_width - 1);
                 let h = i.h() - (state.border_width - 1);
-                draw_improved_rbox(i.x(), i.y(), w, h, state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
-                draw_improved_rbox(i.x(), i.y(), w, h, state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
-                draw_improved_rbox(i.x(), i.y(), w, h, state.border_radius, false, Color::from_rgb(state.border_r, state.border_g, state.border_b));
+                draw_improved_rbox(
+                    i.x(),
+                    i.y(),
+                    w,
+                    h,
+                    state.border_radius,
+                    false,
+                    Color::from_rgb(state.border_r, state.border_g, state.border_b),
+                );
+                draw_improved_rbox(
+                    i.x(),
+                    i.y(),
+                    w,
+                    h,
+                    state.border_radius,
+                    false,
+                    Color::from_rgb(state.border_r, state.border_g, state.border_b),
+                );
+                draw_improved_rbox(
+                    i.x(),
+                    i.y(),
+                    w,
+                    h,
+                    state.border_radius,
+                    false,
+                    Color::from_rgb(state.border_r, state.border_g, state.border_b),
+                );
                 set_line_style(LineStyle::Solid, 1);
             }
 

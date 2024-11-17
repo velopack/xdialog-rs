@@ -4,12 +4,12 @@
 //!
 //! A cross-platform library for displaying native(-ish) dialogs in Rust. This library does not
 //! use native system dialogs, but instead creates its own dialog windows which are designed to
-//! look and feel like native dialogs. This allows for a simplified API and consistent behavior. 
+//! look and feel like native dialogs. This allows for a simplified API and consistent behavior.
 //!
 //! This is not a replacement for a proper GUI framework. It is meant to be used for CLI / background
 //! applications which occasionally need to show dialogs (such as alerts, or progress) to the user.
 //!
-//! It's main use-case is for the [Velopack](https://velopack.io) application installation and 
+//! It's main use-case is for the [Velopack](https://velopack.io) application installation and
 //! update framework.
 //!
 //! ## Features
@@ -47,8 +47,8 @@
 //!   // ... do something here
 //!
 //!   let should_update_now = show_message_yes_no(
-//!     "My App Incorporated", 
-//!     "New version available", 
+//!     "My App Incorporated",
+//!     "New version available",
 //!     "Would you like to to the new version now?",
 //!     XDialogIcon::Warning,
 //!   ).unwrap();
@@ -60,8 +60,8 @@
 //!   // ... do something here
 //!
 //!   let progress = show_progress(
-//!     "My App Incorporated", 
-//!     "Main instruction", 
+//!     "My App Incorporated",
+//!     "Main instruction",
 //!     "Body text",
 //!     XDialogIcon::Information
 //!   ).unwrap();
@@ -82,7 +82,7 @@
 //!   0 // return exit code
 //! }
 //! ```
-//! 
+//!
 //! There are more examples in the `examples` directory.
 //! ```sh
 //! cargo run --example various_options
@@ -91,9 +91,9 @@
 //! ## Build Dependencies
 //! This library uses [fltk-rs](https://github.com/fltk-rs/fltk-rs) for it's primary backend.
 //! By default, [fltk-rs](https://github.com/fltk-rs/fltk-rs) provides pre-compiled binaries for
-//! most platforms (win-x64, linux-x64, linux-arm64, mac-x64, mac-arm64). 
+//! most platforms (win-x64, linux-x64, linux-arm64, mac-x64, mac-arm64).
 //!
-//! If you are compiling for a platform that does not have pre-compiled binaries, you will need 
+//! If you are compiling for a platform that does not have pre-compiled binaries, you will need
 //! to disable the `fltk-bundled` feature and ensure that cmake is installed on your system.
 //!
 //! ```toml
@@ -117,27 +117,24 @@ use state::*;
 
 use crate::backends::XDialogBackendImpl;
 
-pub mod errors;
-mod model;
 mod backends;
-mod state;
+pub mod errors;
 mod images;
-mod progress;
 mod message;
+mod model;
+mod progress;
+mod state;
 
 #[derive(Debug)]
-/// Builder pattern to configure/initialise the XDialog library. Must be configured and `run` in 
+/// Builder pattern to configure/initialise the XDialog library. Must be configured and `run` in
 /// the main thread before any other XDialog functions are called.
-pub struct XDialogBuilder
-{
+pub struct XDialogBuilder {
     backend: XDialogBackend,
     theme: XDialogTheme,
 }
 
-impl Default for XDialogBuilder
-{
-    fn default() -> XDialogBuilder
-    {
+impl Default for XDialogBuilder {
+    fn default() -> XDialogBuilder {
         XDialogBuilder {
             backend: XDialogBackend::Automatic,
             theme: XDialogTheme::SystemDefault,
@@ -145,32 +142,27 @@ impl Default for XDialogBuilder
     }
 }
 
-impl XDialogBuilder
-{
+impl XDialogBuilder {
     /// Create a new XDialogBuilder
-    pub fn new() -> XDialogBuilder
-    {
+    pub fn new() -> XDialogBuilder {
         XDialogBuilder::default()
     }
 
     /// Set the backend to use for the dialog. By default, the backend is chosen automatically.
-    pub fn with_backend(mut self, backend: XDialogBackend) -> XDialogBuilder
-    {
+    pub fn with_backend(mut self, backend: XDialogBackend) -> XDialogBuilder {
         self.backend = backend;
         self
     }
 
     /// Set the theme to use for the dialog. By default, the theme is chosen automatically.
-    pub fn with_theme(mut self, theme: XDialogTheme) -> XDialogBuilder
-    {
+    pub fn with_theme(mut self, theme: XDialogTheme) -> XDialogBuilder {
         self.theme = theme;
         self
     }
 
     /// Run the XDialog library with the specified configuration. This function will block the main
     /// thread and run the specified `main` function in a separate thread.
-    pub fn run(self, main: fn() -> i32) -> i32
-    {
+    pub fn run(self, main: fn() -> i32) -> i32 {
         let (send_message, receive_message) = channel::<DialogMessageRequest>();
         init_sender(send_message);
 

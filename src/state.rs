@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::sync::{OnceLock, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
+use std::sync::{OnceLock, RwLock};
 
 use atomic_counter::{AtomicCounter, RelaxedCounter};
 
@@ -51,6 +51,8 @@ pub fn send_request(message: DialogMessageRequest) -> Result<(), XDialogError> {
         return Err(XDialogError::NotInitialized(NotInitializedError));
     }
 
-    once.unwrap().send(message).map_err(|e| XDialogError::SendFailed(e))?;
+    once.unwrap()
+        .send(message)
+        .map_err(|e| XDialogError::SendFailed(e))?;
     Ok(())
 }

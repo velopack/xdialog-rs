@@ -1,17 +1,19 @@
-use fltk::{
-    *, enums::*, frame::Frame, group::Flex, image::SvgImage, prelude::*,
-    window::DoubleWindow,
-};
 use crate::model::*;
 use crate::state::insert_result;
-
-use super::{
-    fltk_fonts::*, fltk_button::CustomButton, fltk_progress::CustomProgressBar,
-    fltk_theme::{DialogTheme, get_theme_icon_svg}, fltk::Tick,
+use fltk::{
+    enums::*, frame::Frame, group::Flex, image::SvgImage, prelude::*, window::DoubleWindow, *,
 };
 
-pub struct CustomFltkDialog
-{
+use super::{
+    fltk_button::CustomButton,
+    fltk_fonts::*,
+    fltk_progress::CustomProgressBar,
+    fltk_theme::{get_theme_icon_svg, DialogTheme},
+};
+
+use crate::backends::Tick;
+
+pub struct CustomFltkDialog {
     id: usize,
     pad_x: i32,
     pad_y: i32,
@@ -27,7 +29,12 @@ pub struct CustomFltkDialog
 }
 
 impl CustomFltkDialog {
-    pub fn new(id: usize, data: XDialogOptions, theme: &DialogTheme, has_progress: bool) -> CustomFltkDialog {
+    pub fn new(
+        id: usize,
+        data: XDialogOptions,
+        theme: &DialogTheme,
+        has_progress: bool,
+    ) -> CustomFltkDialog {
         let mut wind = DoubleWindow::new(0, 0, 50, 50, data.title.as_str()).center_screen();
         let data2 = data.clone();
 
@@ -45,8 +52,7 @@ impl CustomFltkDialog {
 
         // Svg Icon
         let mut has_icon = true;
-        if let Some(icon_data) = get_theme_icon_svg(data.icon)
-        {
+        if let Some(icon_data) = get_theme_icon_svg(data.icon) {
             let mut icon_frame = Frame::default();
             if let Ok(mut svg_img) = SvgImage::from_data(icon_data) {
                 let svg2 = svg_img.clone();
@@ -115,7 +121,6 @@ impl CustomFltkDialog {
             // Padding frame
             let _ = Frame::default();
 
-
             // Buttons
             let button_iter: Vec<(usize, &String)> = if theme.button_order_reversed {
                 data.buttons.iter().enumerate().rev().collect()
@@ -135,7 +140,10 @@ impl CustomFltkDialog {
                 });
                 flex_button_wrapper.end();
                 let (w, _) = button.measure_label();
-                flex_button_row.fixed(&mut flex_button_wrapper, w + (theme.button_text_padding * 2));
+                flex_button_row.fixed(
+                    &mut flex_button_wrapper,
+                    w + (theme.button_text_padding * 2),
+                );
 
                 btn_vec.push(button);
             }
@@ -232,10 +240,12 @@ impl CustomFltkDialog {
 
         // calculate the height based on wrapping the title and body text.
         draw::set_font(get_main_instruction_font(), get_main_instruction_size());
-        let (_, wrapped_title_height) = draw::wrap_measure(title_text, final_window_width - pad_x, true);
+        let (_, wrapped_title_height) =
+            draw::wrap_measure(title_text, final_window_width - pad_x, true);
 
         draw::set_font(get_body_font(), get_body_size());
-        let (_, wrapped_body_height) = draw::wrap_measure(body_text, final_window_width - pad_x, true);
+        let (_, wrapped_body_height) =
+            draw::wrap_measure(body_text, final_window_width - pad_x, true);
 
         let mut final_window_height = pad_y;
         if !title_text.is_empty() {

@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
+use crate::model::DialogMessageRequest;
 use std::fmt;
 use std::sync::mpsc::SendError;
-use crate::model::DialogMessageRequest;
 
 #[derive(Debug, Clone)]
 pub struct NotInitializedError;
@@ -37,4 +37,3 @@ impl std::error::Error for XDialogError {
         }
     }
 }
-

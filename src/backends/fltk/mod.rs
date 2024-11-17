@@ -1,3 +1,9 @@
+mod fltk_button;
+mod fltk_dialog;
+mod fltk_fonts;
+mod fltk_progress;
+mod fltk_theme;
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -7,23 +13,29 @@ use std::time::Instant;
 
 use fltk::app;
 
+use crate::backends::Tick;
 use crate::model::*;
 
-use super::{fltk_dialog::CustomFltkDialog, XDialogBackendImpl};
+use super::{fltk::fltk_dialog::CustomFltkDialog, XDialogBackendImpl};
 
 pub struct FltkBackend;
 
 impl XDialogBackendImpl for FltkBackend {
-    fn run(main: fn() -> i32, receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) -> i32 {
+    fn run(
+        main: fn() -> i32,
+        receiver: Receiver<DialogMessageRequest>,
+        theme: XDialogTheme,
+    ) -> i32 {
         let app_instance = app::App::default();
 
-        let spacing = super::fltk_theme::apply_theme(&app_instance, theme);
+        let spacing = super::fltk::fltk_theme::apply_theme(&app_instance, theme);
 
         let t = thread::spawn(move || {
             return main();
         });
 
-        let dialogs1: Rc<RefCell<HashMap<usize, CustomFltkDialog>>> = Rc::new(RefCell::new(HashMap::new()));
+        let dialogs1: Rc<RefCell<HashMap<usize, CustomFltkDialog>>> =
+            Rc::new(RefCell::new(HashMap::new()));
         let dialogs2 = dialogs1.clone();
         let current_time = Rc::new(RefCell::new(Instant::now()));
 
@@ -102,8 +114,4 @@ impl XDialogBackendImpl for FltkBackend {
             }
         }
     }
-}
-
-pub trait Tick {
-    fn tick(&mut self, elapsed_secs: f32);
 }

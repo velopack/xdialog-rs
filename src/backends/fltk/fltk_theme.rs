@@ -1,9 +1,9 @@
-use fltk::{app, draw};
 use fltk::app::App;
 use fltk::enums::{Color, FrameType};
+use fltk::{app, draw};
 
-use crate::model::{XDialogIcon, XDialogTheme};
 use super::fltk_fonts::*;
+use crate::model::{XDialogIcon, XDialogTheme};
 
 #[derive(Debug, Clone)]
 pub struct DialogButtonStyle {
@@ -54,7 +54,7 @@ pub fn apply_theme(app_instance: &App, theme: XDialogTheme) -> DialogTheme {
         XDialogTheme::Windows => apply_windows_theme(app_instance),
         XDialogTheme::Ubuntu => apply_ubuntu_theme(app_instance),
         XDialogTheme::MacOSLight => apply_macos_theme(app_instance, false),
-        XDialogTheme::MacOSDark => apply_macos_theme(app_instance, true)
+        XDialogTheme::MacOSDark => apply_macos_theme(app_instance, true),
     };
 
     let bg = theme.color_background.to_rgb();
@@ -244,8 +244,7 @@ pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
     light_theme
 }
 
-pub fn get_theme_icon_svg(icon: XDialogIcon) -> Option<&'static str>
-{
+pub fn get_theme_icon_svg(icon: XDialogIcon) -> Option<&'static str> {
     match icon {
         XDialogIcon::None => None,
         XDialogIcon::Error => Some(crate::images::IMAGE_ERROR_SVG),

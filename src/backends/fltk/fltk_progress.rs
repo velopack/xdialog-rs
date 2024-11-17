@@ -1,11 +1,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use fltk::{*, prelude::*};
 use fltk::enums::{Color, FrameType};
+use fltk::{prelude::*, *};
 use mina::prelude::*;
 
-use super::{fltk::Tick, fltk_theme::DialogTheme};
+use super::fltk_theme::DialogTheme;
+use crate::backends::Tick;
 
 #[derive(Animate, Clone, Debug, Default, PartialEq)]
 struct ProgressIndeterminateState {
@@ -49,13 +50,45 @@ impl CustomProgressBar {
 
         let rs1 = root_state.clone();
         let theme = dialog_theme.clone();
-        inner.draw(move |i| { // we need a draw implementation
-            draw::draw_box(FrameType::FlatBox, i.x(), i.y(), i.w(), i.h(), Color::BackGround);
+        inner.draw(move |i| {
+            // we need a draw implementation
+            draw::draw_box(
+                FrameType::FlatBox,
+                i.x(),
+                i.y(),
+                i.w(),
+                i.h(),
+                Color::BackGround,
+            );
 
             // just a hack to work around anti-aliasing
-            draw::draw_rbox(i.x(), i.y(), i.w(), i.h(), 2, true, theme.color_progress_background);
-            draw::draw_rbox(i.x(), i.y(), i.w(), i.h(), 2, true, theme.color_progress_background);
-            draw::draw_rbox(i.x(), i.y(), i.w(), i.h(), 2, true, theme.color_progress_background);
+            draw::draw_rbox(
+                i.x(),
+                i.y(),
+                i.w(),
+                i.h(),
+                2,
+                true,
+                theme.color_progress_background,
+            );
+            draw::draw_rbox(
+                i.x(),
+                i.y(),
+                i.w(),
+                i.h(),
+                2,
+                true,
+                theme.color_progress_background,
+            );
+            draw::draw_rbox(
+                i.x(),
+                i.y(),
+                i.w(),
+                i.h(),
+                2,
+                true,
+                theme.color_progress_background,
+            );
 
             let state = rs1.borrow();
 
@@ -65,9 +98,33 @@ impl CustomProgressBar {
 
             if width > 0 {
                 // just a hack to work around anti-aliasing
-                draw::draw_rbox(start, i.y(), width, i.h(), 2, true, theme.color_progress_foreground);
-                draw::draw_rbox(start, i.y(), width, i.h(), 2, true, theme.color_progress_foreground);
-                draw::draw_rbox(start, i.y(), width, i.h(), 2, true, theme.color_progress_foreground);
+                draw::draw_rbox(
+                    start,
+                    i.y(),
+                    width,
+                    i.h(),
+                    2,
+                    true,
+                    theme.color_progress_foreground,
+                );
+                draw::draw_rbox(
+                    start,
+                    i.y(),
+                    width,
+                    i.h(),
+                    2,
+                    true,
+                    theme.color_progress_foreground,
+                );
+                draw::draw_rbox(
+                    start,
+                    i.y(),
+                    width,
+                    i.h(),
+                    2,
+                    true,
+                    theme.color_progress_foreground,
+                );
             }
         });
 

@@ -1,6 +1,6 @@
-use crate::{DialogMessageRequest, XDialogIcon, XDialogOptions};
 use crate::errors::XDialogError;
 use crate::state::{get_next_id, send_request};
+use crate::{DialogMessageRequest, XDialogIcon, XDialogOptions};
 
 /// Shows a progress dialog with the specified options and returns a proxy object to control it.
 /// This is a non-blocking function which will return as soon as the dialog opens.
@@ -34,7 +34,11 @@ use crate::state::{get_next_id, send_request};
 ///   0
 /// }
 pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
-    title: P1, main_instruction: P2, message: P3, icon: XDialogIcon) -> Result<ProgressDialogProxy, XDialogError> {
+    title: P1,
+    main_instruction: P2,
+    message: P3,
+    icon: XDialogIcon,
+) -> Result<ProgressDialogProxy, XDialogError> {
     let id = get_next_id();
 
     let data = XDialogOptions {
@@ -67,7 +71,10 @@ impl ProgressDialogProxy {
 
     /// Sets the text displayed below the progress bar.
     pub fn set_text<P: AsRef<str>>(&self, text: P) -> Result<(), XDialogError> {
-        send_request(DialogMessageRequest::SetProgressText(self.id, text.as_ref().to_string()))
+        send_request(DialogMessageRequest::SetProgressText(
+            self.id,
+            text.as_ref().to_string(),
+        ))
     }
 
     /// Closes the progress dialog.
