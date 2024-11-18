@@ -1,3 +1,8 @@
+mod color;
+mod error;
+mod escape;
+mod webview;
+
 use std::{
     collections::HashMap,
     sync::mpsc::Receiver,
@@ -37,7 +42,7 @@ const MAIN_XAML: &'static str = include_str!("main.xaml");
 const RESOURCE_XAML: &'static str = include_str!("Mile.Xaml.Styles.SunValley.xaml");
 
 
-pub struct XamlIslandBackend;
+pub struct WebviewBackend;
 
 pub struct XamlIslandApp {
     pub receiver: Receiver<DialogMessageRequest>,

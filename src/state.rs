@@ -51,8 +51,6 @@ pub fn send_request(message: DialogMessageRequest) -> Result<(), XDialogError> {
         return Err(XDialogError::NotInitialized(NotInitializedError));
     }
 
-    once.unwrap()
-        .send(message)
-        .map_err(|e| XDialogError::SendFailed(e))?;
+    once.unwrap().send(message).map_err(|e| XDialogError::SendFailed(e))?;
     Ok(())
 }

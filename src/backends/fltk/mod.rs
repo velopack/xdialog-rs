@@ -8,7 +8,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::mpsc::Receiver;
-use std::thread;
 use std::time::Instant;
 
 use fltk::app;
@@ -20,22 +19,13 @@ use super::{fltk::fltk_dialog::CustomFltkDialog, XDialogBackendImpl};
 
 pub struct FltkBackend;
 
-impl<T: Send + 'static> XDialogBackendImpl<T> for FltkBackend {
-    fn run(
-        main: fn() -> T,
-        receiver: Receiver<DialogMessageRequest>,
-        theme: XDialogTheme,
-    ) -> T {
+impl XDialogBackendImpl for FltkBackend {
+    fn run_loop(receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) {
         let app_instance = app::App::default();
 
         let spacing = super::fltk::fltk_theme::apply_theme(&app_instance, theme);
 
-        let t = thread::spawn(move || {
-            return main();
-        });
-
-        let dialogs1: Rc<RefCell<HashMap<usize, CustomFltkDialog>>> =
-            Rc::new(RefCell::new(HashMap::new()));
+        let dialogs1: Rc<RefCell<HashMap<usize, CustomFltkDialog>>> = Rc::new(RefCell::new(HashMap::new()));
         let dialogs2 = dialogs1.clone();
         let current_time = Rc::new(RefCell::new(Instant::now()));
 
@@ -57,12 +47,7 @@ impl<T: Send + 'static> XDialogBackendImpl<T> for FltkBackend {
         loop {
             if let Err(e) = app::wait_for(0.1) {
                 error!("xdialog event loop fatal error: {:?}", e);
-                return t.join().unwrap();
-            }
-
-            if t.is_finished() {
-                app::quit();
-                return t.join().unwrap();
+                return;
             }
 
             // TODO: clean up finished message box windows with window::Window::delete(hWnd);
@@ -83,7 +68,7 @@ impl<T: Send + 'static> XDialogBackendImpl<T> for FltkBackend {
                     }
                     DialogMessageRequest::ExitEventLoop => {
                         app::quit();
-                        break;
+                        return;
                     }
                     DialogMessageRequest::CloseWindow(id) => {
                         if let Some(dialog) = dialogs2.borrow_mut().get_mut(&id) {

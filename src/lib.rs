@@ -108,7 +108,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
-use std::sync::mpsc::channel;
+use std::{sync::mpsc::channel, thread};
 
 pub use message::*;
 pub use model::*;
@@ -135,10 +135,7 @@ pub struct XDialogBuilder {
 
 impl Default for XDialogBuilder {
     fn default() -> XDialogBuilder {
-        XDialogBuilder {
-            backend: XDialogBackend::Automatic,
-            theme: XDialogTheme::SystemDefault,
-        }
+        XDialogBuilder { backend: XDialogBackend::Automatic, theme: XDialogTheme::SystemDefault }
     }
 }
 
@@ -162,21 +159,25 @@ impl XDialogBuilder {
 
     /// Run the XDialog library with the specified configuration. This function will block the main
     /// thread and run the specified `main` function in a separate thread.
-    pub fn run<T: Send + 'static>(self, main: fn() -> T) -> T {
+    pub fn run_loop<T: Send + 'static>(self, main: fn() -> T) -> T {
         let (send_message, receive_message) = channel::<DialogMessageRequest>();
         init_sender(send_message);
 
+        let result = thread::spawn(move || {
+            let result = main();
+            let _ = send_request(DialogMessageRequest::ExitEventLoop);
+            result
+        });
+
         match self.backend {
-            XDialogBackend::Automatic => {
-                backends::fltk::FltkBackend::run(main, receive_message, self.theme)
-            }
-            XDialogBackend::Fltk => {
-                backends::fltk::FltkBackend::run(main, receive_message, self.theme)
-            }
-            XDialogBackend::XamlIsland => {
-                backends::xaml_island::XamlIslandBackend::run(main, receive_message, self.theme)
-            }
+            XDialogBackend::Automatic => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
+            XDialogBackend::Fltk => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
+            // XDialogBackend::XamlIsland => {
+            //     backends::xaml_island::XamlIslandBackend::run(main, receive_message, self.theme)
+            // }
         }
+
+        result.join().unwrap()
     }
 }
 

@@ -71,10 +71,7 @@ impl ProgressDialogProxy {
 
     /// Sets the text displayed below the progress bar.
     pub fn set_text<P: AsRef<str>>(&self, text: P) -> Result<(), XDialogError> {
-        send_request(DialogMessageRequest::SetProgressText(
-            self.id,
-            text.as_ref().to_string(),
-        ))
+        send_request(DialogMessageRequest::SetProgressText(self.id, text.as_ref().to_string()))
     }
 
     /// Closes the progress dialog.

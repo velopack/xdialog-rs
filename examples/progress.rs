@@ -1,5 +1,5 @@
 fn main() {
-    xdialog::XDialogBuilder::new().run(run);
+    xdialog::XDialogBuilder::new().run_loop(run);
 }
 
 fn run() -> i32 {
