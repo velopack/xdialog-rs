@@ -20,7 +20,7 @@ lazy_static = "1.5"
 enum-map = "2.7"
 urlencoding = "2.1.3"
 oneshot = "0.1.8"
-thiserror = "2.0"
+thiserror = "1.0"
 
 # windows native
 windows = { version = "0.58", features = [
@@ -44,6 +44,7 @@ mina = "0.1"
 
 # xaml islands
 winit = "0.30"
+# raw-window-handle = "0.6.2"
 # [dependencies.windows]
 # version = ">= 0.30, <= 0.35"
 # features = [

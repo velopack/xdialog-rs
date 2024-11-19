@@ -71,48 +71,58 @@ pub enum XDialogResult {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
+/// Describes the state of a webview dialog window
 pub enum XDialogWindowState {
+    /// The window is in a normal state
     #[default]
     Normal,
+    /// The window is hidden from view (not visible in the taskbar)
     Hidden,
+    /// The window is minimized to the taskbar
     Minimized,
+    /// The window is maximized to fill the screen
     Maximized,
+    /// The window is in fullscreen mode
     Fullscreen,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
+/// Options for constructing a new webview dialog
 pub struct XDialogWebviewOptions {
+    /// The title of the dialog window (required)
     pub title: String,
+    /// The initial HTML content to display in the webview
     pub html: String,
-    // pub position: Option<(i32, i32)>,
+    /// The initial size of the dialog window
     pub size: Option<(i32, i32)>,
+    /// If true, the dialog window will be hidden when first created and will need to be shown manually
     pub hidden: bool,
+    /// The minimum size of the dialog window
     pub min_size: Option<(i32, i32)>,
-    pub resizable: bool,
+    /// If true, the dialog window can NOT be resized by the user
+    pub fixed_size: bool,
+    /// If true, the dialog window will have a borderless frame
     pub borderless: bool,
+    /// If true, the dialog window will hide itself when the close button is pressed instead of exiting
     pub hide_on_close: bool,
-    pub callback: WebviewInvokeHandler,
+    /// A callback function which is executed when a javascript message is dispatched with `window.external.invoke(message)`
+    pub callback: Option<WebviewInvokeHandler>,
 }
-
-// pub enum WebviewResponse {
-//     Error(String),
-//     Invoke(String),
-// }
 
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct ResultSender {
-    pub sender: Option<oneshot::Sender<Result<String, XDialogError>>>,
+    pub sender: Option<oneshot::Sender<Result<(), XDialogError>>>,
 }
 
 #[allow(missing_docs)]
 impl ResultSender {
-    pub fn send_result(&mut self, result: Result<String, XDialogError>) {
+    pub fn send_result(&mut self, result: Result<(), XDialogError>) {
         if let Some(sender) = self.sender.take() {
             let _ = sender.send(result);
         }
     }
-    pub fn create() -> (Self, oneshot::Receiver<Result<String, XDialogError>>) {
+    pub fn create() -> (Self, oneshot::Receiver<Result<(), XDialogError>>) {
         let (sender, receiver) = oneshot::channel();
         let result_sender = ResultSender { sender: Some(sender) };
         (result_sender, receiver)
@@ -129,7 +139,7 @@ impl PartialEq for ResultSender {
 /// `window.external.invoke(message)`. The `WebviewDialogProxy` provided in this callback
 /// is not the same as the one returned by `show_webview`, but it can be used to interact
 /// with the webview in the same way.
-pub type WebviewInvokeHandler = Option<fn(webview: crate::WebviewDialogProxy, message: String)>;
+pub type WebviewInvokeHandler = fn(webview: crate::WebviewDialogProxy, message: String);
 
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
@@ -150,10 +160,12 @@ pub enum DialogMessageRequest {
     SetProgressText(usize, String),
 
     // webview
-    ShowWebviewWindow(usize, XDialogWebviewOptions, ResultSender),
-    // SetWebviewHtml(usize, String),
-    // SetWebviewPosition(usize, i32, i32),
-    // SetWebviewSize(usize, i32, i32),
-    // SetWebviewZoomLevel(usize, f64),
-    // SetWebviewWindowState(usize, XDialogWindowState),
+    WebviewWindowShow(usize, XDialogWebviewOptions, ResultSender),
+    WebviewSetTitle(usize, String),
+    WebviewSetHtml(usize, String),
+    WebviewSetPosition(usize, i32, i32),
+    WebviewSetSize(usize, i32, i32),
+    WebviewSetZoomLevel(usize, f64),
+    WebviewSetWindowState(usize, XDialogWindowState),
+    WebviewEval(usize, String),
 }

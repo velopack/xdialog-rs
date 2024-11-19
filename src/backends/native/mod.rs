@@ -7,10 +7,14 @@ use winit::{
     window::WindowId,
 };
 
-#[cfg(windows)]
 use crate::sys::{mshtml, mshtml::builder::WebView, taskdialog::*};
 
-use crate::{DialogMessageRequest, WebviewDialogProxy, XDialogError, XDialogTheme};
+use windows::Win32::{
+    Foundation::HWND,
+    UI::WindowsAndMessaging::{SetWindowPos, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER},
+};
+
+use crate::{DialogMessageRequest, WebviewDialogProxy, WebviewInvokeHandler, XDialogError, XDialogTheme};
 
 use super::XDialogBackendImpl;
 
@@ -18,12 +22,12 @@ pub struct NativeBackend;
 
 struct NativeApp<'a> {
     pub receiver: Receiver<DialogMessageRequest>,
-    pub webviews: HashMap<usize, WebView<'a, UserData>>,
+    pub mshtml_views: HashMap<usize, WebView<'a, UserData>>,
 }
 
 struct UserData {
     pub id: usize,
-    pub cb: crate::WebviewInvokeHandler,
+    pub cb: Option<WebviewInvokeHandler>,
 }
 
 impl<'a> ApplicationHandler for NativeApp<'a> {
@@ -41,37 +45,88 @@ impl<'a> ApplicationHandler for NativeApp<'a> {
                     return;
                 }
                 DialogMessageRequest::ShowMessageWindow(id, data) => {
-                    #[cfg(windows)]
                     task_dialog_show(id, data, false);
                 }
                 DialogMessageRequest::ExitEventLoop => {
-                    #[cfg(windows)]
                     task_dialog_close_all();
                     event_loop.exit();
                     return;
                 }
                 DialogMessageRequest::CloseWindow(id) => {
-                    #[cfg(windows)]
                     task_dialog_close(id);
                 }
                 DialogMessageRequest::ShowProgressWindow(id, data) => {
-                    #[cfg(windows)]
                     task_dialog_show(id, data, true);
                 }
                 DialogMessageRequest::SetProgressIndeterminate(id) => {
-                    #[cfg(windows)]
                     task_dialog_set_progress_indeterminate(id);
                 }
                 DialogMessageRequest::SetProgressValue(id, value) => {
-                    #[cfg(windows)]
                     task_dialog_set_progress_value(id, value);
                 }
                 DialogMessageRequest::SetProgressText(id, text) => {
-                    #[cfg(windows)]
                     task_dialog_set_progress_text(id, &text);
                 }
-                DialogMessageRequest::ShowWebviewWindow(id, options, result_sender) => {
-                    self.show_mshtml_webview(options, id, result_sender);
+                DialogMessageRequest::WebviewWindowShow(id, options, result_sender) => {
+                    self.mshtml_show(options, id, result_sender);
+                }
+                DialogMessageRequest::WebviewSetTitle(id, title) => {
+                    if let Some(webview) = self.mshtml_views.get_mut(&id) {
+                        let _ = webview.set_title(&title);
+                    }
+                }
+                DialogMessageRequest::WebviewSetHtml(id, html) => {
+                    if let Some(webview) = self.mshtml_views.get_mut(&id) {
+                        let _ = webview.set_html(&html);
+                    }
+                }
+                DialogMessageRequest::WebviewSetPosition(id, x, y) => {
+                    if let Some(webview) = self.mshtml_views.get_mut(&id) {
+                        let handle = webview.window_handle();
+                        let _ = unsafe { SetWindowPos(HWND(handle), HWND(std::ptr::null_mut()), x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER) };
+                    }
+                }
+                DialogMessageRequest::WebviewSetSize(id, w, h) => {
+                    if let Some(webview) = self.mshtml_views.get_mut(&id) {
+                        let handle = webview.window_handle();
+                        let _ = unsafe { SetWindowPos(HWND(handle), HWND(std::ptr::null_mut()), 0, 0, w, h, SWP_NOMOVE | SWP_NOZORDER) };
+                    }
+                }
+                DialogMessageRequest::WebviewSetZoomLevel(id, zoom) => {
+                    if let Some(webview) = self.mshtml_views.get_mut(&id) {
+                        webview.set_zoom_level(zoom);
+                    }
+                }
+                DialogMessageRequest::WebviewSetWindowState(id, xdialog_window_state) => {
+                    if let Some(webview) = self.mshtml_views.get_mut(&id) {
+                        match xdialog_window_state {
+                            crate::XDialogWindowState::Normal => {
+                                webview.set_maximized(false);
+                                webview.set_minimized(false);
+                                webview.set_visible(true);
+                            }
+                            crate::XDialogWindowState::Maximized => {
+                                webview.set_maximized(true);
+                                webview.set_visible(true);
+                            }
+                            crate::XDialogWindowState::Minimized => {
+                                webview.set_minimized(true);
+                                webview.set_visible(true);
+                            }
+                            crate::XDialogWindowState::Hidden => {
+                                webview.set_visible(false);
+                            }
+                            crate::XDialogWindowState::Fullscreen => {
+                                webview.set_fullscreen(true);
+                                webview.set_visible(true);
+                            }
+                        }
+                    }
+                }
+                DialogMessageRequest::WebviewEval(id, js) => {
+                    if let Some(webview) = self.mshtml_views.get_mut(&id) {
+                        let _ = webview.eval(&js);
+                    }
                 }
             }
         }
@@ -81,11 +136,11 @@ impl<'a> ApplicationHandler for NativeApp<'a> {
 }
 
 impl<'a> NativeApp<'a> {
-    fn show_mshtml_webview(&mut self, options: crate::XDialogWebviewOptions, id: usize, mut result_sender: crate::ResultSender) {
+    fn mshtml_show(&mut self, options: crate::XDialogWebviewOptions, id: usize, mut result_sender: crate::ResultSender) {
         let mut builder = mshtml::builder::builder()
             .content(mshtml::builder::Content::Html(options.html))
             .title(options.title)
-            .resizable(options.resizable)
+            .resizable(!options.fixed_size)
             .user_data(UserData { id, cb: options.callback });
         if let Some(size) = options.size {
             builder = builder.size(size.0, size.1);
@@ -114,8 +169,8 @@ impl<'a> NativeApp<'a> {
 
         match builder.build() {
             Ok(view) => {
-                self.webviews.insert(id, view);
-                result_sender.send_result(Ok("Webview created".to_string()));
+                self.mshtml_views.insert(id, view);
+                result_sender.send_result(Ok(()));
             }
             Err(e) => {
                 let error_msg = format!("Failed to create mshtml webview: {:?}", e);
@@ -129,7 +184,7 @@ impl XDialogBackendImpl for NativeBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
         let event_loop = EventLoop::new().unwrap();
         event_loop.set_control_flow(ControlFlow::Poll);
-        let mut app = NativeApp { receiver, webviews: HashMap::new() };
+        let mut app = NativeApp { receiver, mshtml_views: HashMap::new() };
         event_loop.run_app(&mut app).unwrap();
     }
 }
