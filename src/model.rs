@@ -1,3 +1,5 @@
+use std::sync::mpsc::Sender;
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 /// The backend to use for the dialog. Automatic will choose the best backend for the current platform.
 pub enum XDialogBackend {
@@ -26,10 +28,11 @@ pub enum XDialogTheme {
     MacOSDark,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 /// The icon to display in the dialog, or None for no icon.
 pub enum XDialogIcon {
     /// No icon
+    #[default]
     None = 0,
     /// Error icon
     Error,
@@ -39,7 +42,7 @@ pub enum XDialogIcon {
     Information,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 /// Options for constructing a new custom message dialog
 pub struct XDialogOptions {
     /// The title of the dialog window (required)
@@ -67,23 +70,73 @@ pub enum XDialogResult {
     ButtonPressed(usize),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
+pub enum XDialogWindowState {
+    #[default]
+    Normal,
+    Hidden,
+    Minimized,
+    Maximized,
+    Fullscreen,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct XDialogWebviewOptions {
     pub title: String,
-    pub html_content: String,
-    pub position: Option<(i32, i32)>,
+    pub html: String,
+    // pub position: Option<(i32, i32)>,
     pub size: Option<(i32, i32)>,
+    pub hidden: bool,
+    pub min_size: Option<(i32, i32)>,
+    pub resizable: bool,
+    pub borderless: bool,
+    pub hide_on_close: bool,
+}
+
+pub(crate) enum WebviewResponse {
+    ErrorOpening(String)
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WebviewSender {
+    pub sender: Sender<String>,
+}
+
+impl PartialEq for WebviewSender {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Into<WebviewSender> for Sender<String> {
+    fn into(self) -> WebviewSender {
+        WebviewSender { sender: self }
+    }
 }
 
 #[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum DialogMessageRequest {
+    // generic
     None,
-    ShowMessageWindow(usize, XDialogOptions),
-    ShowProgressWindow(usize, XDialogOptions),
+    ExitEventLoop,
     CloseWindow(usize),
+    // SetWindowTitle(usize, String),
+
+    // messagebox
+    ShowMessageWindow(usize, XDialogOptions),
+
+    // progress
+    ShowProgressWindow(usize, XDialogOptions),
     SetProgressIndeterminate(usize),
     SetProgressValue(usize, f32),
     SetProgressText(usize, String),
-    ExitEventLoop,
+
+    // webview
+    ShowWebviewWindow(usize, XDialogWebviewOptions, WebviewSender),
+    // SetWebviewHtml(usize, String),
+    // SetWebviewPosition(usize, i32, i32),
+    // SetWebviewSize(usize, i32, i32),
+    // SetWebviewZoomLevel(usize, f64),
+    // SetWebviewWindowState(usize, XDialogWindowState),
 }

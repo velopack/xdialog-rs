@@ -88,13 +88,13 @@ fn show_message_internal<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
 }
 
 /// Shows a message box with the specified options and blocks until the user closes it.
-pub fn show_message(info: XDialogOptions) -> Result<XDialogResult, XDialogError> {
+pub fn show_message(options: XDialogOptions) -> Result<XDialogResult, XDialogError> {
     if get_silent() {
         return Ok(XDialogResult::SilentMode);
     }
 
     let id = get_next_id();
-    send_request(DialogMessageRequest::ShowMessageWindow(id, info))?;
+    send_request(DialogMessageRequest::ShowMessageWindow(id, options))?;
     loop {
         if let Some(result) = get_result(id) {
             return Ok(result);
@@ -104,13 +104,13 @@ pub fn show_message(info: XDialogOptions) -> Result<XDialogResult, XDialogError>
 }
 
 /// Shows a message box with the specified options and blocks until the user closes it or the timeout occurs.
-pub fn show_message_with_timeout(info: XDialogOptions, timeout: Duration) -> Result<XDialogResult, XDialogError> {
+pub fn show_message_with_timeout(options: XDialogOptions, timeout: Duration) -> Result<XDialogResult, XDialogError> {
     if get_silent() {
         return Ok(XDialogResult::SilentMode);
     }
 
     let id = get_next_id();
-    send_request(DialogMessageRequest::ShowMessageWindow(id, info))?;
+    send_request(DialogMessageRequest::ShowMessageWindow(id, options))?;
 
     let start = std::time::Instant::now();
     loop {

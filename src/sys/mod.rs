@@ -1,2 +1,2 @@
-pub mod webview_mshtml;
+pub mod mshtml;
 pub mod taskdialog;

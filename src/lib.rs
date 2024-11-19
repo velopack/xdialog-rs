@@ -113,6 +113,7 @@ use std::{sync::mpsc::channel, thread};
 pub use message::*;
 pub use model::*;
 pub use progress::*;
+pub use webview::*;
 use state::*;
 
 use crate::backends::XDialogBackendImpl;
@@ -125,6 +126,7 @@ mod message;
 mod model;
 mod progress;
 mod state;
+mod webview;
 
 #[derive(Debug)]
 /// Builder pattern to configure/initialise the XDialog library. Must be configured and `run` in

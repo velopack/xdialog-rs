@@ -11,7 +11,7 @@ fn link_mshtml() {
     let target = std::env::var("TARGET").unwrap();
     let mut build = cc::Build::new();
 
-    build.include("src/sys/webview-mshtml/webview.h").flag_if_supported("-std=c11").flag_if_supported("-w");
+    build.include("src/sys/mshtml/webview.h").flag_if_supported("-std=c11").flag_if_supported("-w");
 
     if std::env::var("DEBUG").is_err() {
         build.define("NDEBUG", None);
@@ -21,7 +21,7 @@ fn link_mshtml() {
 
     if target.contains("windows") {
         build.define("UNICODE", None);
-        build.file("src/sys/webview-mshtml/webview_mshtml.c");
+        build.file("src/sys/mshtml/webview_mshtml.c");
 
         for &lib in &["ole32", "comctl32", "oleaut32", "uuid", "gdi32", "user32"] {
             println!("cargo:rustc-link-lib={}", lib);

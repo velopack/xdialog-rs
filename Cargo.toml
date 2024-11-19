@@ -29,7 +29,10 @@ widestring = "1.1.0"
 
 # webview
 wry = "0.47"
-webview2-com = "0.33"
+# webview2-com = "0.33"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
 
 # fltk
 fltk = "1.4"

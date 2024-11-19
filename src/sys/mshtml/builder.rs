@@ -65,7 +65,7 @@ pub enum Content<T> {
 ///
 /// [`WebView`]: struct.WebView.html
 pub struct WebViewBuilder<'a, T: 'a, I, C> {
-    pub title: &'a str,
+    pub title: String,
     pub content: Option<Content<C>>,
     pub width: i32,
     pub height: i32,
@@ -78,6 +78,7 @@ pub struct WebViewBuilder<'a, T: 'a, I, C> {
     pub min_width: i32,
     pub min_height: i32,
     pub hide_instead_of_close: bool,
+    _phantom: PhantomData<&'a ()>,
 }
 
 impl<'a, T: 'a, I, C> Default for WebViewBuilder<'a, T, I, C>
@@ -92,7 +93,7 @@ where
         let debug = false;
 
         WebViewBuilder {
-            title: "Application",
+            title: "Application".to_string(),
             content: None,
             width: 800,
             height: 600,
@@ -105,6 +106,7 @@ where
             min_width: 300,
             min_height: 300,
             hide_instead_of_close: false,
+            _phantom: PhantomData,
         }
     }
 }
@@ -124,7 +126,7 @@ where
     /// Sets the title of the WebView window.
     ///
     /// Defaults to `"Application"`.
-    pub fn title(mut self, title: &'a str) -> Self {
+    pub fn title(mut self, title: String) -> Self {
         self.title = title;
         self
     }

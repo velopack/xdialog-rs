@@ -5,6 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use builder::WebView;
 use windows::Win32::Foundation::HWND;
 use winit::{
     application::ApplicationHandler,
@@ -13,20 +14,24 @@ use winit::{
     window::WindowId,
 };
 
+#[cfg(windows)]
+use crate::sys::mshtml::*;
+#[cfg(windows)]
 use crate::sys::taskdialog::*;
-use crate::{DialogMessageRequest, XDialogTheme};
+
+use crate::{sys::mshtml, DialogMessageRequest, XDialogTheme};
 
 use super::XDialogBackendImpl;
 
 pub struct NativeBackend;
 
-pub struct NativeApp {
+pub struct NativeApp<'a> {
     pub receiver: Receiver<DialogMessageRequest>,
     pub theme: XDialogTheme,
-    // pub dialogs: HashMap<usize, HWND>,
+    pub webviews: HashMap<usize, WebView<'a, ()>>,
 }
 
-impl ApplicationHandler for NativeApp {
+impl<'a> ApplicationHandler for NativeApp<'a> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // event_loop
         //     .create_window(Window::default_attributes())
@@ -46,33 +51,81 @@ impl ApplicationHandler for NativeApp {
             match message {
                 DialogMessageRequest::None => {}
                 DialogMessageRequest::ShowMessageWindow(id, data) => {
-                    // use task dialog on windows
-                    task_dialog_show(id, data, false)
+                    #[cfg(windows)]
+                    task_dialog_show(id, data, false);
                 }
                 DialogMessageRequest::ExitEventLoop => {
+                    #[cfg(windows)]
                     task_dialog_close_all();
                     event_loop.exit();
                     return;
                 }
                 DialogMessageRequest::CloseWindow(id) => {
-                    // use task dialog on windows
+                    #[cfg(windows)]
                     task_dialog_close(id);
                 }
                 DialogMessageRequest::ShowProgressWindow(id, data) => {
-                    // use task dialog on windows
-                    task_dialog_show(id, data, true)
+                    #[cfg(windows)]
+                    task_dialog_show(id, data, true);
                 }
                 DialogMessageRequest::SetProgressIndeterminate(id) => {
-                    // use task dialog on windows
+                    #[cfg(windows)]
                     task_dialog_set_progress_indeterminate(id);
                 }
                 DialogMessageRequest::SetProgressValue(id, value) => {
-                    // use task dialog on windows
+                    #[cfg(windows)]
                     task_dialog_set_progress_value(id, value);
                 }
                 DialogMessageRequest::SetProgressText(id, text) => {
-                    // use task dialog on windows
+                    #[cfg(windows)]
                     task_dialog_set_progress_text(id, &text);
+                }
+                DialogMessageRequest::ShowWebviewWindow(id, options, sender) => {
+                    let mut builder = mshtml::builder::builder()
+                        .content(builder::Content::Html(options.html))
+                        .title(options.title)
+                        .resizable(options.resizable)
+                        .user_data(());
+                    if let Some(size) = options.size {
+                        builder = builder.size(size.0, size.1);
+                    }
+                    if let Some(min_size) = options.min_size {
+                        builder = builder.min_size(min_size.0, min_size.1);
+                    }
+                    if options.hidden {
+                        builder = builder.visible(false);
+                    }
+                    if options.borderless {
+                        builder = builder.frameless(true);
+                    }
+                    if options.hide_on_close {
+                        builder = builder.hide_instead_of_close(true);
+                    }
+                    builder = builder.invoke_handler(|webview, arg| {
+                        println!("Webview invoked: {}", arg);
+                        // use Cmd::*;
+            
+                        // let tasks_len = {
+                        //     let tasks = webview.user_data_mut();
+            
+                        //     match serde_json::from_str(arg).unwrap() {
+                        //         Init => (),
+                        //         Log { text } => println!("{}", text),
+                        //         AddTask { name } => tasks.push(Task { name, done: false }),
+                        //         MarkTask { index, done } => tasks[index].done = done,
+                        //         ClearDoneTasks => tasks.retain(|t| !t.done),
+                        //     }
+            
+                        //     tasks.len()
+                        // };
+            
+                        // webview.set_title(&format!("Rust Todo App ({} Tasks)", tasks_len))?;
+                        // render(webview)
+                        Ok(())
+                    });
+
+                    let view = builder.build().unwrap();
+                    self.webviews.insert(id, view);
                 }
             }
         }
@@ -125,7 +178,7 @@ impl XDialogBackendImpl for NativeBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) {
         let event_loop = EventLoop::new().unwrap();
         event_loop.set_control_flow(ControlFlow::Poll);
-        let mut app = NativeApp { receiver, theme };
+        let mut app = NativeApp { receiver, theme, webviews: HashMap::new() };
         event_loop.run_app(&mut app).unwrap();
     }
 }
