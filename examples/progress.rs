@@ -3,11 +3,9 @@ fn main() {
 }
 
 fn run() -> i32 {
-    let result = xdialog::show_progress(
-        "My App Incorporated",
-        "Doing some hard thing",
-        "Solving string theory...",
-        xdialog::XDialogIcon::Warning).unwrap();
+    let result =
+        xdialog::show_progress("My App Incorporated", "Doing some hard thing", "Solving string theory...", xdialog::XDialogIcon::Warning)
+            .unwrap();
 
     std::thread::sleep(std::time::Duration::from_secs(1));
     result.set_value(0.2).unwrap();
@@ -26,5 +24,6 @@ fn run() -> i32 {
     result.set_text("Oops, not quite there yet.").unwrap();
     result.set_indeterminate().unwrap();
     std::thread::sleep(std::time::Duration::from_secs(5));
+    result.close().unwrap();
     return 0;
 }

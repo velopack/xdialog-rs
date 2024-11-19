@@ -1,12 +1,10 @@
-extern crate webview_sys as ffi;
-
 use super::color::Color;
 use super::error::{Error, WVResult};
 use super::escape::escape;
 
 use urlencoding::encode;
 
-use ffi::*;
+use super::native::*;
 use std::{
     ffi::{CStr, CString},
     marker::PhantomData,

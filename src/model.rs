@@ -5,6 +5,8 @@ pub enum XDialogBackend {
     Automatic = 0,
     /// Use the FLTK backend
     Fltk,
+    /// Use the Native backend for given platform (eg. Win32, GTK, Cocoa)
+    Native,
     // Use Windows-only XAML Islands
     // XamlIsland,
 }
@@ -57,10 +59,20 @@ pub struct XDialogOptions {
 pub enum XDialogResult {
     /// The dialog was closed without a button being pressed (eg. user clicked 'X' button)
     WindowClosed,
+    /// The dialog was closed because the timeout elapsed
+    TimeoutElapsed,
     /// The dialog was not shown because silent mode is currently enabled
     SilentMode,
     /// A button was pressed, with the index of the button in the `buttons` array
     ButtonPressed(usize),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct XDialogWebviewOptions {
+    pub title: String,
+    pub html_content: String,
+    pub position: Option<(i32, i32)>,
+    pub size: Option<(i32, i32)>,
 }
 
 #[allow(missing_docs)]

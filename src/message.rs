@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::errors::*;
 use crate::model::*;
 use crate::state::*;
@@ -97,6 +99,28 @@ pub fn show_message(info: XDialogOptions) -> Result<XDialogResult, XDialogError>
         if let Some(result) = get_result(id) {
             return Ok(result);
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(std::time::Duration::from_millis(16));
+    }
+}
+
+/// Shows a message box with the specified options and blocks until the user closes it or the timeout occurs.
+pub fn show_message_with_timeout(info: XDialogOptions, timeout: Duration) -> Result<XDialogResult, XDialogError> {
+    if get_silent() {
+        return Ok(XDialogResult::SilentMode);
+    }
+
+    let id = get_next_id();
+    send_request(DialogMessageRequest::ShowMessageWindow(id, info))?;
+
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(result) = get_result(id) {
+            return Ok(result);
+        }
+        if start.elapsed() >= timeout {
+            send_request(DialogMessageRequest::CloseWindow(id))?; // close the dialog
+            return Ok(XDialogResult::TimeoutElapsed);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(16));
     }
 }

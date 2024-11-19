@@ -117,6 +117,7 @@ use state::*;
 
 use crate::backends::XDialogBackendImpl;
 
+mod sys;
 mod backends;
 pub mod errors;
 mod images;
@@ -170,8 +171,10 @@ impl XDialogBuilder {
         });
 
         match self.backend {
-            XDialogBackend::Automatic => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
+            // XDialogBackend::Automatic => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
+            XDialogBackend::Automatic => backends::native::NativeBackend::run_loop(receive_message, self.theme),
             XDialogBackend::Fltk => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
+            XDialogBackend::Native => backends::native::NativeBackend::run_loop(receive_message, self.theme),
             // XDialogBackend::XamlIsland => {
             //     backends::xaml_island::XamlIslandBackend::run(main, receive_message, self.theme)
             // }

@@ -2,9 +2,10 @@ use crate::model::{DialogMessageRequest, XDialogTheme};
 use std::sync::mpsc::Receiver;
 
 pub mod fltk;
+pub mod native;
 // pub mod xaml_island;
 // pub mod webview;
-// pub mod mshtml;
+// pub mod win32;
 
 pub trait XDialogBackendImpl {
     fn run_loop(
