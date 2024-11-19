@@ -5,8 +5,7 @@ use std::sync::{OnceLock, RwLock};
 
 use atomic_counter::{AtomicCounter, RelaxedCounter};
 
-use crate::errors::{NotInitializedError, XDialogError};
-use crate::model::{DialogMessageRequest, XDialogResult};
+use crate::*;
 
 static REQUEST_SEND: OnceLock<Sender<DialogMessageRequest>> = OnceLock::new();
 static SILENT: AtomicBool = AtomicBool::new(false);
@@ -48,7 +47,7 @@ pub fn init_sender(sender: Sender<DialogMessageRequest>) {
 pub fn send_request(message: DialogMessageRequest) -> Result<(), XDialogError> {
     let once = REQUEST_SEND.get();
     if once.is_none() {
-        return Err(XDialogError::NotInitialized(NotInitializedError));
+        return Err(XDialogError::NotInitialized);
     }
 
     once.unwrap().send(message).map_err(|e| XDialogError::SendFailed(e))?;

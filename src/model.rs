@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use crate::*;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 /// The backend to use for the dialog. Automatic will choose the best backend for the current platform.
@@ -91,31 +91,48 @@ pub struct XDialogWebviewOptions {
     pub resizable: bool,
     pub borderless: bool,
     pub hide_on_close: bool,
+    pub callback: WebviewInvokeHandler,
 }
 
-pub(crate) enum WebviewResponse {
-    ErrorOpening(String)
+// pub enum WebviewResponse {
+//     Error(String),
+//     Invoke(String),
+// }
+
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub struct ResultSender {
+    pub sender: Option<oneshot::Sender<Result<String, XDialogError>>>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct WebviewSender {
-    pub sender: Sender<String>,
+#[allow(missing_docs)]
+impl ResultSender {
+    pub fn send_result(&mut self, result: Result<String, XDialogError>) {
+        if let Some(sender) = self.sender.take() {
+            let _ = sender.send(result);
+        }
+    }
+    pub fn create() -> (Self, oneshot::Receiver<Result<String, XDialogError>>) {
+        let (sender, receiver) = oneshot::channel();
+        let result_sender = ResultSender { sender: Some(sender) };
+        (result_sender, receiver)
+    }
 }
 
-impl PartialEq for WebviewSender {
+impl PartialEq for ResultSender {
     fn eq(&self, _: &Self) -> bool {
         true
     }
 }
 
-impl Into<WebviewSender> for Sender<String> {
-    fn into(self) -> WebviewSender {
-        WebviewSender { sender: self }
-    }
-}
+/// A callback function which is executed when a javascript message is dispatched with
+/// `window.external.invoke(message)`. The `WebviewDialogProxy` provided in this callback
+/// is not the same as the one returned by `show_webview`, but it can be used to interact
+/// with the webview in the same way.
+pub type WebviewInvokeHandler = Option<fn(webview: crate::WebviewDialogProxy, message: String)>;
 
 #[allow(missing_docs)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum DialogMessageRequest {
     // generic
     None,
@@ -133,7 +150,7 @@ pub enum DialogMessageRequest {
     SetProgressText(usize, String),
 
     // webview
-    ShowWebviewWindow(usize, XDialogWebviewOptions, WebviewSender),
+    ShowWebviewWindow(usize, XDialogWebviewOptions, ResultSender),
     // SetWebviewHtml(usize, String),
     // SetWebviewPosition(usize, i32, i32),
     // SetWebviewSize(usize, i32, i32),

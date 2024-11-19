@@ -1,6 +1,4 @@
-use crate::errors::XDialogError;
-use crate::state::{get_next_id, send_request};
-use crate::{DialogMessageRequest, XDialogIcon, XDialogOptions};
+use crate::*;
 
 /// Shows a progress dialog with the specified options and returns a proxy object to control it.
 /// This is a non-blocking function which will return as soon as the dialog opens.

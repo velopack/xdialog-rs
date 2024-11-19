@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::color::Color;
 use super::error::{Error, WVResult};
 use super::escape::escape;
@@ -333,7 +335,7 @@ impl<'a, T> WebView<'a, T> {
             );
 
             if inner.is_null() {
-                Box::<UserData<T>>::from_raw(user_data_ptr);
+                let _ = Box::<UserData<T>>::from_raw(user_data_ptr);
                 Err(Error::Initialization)
             } else {
                 Ok(WebView::from_ptr(inner))

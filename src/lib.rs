@@ -113,19 +113,18 @@ use std::{sync::mpsc::channel, thread};
 pub use message::*;
 pub use model::*;
 pub use progress::*;
-pub use webview::*;
 use state::*;
+pub use webview::*;
 
 use crate::backends::XDialogBackendImpl;
 
-mod sys;
 mod backends;
-pub mod errors;
 mod images;
 mod message;
 mod model;
 mod progress;
 mod state;
+mod sys;
 mod webview;
 
 #[derive(Debug)]
@@ -190,4 +189,17 @@ impl XDialogBuilder {
 /// return `XDialogResult::SilentMode` without showing any dialogs.
 pub fn set_silent_mode(silent: bool) {
     set_silent(silent);
+}
+
+#[allow(missing_docs)]
+#[derive(thiserror::Error, Debug)]
+pub enum XDialogError {
+    #[error("xdialog backend not initialized")]
+    NotInitialized,
+    #[error("xdialog command returned no result: {0}")]
+    NoResult(oneshot::RecvError),
+    #[error("xdialog send to backend failed: {0}")]
+    SendFailed(std::sync::mpsc::SendError<DialogMessageRequest>),
+    #[error("xdialog generic error: {0}")]
+    GenericError(String),
 }

@@ -1,12 +1,5 @@
-use std::{
-    collections::HashMap,
-    sync::mpsc::Receiver,
-    thread::{self, JoinHandle},
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, sync::mpsc::Receiver, time::Duration};
 
-use builder::WebView;
-use windows::Win32::Foundation::HWND;
 use winit::{
     application::ApplicationHandler,
     event::{StartCause, WindowEvent},
@@ -15,41 +8,38 @@ use winit::{
 };
 
 #[cfg(windows)]
-use crate::sys::mshtml::*;
-#[cfg(windows)]
-use crate::sys::taskdialog::*;
+use crate::sys::{mshtml, mshtml::builder::WebView, taskdialog::*};
 
-use crate::{sys::mshtml, DialogMessageRequest, XDialogTheme};
+use crate::{DialogMessageRequest, WebviewDialogProxy, XDialogError, XDialogTheme};
 
 use super::XDialogBackendImpl;
 
 pub struct NativeBackend;
 
-pub struct NativeApp<'a> {
+struct NativeApp<'a> {
     pub receiver: Receiver<DialogMessageRequest>,
-    pub theme: XDialogTheme,
-    pub webviews: HashMap<usize, WebView<'a, ()>>,
+    pub webviews: HashMap<usize, WebView<'a, UserData>>,
+}
+
+struct UserData {
+    pub id: usize,
+    pub cb: crate::WebviewInvokeHandler,
 }
 
 impl<'a> ApplicationHandler for NativeApp<'a> {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // event_loop
-        //     .create_window(Window::default_attributes())
-        //     .unwrap();
-        // println!("Resumed");
-    }
+    fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
 
     fn new_events(&mut self, event_loop: &ActiveEventLoop, _cause: StartCause) {
         loop {
             // read all messages until there are no more queued
             let message = self.receiver.try_recv().unwrap_or(DialogMessageRequest::None);
-            if message == DialogMessageRequest::None {
-                std::thread::sleep(Duration::from_millis(16));
-                break;
-            }
 
             match message {
-                DialogMessageRequest::None => {}
+                DialogMessageRequest::None => {
+                    // sleep for a bit to avoid busy waiting
+                    std::thread::sleep(Duration::from_millis(16));
+                    return;
+                }
                 DialogMessageRequest::ShowMessageWindow(id, data) => {
                     #[cfg(windows)]
                     task_dialog_show(id, data, false);
@@ -80,105 +70,66 @@ impl<'a> ApplicationHandler for NativeApp<'a> {
                     #[cfg(windows)]
                     task_dialog_set_progress_text(id, &text);
                 }
-                DialogMessageRequest::ShowWebviewWindow(id, options, sender) => {
-                    let mut builder = mshtml::builder::builder()
-                        .content(builder::Content::Html(options.html))
-                        .title(options.title)
-                        .resizable(options.resizable)
-                        .user_data(());
-                    if let Some(size) = options.size {
-                        builder = builder.size(size.0, size.1);
-                    }
-                    if let Some(min_size) = options.min_size {
-                        builder = builder.min_size(min_size.0, min_size.1);
-                    }
-                    if options.hidden {
-                        builder = builder.visible(false);
-                    }
-                    if options.borderless {
-                        builder = builder.frameless(true);
-                    }
-                    if options.hide_on_close {
-                        builder = builder.hide_instead_of_close(true);
-                    }
-                    builder = builder.invoke_handler(|webview, arg| {
-                        println!("Webview invoked: {}", arg);
-                        // use Cmd::*;
-            
-                        // let tasks_len = {
-                        //     let tasks = webview.user_data_mut();
-            
-                        //     match serde_json::from_str(arg).unwrap() {
-                        //         Init => (),
-                        //         Log { text } => println!("{}", text),
-                        //         AddTask { name } => tasks.push(Task { name, done: false }),
-                        //         MarkTask { index, done } => tasks[index].done = done,
-                        //         ClearDoneTasks => tasks.retain(|t| !t.done),
-                        //     }
-            
-                        //     tasks.len()
-                        // };
-            
-                        // webview.set_title(&format!("Rust Todo App ({} Tasks)", tasks_len))?;
-                        // render(webview)
-                        Ok(())
-                    });
-
-                    let view = builder.build().unwrap();
-                    self.webviews.insert(id, view);
+                DialogMessageRequest::ShowWebviewWindow(id, options, result_sender) => {
+                    self.show_mshtml_webview(options, id, result_sender);
                 }
             }
         }
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        // println!("Window event: {:?}", event);
-        // // let id: u64 = id.into();
-        // // let id = id as usize;
-        // match event {
-        //     WindowEvent::Resized(size) => {
-        //         // iterate each window and resize it
-        //         for (_, (_, _, _, xaml_island_hwnd)) in self.windows.iter_mut() {
-        //             unsafe {
-        //                 SetWindowPos(xaml_island_hwnd.clone(), HWND(0), 0, 0, size.width as _, size.height as _, SWP_SHOWWINDOW);
-        //             }
-        //         }
-        //     }
-        //     WindowEvent::CloseRequested => {
-        //         // self.windows.remove(&id);
+    fn window_event(&mut self, _event_loop: &ActiveEventLoop, _id: WindowId, _event: WindowEvent) {}
+}
 
-        //         // println!("The close button was pressed; stopping");
-        //         // event_loop.exit();
-        //     }
-        //     WindowEvent::RedrawRequested => {
-        //         // if let Some(wnd) = self.windows. {
-        //         //     wnd.request_redraw();
-        //         // }
-        //         // Redraw the application.
-        //         //
-        //         // It's preferable for applications that do not render continuously to render in
-        //         // this event rather than in AboutToWait, since rendering in here allows
-        //         // the program to gracefully handle redraws requested by the OS.
+impl<'a> NativeApp<'a> {
+    fn show_mshtml_webview(&mut self, options: crate::XDialogWebviewOptions, id: usize, mut result_sender: crate::ResultSender) {
+        let mut builder = mshtml::builder::builder()
+            .content(mshtml::builder::Content::Html(options.html))
+            .title(options.title)
+            .resizable(options.resizable)
+            .user_data(UserData { id, cb: options.callback });
+        if let Some(size) = options.size {
+            builder = builder.size(size.0, size.1);
+        }
+        if let Some(min_size) = options.min_size {
+            builder = builder.min_size(min_size.0, min_size.1);
+        }
+        if options.hidden {
+            builder = builder.visible(false);
+        }
+        if options.borderless {
+            builder = builder.frameless(true);
+        }
+        if options.hide_on_close {
+            builder = builder.hide_instead_of_close(true);
+        }
+        builder = builder.invoke_handler(|webview, arg| {
+            println!("Webview invoked: {}", arg);
+            let user_data = webview.user_data();
+            let user_id = user_data.id;
+            if let Some(cb) = user_data.cb {
+                cb(WebviewDialogProxy { id: user_id }, arg.to_string());
+            }
+            Ok(())
+        });
 
-        //         // Draw.
-
-        //         // Queue a RedrawRequested event.
-        //         //
-        //         // You only need to call this if you've determined that you need to redraw in
-        //         // applications which do not always need to. Applications that redraw continuously
-        //         // can render here instead.
-        //         // self.window.as_ref().unwrap().request_redraw();
-        //     }
-        //     _ => (),
-        // }
+        match builder.build() {
+            Ok(view) => {
+                self.webviews.insert(id, view);
+                result_sender.send_result(Ok("Webview created".to_string()));
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to create mshtml webview: {:?}", e);
+                result_sender.send_result(Err(XDialogError::GenericError(error_msg)));
+            }
+        }
     }
 }
 
 impl XDialogBackendImpl for NativeBackend {
-    fn run_loop(receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) {
+    fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
         let event_loop = EventLoop::new().unwrap();
         event_loop.set_control_flow(ControlFlow::Poll);
-        let mut app = NativeApp { receiver, theme, webviews: HashMap::new() };
+        let mut app = NativeApp { receiver, webviews: HashMap::new() };
         event_loop.run_app(&mut app).unwrap();
     }
 }

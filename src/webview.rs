@@ -1,11 +1,7 @@
-use std::sync::mpsc::channel;
-
-use crate::errors::*;
-use crate::model::*;
-use crate::state::*;
+use crate::*;
 
 pub struct WebviewDialogProxy {
-    id: usize,
+    pub(crate) id: usize,
 }
 
 impl WebviewDialogProxy {
@@ -41,14 +37,19 @@ impl WebviewDialogProxy {
         Ok(())
     }
 
+    pub fn eval_js<S: AsRef<str>>(&self, js: S) -> Result<(), XDialogError> {
+        Ok(())
+    }
+
     pub fn close() -> Result<(), XDialogError> {
         Ok(())
     }
 }
 
 pub fn show_webview(options: XDialogWebviewOptions) -> Result<WebviewDialogProxy, XDialogError> {
-    let (sender, receiver) = channel();
     let id = get_next_id();
-    send_request(DialogMessageRequest::ShowWebviewWindow(id, options, sender.into()))?;
+    let (result_sender, result_receiver) = ResultSender::create();
+    send_request(DialogMessageRequest::ShowWebviewWindow(id, options, result_sender))?;
+    result_receiver.recv().map_err(|e| XDialogError::NoResult(e))?;
     Ok(WebviewDialogProxy { id })
 }
