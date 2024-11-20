@@ -103,8 +103,6 @@ pub struct XDialogWebviewOptions {
     pub fixed_size: bool,
     /// If true, the dialog window will have a borderless frame
     pub borderless: bool,
-    /// If true, the dialog window will hide itself when the close button is pressed instead of exiting
-    pub hide_on_close: bool,
     /// A callback function which is executed when a javascript message is dispatched with `window.external.invoke(message)`
     pub callback: Option<WebviewInvokeHandler>,
 }
@@ -161,11 +159,11 @@ pub enum DialogMessageRequest {
 
     // webview
     WebviewWindowShow(usize, XDialogWebviewOptions, ResultSender),
-    WebviewSetTitle(usize, String),
-    WebviewSetHtml(usize, String),
-    WebviewSetPosition(usize, i32, i32),
-    WebviewSetSize(usize, i32, i32),
-    WebviewSetZoomLevel(usize, f64),
-    WebviewSetWindowState(usize, XDialogWindowState),
-    WebviewEval(usize, String),
+    WebviewSetTitle(usize, String, ResultSender),
+    WebviewSetHtml(usize, String, ResultSender),
+    WebviewSetPosition(usize, i32, i32, ResultSender),
+    WebviewSetSize(usize, i32, i32, ResultSender),
+    WebviewSetZoomLevel(usize, f64, ResultSender),
+    WebviewSetWindowState(usize, XDialogWindowState, ResultSender),
+    WebviewEval(usize, String, ResultSender),
 }

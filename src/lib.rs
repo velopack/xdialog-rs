@@ -201,5 +201,5 @@ pub enum XDialogError {
     #[error("xdialog send to backend failed: {0}")]
     SendFailed(std::sync::mpsc::SendError<DialogMessageRequest>),
     #[error("xdialog generic error: {0}")]
-    GenericError(String),
+    SystemError(String),
 }
