@@ -82,11 +82,11 @@ pub enum XDialogWindowState {
     Minimized,
     /// The window is maximized to fill the screen
     Maximized,
-    /// The window is in fullscreen mode
-    Fullscreen,
+    /// The window is in fullscreen borderless mode
+    FullscreenBorderless,
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 /// Options for constructing a new webview dialog
 pub struct XDialogWebviewOptions {
     /// The title of the dialog window (required)
@@ -95,16 +95,35 @@ pub struct XDialogWebviewOptions {
     pub html: String,
     /// The initial size of the dialog window
     pub size: Option<(i32, i32)>,
-    /// If true, the dialog window will be hidden when first created and will need to be shown manually
-    pub hidden: bool,
+    /// The initial position of the dialog window
+    pub position: Option<(i32, i32)>,
     /// The minimum size of the dialog window
     pub min_size: Option<(i32, i32)>,
-    /// If true, the dialog window can NOT be resized by the user
-    pub fixed_size: bool,
+    /// If true, the dialog window can be resized by the user
+    pub resizable: bool,
     /// If true, the dialog window will have a borderless frame
     pub borderless: bool,
-    /// A callback function which is executed when a javascript message is dispatched with `window.external.invoke(message)`
+    /// The initial state of the dialog window
+    pub state: XDialogWindowState,
+    /// A callback function which is executed when a javascript message is dispatched with
+    /// `window.ipc.postMessage(message)` (webview2) or `window.external.invoke(message)` (mshtml)
     pub callback: Option<WebviewInvokeHandler>,
+}
+
+impl Default for XDialogWebviewOptions {
+    fn default() -> Self {
+        Self {
+            title: "XDialog WebView".to_string(),
+            html: "".to_string(),
+            size: None,
+            position: None,
+            min_size: None,
+            resizable: true,
+            borderless: false,
+            callback: None,
+            state: XDialogWindowState::Normal,
+        }
+    }
 }
 
 #[allow(missing_docs)]
@@ -120,6 +139,15 @@ impl ResultSender {
             let _ = sender.send(result);
         }
     }
+
+    pub fn send_ok(&mut self) {
+        self.send_result(Ok(()));
+    }
+
+    pub fn send_error(&mut self, error: XDialogError) {
+        self.send_result(Err(error));
+    }
+
     pub fn create() -> (Self, oneshot::Receiver<Result<(), XDialogError>>) {
         let (sender, receiver) = oneshot::channel();
         let result_sender = ResultSender { sender: Some(sender) };
@@ -146,13 +174,12 @@ pub enum DialogMessageRequest {
     None,
     ExitEventLoop,
     CloseWindow(usize),
-    // SetWindowTitle(usize, String),
 
     // messagebox
-    ShowMessageWindow(usize, XDialogOptions),
+    ShowMessageWindow(usize, XDialogOptions, ResultSender),
 
     // progress
-    ShowProgressWindow(usize, XDialogOptions),
+    ShowProgressWindow(usize, XDialogOptions, ResultSender),
     SetProgressIndeterminate(usize),
     SetProgressValue(usize, f32),
     SetProgressText(usize, String),

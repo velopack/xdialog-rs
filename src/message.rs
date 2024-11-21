@@ -82,42 +82,30 @@ fn show_message_internal<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
         icon,
         buttons,
     };
-    show_message(data)
-}
-
-/// Shows a message box with the specified options and blocks until the user closes it.
-pub fn show_message(options: XDialogOptions) -> Result<XDialogResult, XDialogError> {
-    if get_silent() {
-        return Ok(XDialogResult::SilentMode);
-    }
-
-    let id = get_next_id();
-    send_request(DialogMessageRequest::ShowMessageWindow(id, options))?;
-    loop {
-        if let Some(result) = get_result(id) {
-            return Ok(result);
-        }
-        std::thread::sleep(std::time::Duration::from_millis(16));
-    }
+    show_message(data, None)
 }
 
 /// Shows a message box with the specified options and blocks until the user closes it or the timeout occurs.
-pub fn show_message_with_timeout(options: XDialogOptions, timeout: Duration) -> Result<XDialogResult, XDialogError> {
+pub fn show_message(options: XDialogOptions, timeout: Option<Duration>) -> Result<XDialogResult, XDialogError> {
     if get_silent() {
         return Ok(XDialogResult::SilentMode);
     }
 
     let id = get_next_id();
-    send_request(DialogMessageRequest::ShowMessageWindow(id, options))?;
+    let (result_sender, result_receiver) = ResultSender::create();
+    send_request(DialogMessageRequest::ShowMessageWindow(id, options, result_sender))?;
+    result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
 
     let start = std::time::Instant::now();
     loop {
         if let Some(result) = get_result(id) {
             return Ok(result);
         }
-        if start.elapsed() >= timeout {
-            send_request(DialogMessageRequest::CloseWindow(id))?; // close the dialog
-            return Ok(XDialogResult::TimeoutElapsed);
+        if let Some(timeout) = timeout {
+            if start.elapsed() >= timeout {
+                send_request(DialogMessageRequest::CloseWindow(id))?; // close the dialog
+                return Ok(XDialogResult::TimeoutElapsed);
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(16));
     }

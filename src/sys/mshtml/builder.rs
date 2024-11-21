@@ -318,6 +318,7 @@ impl<'a, T> WebView<'a, T> {
         let user_data_ptr = Box::into_raw(user_data);
 
         unsafe {
+            println!("1");
             let inner = webview_new(
                 title.as_ptr(),
                 url.as_ptr(),
@@ -333,6 +334,7 @@ impl<'a, T> WebView<'a, T> {
                 Some(ffi_invoke_handler::<T>),
                 user_data_ptr as _,
             );
+            println!("2");
 
             if inner.is_null() {
                 let _ = Box::<UserData<T>>::from_raw(user_data_ptr);

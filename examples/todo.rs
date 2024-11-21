@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::{sync::Mutex, time::Duration};
 
 use serde_derive::{Deserialize, Serialize};
 use xdialog::WebviewDialogProxy;
@@ -44,12 +44,13 @@ fn run() -> i32 {
     options.title = "Rust Todo App".to_owned();
     options.html = html;
     options.size = Some((320, 480));
-    options.fixed_size = true;
+    options.resizable = false;
     options.callback = Some(|proxy, arg| {
         println!("callback invoked: {}", arg);
         use Cmd::*;
         let tasks_len = {
             // let tasks = webview.user_data_mut();
+            println!("lock");
             let mut tasks = TASKS.lock().unwrap();
 
             match serde_json::from_str(&arg).unwrap() {
@@ -62,22 +63,26 @@ fn run() -> i32 {
 
             tasks.len()
         };
-
+        println!("unlock");
         proxy.set_title(&format!("Rust Todo App ({} Tasks)", tasks_len)).unwrap();
         render(&proxy);
     });
 
-    let view = xdialog::show_webview(options).unwrap();
-    std::thread::sleep_ms(15000);
+    let _ = xdialog::show_webview(options).unwrap();
+
+    println!("Webview dialog opened");
+    std::thread::sleep(Duration::from_secs(15));
     0
 }
 
 fn render(webview: &WebviewDialogProxy) {
     let render_tasks = {
+        println!("lock");
         let tasks = TASKS.lock().unwrap();
         println!("{:#?}", tasks);
         format!("rpc.render({})", serde_json::to_string(&*tasks).unwrap())
     };
+    println!("unlock");
     webview.eval_js(&render_tasks).unwrap();
 }
 

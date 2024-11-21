@@ -47,7 +47,9 @@ pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
         buttons: vec![],
     };
 
-    send_request(DialogMessageRequest::ShowProgressWindow(id, data))?;
+    let (result_sender, result_receiver) = ResultSender::create();
+    send_request(DialogMessageRequest::ShowProgressWindow(id, data, result_sender))?;
+    result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
     Ok(ProgressDialogProxy { id })
 }
 

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::ptr::null_mut;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use widestring::U16CString;
 use windows::core::{HRESULT, PCWSTR};
@@ -18,7 +18,7 @@ use windows::Win32::UI::Controls::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{EndDialog, SendMessageW, HICON};
 
-use crate::{insert_result, XDialogIcon, XDialogOptions, XDialogResult};
+use crate::{backends::DialogManager, insert_result, XDialogError, XDialogIcon, XDialogOptions, XDialogResult};
 
 #[derive(Debug, PartialEq)]
 enum DialogRequest {
@@ -29,132 +29,144 @@ enum DialogRequest {
     SetText(String),
 }
 
-lazy_static! {
-    static ref OPEN_DIALOGS: Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>> = Mutex::new(HashMap::new());
+pub struct TaskDialogManager {
+    open_dialogs: Arc<Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>>>,
 }
 
-pub fn task_dialog_show(id: usize, data: XDialogOptions, has_progress: bool) {
-    // Insert a new dialog
-    {
-        let mut dialogs = OPEN_DIALOGS.lock().unwrap();
-        let (sender, receiver) = channel();
-        dialogs.insert(id, (sender, receiver));
+impl TaskDialogManager {
+    pub fn new() -> Self {
+        TaskDialogManager { open_dialogs: Arc::new(Mutex::new(HashMap::new())) }
     }
+}
 
-    std::thread::spawn(move || {
-        let mut config = TaskDialogConfig::default();
-        config.window_title = data.title;
-        config.main_instruction = data.main_instruction;
-        config.content = data.message;
-        config.x_dialog_id = id;
-        let mut default_button: Option<i32> = None;
-        for (idx, text) in data.buttons.iter().enumerate().rev() {
-            if default_button.is_none() {
-                default_button = Some(idx as i32);
+impl DialogManager for TaskDialogManager {
+    fn show(&mut self, id: usize, data: XDialogOptions, has_progress: bool) -> Result<(), XDialogError> {
+        let open_dialogs = self.open_dialogs.clone();
+        // Insert a new dialog
+        {
+            let mut dialogs = self.open_dialogs.lock().unwrap();
+            let (sender, receiver) = channel();
+            dialogs.insert(id, (sender, receiver));
+        }
+
+        std::thread::spawn(move || {
+            let mut config = TaskDialogConfig::new(open_dialogs.clone());
+            config.window_title = data.title;
+            config.main_instruction = data.main_instruction;
+            config.content = data.message;
+            config.x_dialog_id = id;
+            let mut default_button: Option<i32> = None;
+            for (idx, text) in data.buttons.iter().enumerate().rev() {
+                if default_button.is_none() {
+                    default_button = Some(idx as i32);
+                }
+
+                let button = TaskDialogButton { text: text.clone(), id: idx as i32 };
+                config.buttons.push(button);
             }
+            config.default_button = default_button.unwrap_or(0);
+            config.main_icon = convert_icon(data.icon);
+            config.progress = if has_progress { ProgressState::Pos(0f32) } else { ProgressState::None };
+            config.flags = TDF_SIZE_TO_CONTENT | TDF_CALLBACK_TIMER;
+            if has_progress {
+                config.flags |= TDF_SHOW_PROGRESS_BAR;
+            }
+            config.callback = Some(|hwnd, msg, _w_param, _l_param, ref_data| {
+                if msg == TDN_TIMER {
+                    let config = unsafe { &mut *ref_data };
+                    let open_dialogs = config.open_dialogs.clone();
+                    let mut open_dialogs = open_dialogs.lock().unwrap();
 
-            let button = TaskDialogButton { text: text.clone(), id: idx as i32 };
-            config.buttons.push(button);
-        }
-        config.default_button = default_button.unwrap_or(0);
-        config.main_icon = convert_icon(data.icon);
-        config.progress = if has_progress { ProgressState::Pos(0f32) } else { ProgressState::None };
-        config.flags = TDF_SIZE_TO_CONTENT | TDF_CALLBACK_TIMER;
-        if has_progress {
-            config.flags |= TDF_SHOW_PROGRESS_BAR;
-        }
-        config.callback = Some(|hwnd, msg, _w_param, _l_param, ref_data| {
-            if msg == TDN_TIMER {
-                let config = unsafe { &mut *ref_data };
-                let mut dialogs = OPEN_DIALOGS.lock().unwrap();
-
-                if let Some(state) = dialogs.get_mut(&config.x_dialog_id) {
-                    let mut desired_state = ProgressState::None;
-                    loop {
-                        // read all messages until there are no more queued
-                        let message = state.1.try_recv().unwrap_or(DialogRequest::None);
-                        match message {
-                            DialogRequest::None => break,
-                            DialogRequest::Close => unsafe {
-                                let _ = EndDialog(hwnd, -1);
-                            },
-                            DialogRequest::SetProgress(val) => desired_state = ProgressState::Pos(val),
-                            DialogRequest::SetIndeterminate => desired_state = ProgressState::Indeterminate,
-                            DialogRequest::SetText(text) => config.set_content(&text),
-                        }
-                    }
-
-                    if desired_state != ProgressState::None {
-                        if let ProgressState::Pos(progress) = desired_state {
-                            if config.progress == ProgressState::Indeterminate {
-                                config.set_progress_bar_marquee_on_off(false);
-                                config.set_progress_bar_marquee_progress(false);
+                    if let Some(state) = open_dialogs.get_mut(&config.x_dialog_id) {
+                        let mut desired_state = ProgressState::None;
+                        loop {
+                            // read all messages until there are no more queued
+                            let message = state.1.try_recv().unwrap_or(DialogRequest::None);
+                            match message {
+                                DialogRequest::None => break,
+                                DialogRequest::Close => unsafe {
+                                    let _ = EndDialog(hwnd, -1);
+                                },
+                                DialogRequest::SetProgress(val) => desired_state = ProgressState::Pos(val),
+                                DialogRequest::SetIndeterminate => desired_state = ProgressState::Indeterminate,
+                                DialogRequest::SetText(text) => config.set_content(&text),
                             }
+                        }
 
-                            config.set_progress_bar_pos((progress * 100f32) as usize);
-                            config.progress = ProgressState::Pos(progress);
-                        } else if ProgressState::Indeterminate == desired_state {
-                            config.set_progress_bar_marquee_on_off(true);
-                            config.set_progress_bar_marquee_progress(true);
-                            config.progress = ProgressState::Indeterminate;
+                        if desired_state != ProgressState::None {
+                            if let ProgressState::Pos(progress) = desired_state {
+                                if config.progress == ProgressState::Indeterminate {
+                                    config.set_progress_bar_marquee_on_off(false);
+                                    config.set_progress_bar_marquee_progress(false);
+                                }
+
+                                config.set_progress_bar_pos((progress * 100f32) as usize);
+                                config.progress = ProgressState::Pos(progress);
+                            } else if ProgressState::Indeterminate == desired_state {
+                                config.set_progress_bar_marquee_on_off(true);
+                                config.set_progress_bar_marquee_progress(true);
+                                config.progress = ProgressState::Indeterminate;
+                            }
                         }
                     }
                 }
+                S_OK
+            });
+
+            let result = unsafe { execute_task_dialog(&mut config) };
+
+            // Remove dialog
+            {
+                let mut dialogs = open_dialogs.lock().unwrap();
+                dialogs.remove(&id);
             }
-            S_OK
+
+            let xresult = match result {
+                Ok(result) => {
+                    if result.button_id < 0 {
+                        XDialogResult::WindowClosed
+                    } else {
+                        XDialogResult::ButtonPressed(result.button_id as usize)
+                    }
+                }
+                Err(_) => XDialogResult::WindowClosed,
+            };
+
+            insert_result(id, xresult);
         });
 
-        let result = unsafe { execute_task_dialog(&mut config) };
+        Ok(())
+    }
 
-        // Remove dialog
-        {
-            let mut dialogs = OPEN_DIALOGS.lock().unwrap();
-            dialogs.remove(&id);
+    fn close(&mut self, id: usize) {
+        if let Some(obj) = self.open_dialogs.lock().unwrap().get_mut(&id) {
+            let _ = obj.0.send(DialogRequest::Close);
         }
-
-        let xresult = match result {
-            Ok(result) => {
-                if result.button_id < 0 {
-                    XDialogResult::WindowClosed
-                } else {
-                    XDialogResult::ButtonPressed(result.button_id as usize)
-                }
-            }
-            Err(_) => XDialogResult::WindowClosed,
-        };
-
-        insert_result(id, xresult);
-    });
-}
-
-pub fn task_dialog_close(id: usize) {
-    if let Some(obj) = OPEN_DIALOGS.lock().unwrap().get_mut(&id) {
-        let _ = obj.0.send(DialogRequest::Close);
     }
-}
 
-pub fn task_dialog_close_all() {
-    let mut dialogs = OPEN_DIALOGS.lock().unwrap();
-    for (_id, obj) in dialogs.iter_mut() {
-        let _ = obj.0.send(DialogRequest::Close);
+    fn close_all(&mut self) {
+        let mut dialogs = self.open_dialogs.lock().unwrap();
+        for (_id, obj) in dialogs.iter_mut() {
+            let _ = obj.0.send(DialogRequest::Close);
+        }
     }
-}
 
-pub fn task_dialog_set_progress_value(id: usize, progress: f32) {
-    if let Some(obj) = OPEN_DIALOGS.lock().unwrap().get_mut(&id) {
-        let _ = obj.0.send(DialogRequest::SetProgress(progress));
+    fn set_progress_value(&mut self, id: usize, progress: f32) {
+        if let Some(obj) = self.open_dialogs.lock().unwrap().get_mut(&id) {
+            let _ = obj.0.send(DialogRequest::SetProgress(progress));
+        }
     }
-}
 
-pub fn task_dialog_set_progress_text(id: usize, text: &str) {
-    if let Some(obj) = OPEN_DIALOGS.lock().unwrap().get_mut(&id) {
-        let _ = obj.0.send(DialogRequest::SetText(text.to_string()));
+    fn set_progress_text(&mut self, id: usize, text: &str) {
+        if let Some(obj) = self.open_dialogs.lock().unwrap().get_mut(&id) {
+            let _ = obj.0.send(DialogRequest::SetText(text.to_string()));
+        }
     }
-}
 
-pub fn task_dialog_set_progress_indeterminate(id: usize) {
-    if let Some(obj) = OPEN_DIALOGS.lock().unwrap().get_mut(&id) {
-        let _ = obj.0.send(DialogRequest::SetIndeterminate);
+    fn set_progress_indeterminate(&mut self, id: usize) {
+        if let Some(obj) = self.open_dialogs.lock().unwrap().get_mut(&id) {
+            let _ = obj.0.send(DialogRequest::SetIndeterminate);
+        }
     }
 }
 
@@ -207,10 +219,11 @@ struct TaskDialogConfig {
     pub cx_width: u32,
     pub progress: ProgressState,
     pub x_dialog_id: usize,
+    pub open_dialogs: Arc<Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>>>,
 }
 
-impl Default for TaskDialogConfig {
-    fn default() -> Self {
+impl TaskDialogConfig {
+    fn new(open_dialogs: Arc<Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>>>) -> Self {
         TaskDialogConfig {
             parent: HWND(null_mut()),
             instance: HMODULE(null_mut()),
@@ -237,6 +250,7 @@ impl Default for TaskDialogConfig {
             cx_width: 0,
             progress: ProgressState::None,
             x_dialog_id: 0,
+            open_dialogs,
         }
     }
 }

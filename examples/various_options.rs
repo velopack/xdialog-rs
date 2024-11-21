@@ -18,21 +18,21 @@ fn run() -> i32 {
         main_instruction: "This is a main instruction".to_string(),
         title: "This is a title".to_string(),
     };
-    let _ = xdialog::show_message(data.clone());
+    let _ = xdialog::show_message(data.clone(), None);
 
     data.message = medium_text.to_string();
-    let _ = xdialog::show_message(data.clone());
+    let _ = xdialog::show_message(data.clone(), None);
 
     data.message = small_text.to_string();
     data.main_instruction = long_instruction.to_string();
-    let _ = xdialog::show_message(data.clone());
+    let _ = xdialog::show_message(data.clone(), None);
 
     data.icon = XDialogIcon::Error;
-    let _ = xdialog::show_message(data.clone());
+    let _ = xdialog::show_message(data.clone(), None);
 
     data.message = medium_text.to_string();
     data.title = "".to_string();
-    let _ = xdialog::show_message(data.clone());
+    let _ = xdialog::show_message(data.clone(), None);
 
     let d = show_progress("Title", "This is an instruction", small_text, XDialogIcon::None).unwrap();
     d.set_indeterminate().unwrap();

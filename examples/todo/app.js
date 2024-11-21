@@ -37,7 +37,13 @@ function UI(items) {
 var element;
 var oldNode;
 var rpc = {
-  invoke : function(arg) { window.external.invoke(JSON.stringify(arg)); },
+  invoke : function(arg) { 
+    if (window && window.ipc && window.ipc.postMessage) {
+      window.ipc.postMessage(JSON.stringify(arg)); 
+    } else {
+      window.external.invoke(JSON.stringify(arg));
+    }
+  },
   init : function() { rpc.invoke({cmd : 'init'}); },
   log : function() {
     var s = '';

@@ -10,7 +10,7 @@ impl WebviewDialogProxy {
     pub fn set_html<S: AsRef<str>>(&self, html: S) -> Result<(), XDialogError> {
         let (result_sender, result_receiver) = ResultSender::create();
         send_request(DialogMessageRequest::WebviewSetHtml(self.id, html.as_ref().to_string(), result_sender))?;
-        let _ = result_receiver.recv().map_err(|e| XDialogError::NoResult(e))?;
+        result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
         Ok(())
     }
 
@@ -18,7 +18,7 @@ impl WebviewDialogProxy {
     pub fn set_title<S: AsRef<str>>(&self, title: S) -> Result<(), XDialogError> {
         let (result_sender, result_receiver) = ResultSender::create();
         send_request(DialogMessageRequest::WebviewSetTitle(self.id, title.as_ref().to_string(), result_sender))?;
-        let _ = result_receiver.recv().map_err(|e| XDialogError::NoResult(e))?;
+        result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
         Ok(())
     }
 
@@ -26,7 +26,7 @@ impl WebviewDialogProxy {
     pub fn set_position(&self, x: i32, y: i32) -> Result<(), XDialogError> {
         let (result_sender, result_receiver) = ResultSender::create();
         send_request(DialogMessageRequest::WebviewSetPosition(self.id, x, y, result_sender))?;
-        let _ = result_receiver.recv().map_err(|e| XDialogError::NoResult(e))?;
+        result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
         Ok(())
     }
 
@@ -34,7 +34,7 @@ impl WebviewDialogProxy {
     pub fn set_size(&self, width: i32, height: i32) -> Result<(), XDialogError> {
         let (result_sender, result_receiver) = ResultSender::create();
         send_request(DialogMessageRequest::WebviewSetSize(self.id, width, height, result_sender))?;
-        let _ = result_receiver.recv().map_err(|e| XDialogError::NoResult(e))?;
+        result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
         Ok(())
     }
 
@@ -42,7 +42,7 @@ impl WebviewDialogProxy {
     pub fn set_zoom_level(&self, zoom_level: f64) -> Result<(), XDialogError> {
         let (result_sender, result_receiver) = ResultSender::create();
         send_request(DialogMessageRequest::WebviewSetZoomLevel(self.id, zoom_level, result_sender))?;
-        let _ = result_receiver.recv().map_err(|e| XDialogError::NoResult(e))?;
+        result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
         Ok(())
     }
 
@@ -50,7 +50,7 @@ impl WebviewDialogProxy {
     pub fn set_window_state(&self, state: XDialogWindowState) -> Result<(), XDialogError> {
         let (result_sender, result_receiver) = ResultSender::create();
         send_request(DialogMessageRequest::WebviewSetWindowState(self.id, state, result_sender))?;
-        let _ = result_receiver.recv().map_err(|e| XDialogError::NoResult(e))?;
+        result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
         Ok(())
     }
 
@@ -58,7 +58,7 @@ impl WebviewDialogProxy {
     pub fn eval_js<S: AsRef<str>>(&self, js: S) -> Result<(), XDialogError> {
         let (result_sender, result_receiver) = ResultSender::create();
         send_request(DialogMessageRequest::WebviewEval(self.id, js.as_ref().to_string(), result_sender))?;
-        let _ = result_receiver.recv().map_err(|e| XDialogError::NoResult(e))?;
+        result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
         Ok(())
     }
 
@@ -74,6 +74,8 @@ pub fn show_webview(options: XDialogWebviewOptions) -> Result<WebviewDialogProxy
     let id = get_next_id();
     let (result_sender, result_receiver) = ResultSender::create();
     send_request(DialogMessageRequest::WebviewWindowShow(id, options, result_sender))?;
-    let _ = result_receiver.recv().map_err(|e| XDialogError::NoResult(e))?;
+    println!("show_webview: waiting for result");
+    result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
+    println!("show_webview: got result");
     Ok(WebviewDialogProxy { id })
 }
