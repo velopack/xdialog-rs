@@ -168,9 +168,13 @@ impl XDialogBuilder {
 
         let backend_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             match self.backend {
-                XDialogBackend::Automatic => backends::native::NativeBackend::run_loop(receive_message, self.theme),
+                XDialogBackend::Automatic | XDialogBackend::NativePreferred => {
+                    #[cfg(windows)]
+                    { backends::win32::Win32Backend::run_loop(receive_message, self.theme) }
+                    #[cfg(not(windows))]
+                    { backends::fltk::FltkBackend::run_loop(receive_message, self.theme) }
+                }
                 XDialogBackend::Fltk => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
-                XDialogBackend::Native => backends::native::NativeBackend::run_loop(receive_message, self.theme),
             }
         }));
         

@@ -1,7 +1,7 @@
 fn main() {
     println!("Starting Example...");
     xdialog::XDialogBuilder::new()
-        // .with_backend(xdialog::XDialogBackend::Native)
+        // .with_backend(xdialog::XDialogBackend::NativePreferred)
         .run_loop(run);
 }
 

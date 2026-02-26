@@ -18,9 +18,6 @@ log = "0.4"
 enum-map = "2.7"
 oneshot = { version = "0.2", features = ["std"] }
 thiserror = "2.0"
-winit = "0.30"
-
-# windows native
 windows = { version = "0.62", features = [
     "Win32_System",
     "Win32_Foundation",
@@ -29,8 +26,6 @@ windows = { version = "0.62", features = [
     "Win32_System_LibraryLoader",
 ] }
 widestring = "1.2"
-
-# fltk
 fltk = "1.5"
 font-kit = "0.14"
 dark-light = "2.0"

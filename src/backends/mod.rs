@@ -5,7 +5,7 @@ use crate::{
 use std::sync::mpsc::Receiver;
 
 pub mod fltk;
-pub mod native;
+pub mod win32;
 
 pub trait XDialogBackendImpl {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, xdialog_theme: XDialogTheme);

@@ -7,8 +7,8 @@ pub enum XDialogBackend {
     Automatic = 0,
     /// Use the FLTK backend
     Fltk,
-    /// Use the Native backend for given platform (eg. Win32, GTK, Cocoa)
-    Native,
+    /// Prefer the native backend for the current platform (eg. Win32), falling back to FLTK
+    NativePreferred,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
