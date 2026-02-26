@@ -65,10 +65,11 @@ impl XDialogBackendImpl for FltkBackend {
 
                 match message {
                     DialogMessageRequest::None => {}
-                    DialogMessageRequest::ShowMessageWindow(id, data, _) => {
+                    DialogMessageRequest::ShowMessageWindow(id, data, mut result) => {
                         let mut d = CustomFltkDialog::new(id, data, &spacing, false);
                         d.show();
                         dialogs2.borrow_mut().insert(id, d);
+                        result.send_ok();
                     }
                     DialogMessageRequest::ExitEventLoop => {
                         app::quit();
@@ -79,10 +80,11 @@ impl XDialogBackendImpl for FltkBackend {
                             dialog.close();
                         }
                     }
-                    DialogMessageRequest::ShowProgressWindow(id, data, _) => {
+                    DialogMessageRequest::ShowProgressWindow(id, data, mut result) => {
                         let mut d = CustomFltkDialog::new(id, data, &spacing, true);
                         d.show();
                         dialogs2.borrow_mut().insert(id, d);
+                        result.send_ok();
                     }
                     DialogMessageRequest::SetProgressIndeterminate(id) => {
                         if let Some(dialog) = dialogs2.borrow_mut().get_mut(&id) {
