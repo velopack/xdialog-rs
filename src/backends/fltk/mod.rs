@@ -29,18 +29,20 @@ impl XDialogBackendImpl for FltkBackend {
         let dialogs2 = dialogs1.clone();
         let current_time = Rc::new(RefCell::new(Instant::now()));
 
-        // let mut tick_mgr = Rc::new(RefCell::new(TickManager::new()));
-        // let mut tick_mgr2 = tick_mgr.clone();
-
         app::add_timeout3(0.008, move |handle| {
             let mut t = dialogs1.borrow_mut();
             let mut current_time = current_time.borrow_mut();
             let now = Instant::now();
             let elapsed = now.duration_since(*current_time).as_secs_f32();
             *current_time = now;
-            for (_, dialog) in t.iter_mut() {
-                dialog.tick(elapsed);
-            }
+            t.retain(|_, dialog| {
+                if dialog.is_visible() {
+                    dialog.tick(elapsed);
+                    true
+                } else {
+                    false
+                }
+            });
             app::repeat_timeout3(0.008, handle);
         });
 
@@ -49,8 +51,6 @@ impl XDialogBackendImpl for FltkBackend {
                 error!("xdialog event loop fatal error: {:?}", e);
                 return;
             }
-
-            // TODO: clean up finished message box windows with window::Window::delete(hWnd);
 
             loop {
                 // read all messages until there are no more queued
@@ -76,7 +76,7 @@ impl XDialogBackendImpl for FltkBackend {
                         return;
                     }
                     DialogMessageRequest::CloseWindow(id) => {
-                        if let Some(dialog) = dialogs2.borrow_mut().get_mut(&id) {
+                        if let Some(mut dialog) = dialogs2.borrow_mut().remove(&id) {
                             dialog.close();
                         }
                     }

@@ -307,6 +307,10 @@ impl CustomFltkDialog {
         }
     }
 
+    pub fn is_visible(&self) -> bool {
+        self.wind.visible()
+    }
+
     pub fn close(&mut self) {
         self.wind.clone().hide();
         insert_result(self.id, XDialogResult::WindowClosed);
