@@ -41,7 +41,7 @@ pub struct DialogTheme {
 pub fn apply_theme(app_instance: &App, theme: XDialogTheme) -> DialogTheme {
     let theme = match theme {
         XDialogTheme::SystemDefault => {
-            let mode = dark_light::detect();
+            let mode = dark_light::detect().unwrap_or(dark_light::Mode::Light);
             let is_dark = mode == dark_light::Mode::Dark;
             if cfg!(target_os = "windows") {
                 apply_windows_theme(app_instance)

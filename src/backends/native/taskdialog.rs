@@ -6,8 +6,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
 use widestring::U16CString;
-use windows::core::{HRESULT, PCWSTR};
-use windows::Win32::Foundation::{BOOL, FALSE, HMODULE, HWND, LPARAM, S_OK, TRUE, WPARAM};
+use windows::core::{BOOL, HRESULT, PCWSTR};
+use windows::Win32::Foundation::{FALSE, HMODULE, HWND, LPARAM, S_OK, TRUE, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::{
     TaskDialogIndirect, TASKDIALOGCONFIG, TASKDIALOGCONFIG_0, TASKDIALOGCONFIG_1, TASKDIALOG_BUTTON, TASKDIALOG_COMMON_BUTTON_FLAGS,
@@ -295,7 +295,7 @@ impl TaskDialogConfig {
         }
         unsafe {
             let v = if enable { TRUE.0 as usize } else { FALSE.0 as usize };
-            SendMessageW(self.dialog_hwnd, TDM_SET_PROGRESS_BAR_MARQUEE.0 as u32, WPARAM(v), LPARAM(0));
+            SendMessageW(self.dialog_hwnd, TDM_SET_PROGRESS_BAR_MARQUEE.0 as u32, Some(WPARAM(v)), Some(LPARAM(0)));
         }
     }
 
@@ -305,7 +305,7 @@ impl TaskDialogConfig {
         }
         unsafe {
             let v = if enable { TRUE.0 as usize } else { FALSE.0 as usize };
-            SendMessageW(self.dialog_hwnd, TDM_SET_MARQUEE_PROGRESS_BAR.0 as u32, WPARAM(v), LPARAM(0));
+            SendMessageW(self.dialog_hwnd, TDM_SET_MARQUEE_PROGRESS_BAR.0 as u32, Some(WPARAM(v)), Some(LPARAM(0)));
         }
     }
 
@@ -315,7 +315,7 @@ impl TaskDialogConfig {
             return;
         }
         unsafe {
-            SendMessageW(self.dialog_hwnd, TDM_SET_PROGRESS_BAR_POS.0 as u32, WPARAM(percentage), LPARAM(0));
+            SendMessageW(self.dialog_hwnd, TDM_SET_PROGRESS_BAR_POS.0 as u32, Some(WPARAM(percentage)), Some(LPARAM(0)));
         }
     }
 
@@ -330,8 +330,8 @@ impl TaskDialogConfig {
             SendMessageW(
                 self.dialog_hwnd,
                 TDM_SET_ELEMENT_TEXT.0 as u32,
-                WPARAM(TDE_CONTENT.0 as usize),
-                LPARAM(content_wchar.as_ptr() as isize),
+                Some(WPARAM(TDE_CONTENT.0 as usize)),
+                Some(LPARAM(content_wchar.as_ptr() as isize)),
             );
         }
     }
@@ -347,8 +347,8 @@ impl TaskDialogConfig {
             SendMessageW(
                 self.dialog_hwnd,
                 TDM_SET_ELEMENT_TEXT.0 as u32,
-                WPARAM(TDE_MAIN_INSTRUCTION.0 as usize),
-                LPARAM(main_instruction_wchar.as_ptr() as isize),
+                Some(WPARAM(TDE_MAIN_INSTRUCTION.0 as usize)),
+                Some(LPARAM(main_instruction_wchar.as_ptr() as isize)),
             );
         }
     }
@@ -364,8 +364,8 @@ impl TaskDialogConfig {
             SendMessageW(
                 self.dialog_hwnd,
                 TDM_SET_ELEMENT_TEXT.0 as u32,
-                WPARAM(TDE_FOOTER.0 as usize),
-                LPARAM(footer_wchar.as_ptr() as isize),
+                Some(WPARAM(TDE_FOOTER.0 as usize)),
+                Some(LPARAM(footer_wchar.as_ptr() as isize)),
             );
         }
     }
@@ -381,8 +381,8 @@ impl TaskDialogConfig {
             SendMessageW(
                 self.dialog_hwnd,
                 TDM_SET_ELEMENT_TEXT.0 as u32,
-                WPARAM(TDE_EXPANDED_INFORMATION.0 as usize),
-                LPARAM(expanded_information_wchar.as_ptr() as isize),
+                Some(WPARAM(TDE_EXPANDED_INFORMATION.0 as usize)),
+                Some(LPARAM(expanded_information_wchar.as_ptr() as isize)),
             );
         }
     }
@@ -396,8 +396,8 @@ impl TaskDialogConfig {
             SendMessageW(
                 self.dialog_hwnd,
                 TDM_SET_BUTTON_ELEVATION_REQUIRED_STATE.0 as u32,
-                WPARAM(button_id),
-                LPARAM(if enable { 1 } else { 0 }),
+                Some(WPARAM(button_id)),
+                Some(LPARAM(if enable { 1 } else { 0 })),
             );
         }
     }
@@ -464,7 +464,7 @@ unsafe fn execute_task_dialog(conf: &mut TaskDialogConfig) -> Result<TaskDialogR
         _l_param: LPARAM,
         lp_ref_data: isize,
     ) -> HRESULT {
-        let conf = std::mem::transmute::<isize, *mut TaskDialogConfig>(lp_ref_data);
+        let conf = std::ptr::with_exposed_provenance_mut::<TaskDialogConfig>(lp_ref_data as usize);
         match msg {
             TDN_CREATED => {
                 (*conf).dialog_hwnd = hwnd;

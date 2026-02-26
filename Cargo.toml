@@ -18,24 +18,26 @@ log = "0.4"
 atomic-counter = "1.0"
 lazy_static = "1.5"
 enum-map = "2.7"
-urlencoding = "2.1.3"
-oneshot = "0.1.8"
+urlencoding = "2.1"
+oneshot = { version = "0.2", features = ["std"] }
 thiserror = "2.0"
 winit = "0.30"
-wry = "0.47"
 dpi = "0.1"
 
 # windows native
-windows = { version = "0.58", features = [
+windows = { version = "0.62", features = [
+    "Win32_System",
     "Win32_Foundation",
     "Win32_UI_Controls",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_System_LibraryLoader",
 ] }
-widestring = "1.1.0"
+widestring = "1.2"
 
 # fltk
-fltk = "1.4"
+fltk = "1.5"
 font-kit = "0.14"
-dark-light = "1.1"
+dark-light = "2.0"
 mina = "0.1"
 
 # xaml islands
