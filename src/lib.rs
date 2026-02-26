@@ -166,13 +166,22 @@ impl XDialogBuilder {
             result
         });
 
-        match self.backend {
-            XDialogBackend::Automatic => backends::native::NativeBackend::run_loop(receive_message, self.theme),
-            XDialogBackend::Fltk => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
-            XDialogBackend::Native => backends::native::NativeBackend::run_loop(receive_message, self.theme),
+        let backend_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            match self.backend {
+                XDialogBackend::Automatic => backends::native::NativeBackend::run_loop(receive_message, self.theme),
+                XDialogBackend::Fltk => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
+                XDialogBackend::Native => backends::native::NativeBackend::run_loop(receive_message, self.theme),
+            }
+        }));
+        
+        if let Err(e) = backend_result {
+            error!("xdialog: backend panicked: {:?}", e);
         }
 
-        result.join().unwrap()
+        match result.join() {
+            Ok(val) => val,
+            Err(payload) => std::panic::resume_unwind(payload),
+        }
     }
 }
 

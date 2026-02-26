@@ -7,7 +7,7 @@ mod fltk_theme;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::Instant;
 
 use fltk::app;
@@ -54,10 +54,14 @@ impl XDialogBackendImpl for FltkBackend {
 
             loop {
                 // read all messages until there are no more queued
-                let message = receiver.try_recv().unwrap_or(DialogMessageRequest::None);
-                if message == DialogMessageRequest::None {
-                    break;
-                }
+                let message = match receiver.try_recv() {
+                    Ok(msg) => msg,
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        app::quit();
+                        return;
+                    }
+                };
 
                 match message {
                     DialogMessageRequest::None => {}

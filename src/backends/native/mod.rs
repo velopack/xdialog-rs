@@ -1,7 +1,7 @@
 #[cfg(windows)]
 mod taskdialog;
 
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 use winit::{
     application::ApplicationHandler,
@@ -28,15 +28,18 @@ impl ApplicationHandler for NativeApp {
     fn new_events(&mut self, event_loop: &ActiveEventLoop, _cause: StartCause) {
         loop {
             // read all messages until there are no more queued
-            let message = self.receiver.try_recv().unwrap_or(DialogMessageRequest::None);
-
-            match message {
-                DialogMessageRequest::None => {
-                    // sleep for a bit to avoid busy waiting
-                    // event_loop.set_control_flow(ControlFlow::WaitUntil(std::time::Instant::now() + Duration::from_millis(16)));
-                    // std::thread::sleep(Duration::from_millis(16));
+            let message = match self.receiver.try_recv() {
+                Ok(msg) => msg,
+                Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => {
+                    self.dialogs.close_all();
+                    event_loop.exit();
                     return;
                 }
+            };
+
+            match message {
+                DialogMessageRequest::None => return,
                 DialogMessageRequest::ShowMessageWindow(id, options, mut result) => {
                     result.send_result(self.dialogs.show(id, options, false));
                 }
@@ -69,9 +72,17 @@ impl ApplicationHandler for NativeApp {
 
 impl XDialogBackendImpl for NativeBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
-        let event_loop = EventLoop::new().unwrap();
+        let event_loop = match EventLoop::new() {
+            Ok(el) => el,
+            Err(e) => {
+                error!("xdialog: failed to create event loop: {:?}", e);
+                return;
+            }
+        };
         event_loop.set_control_flow(ControlFlow::Poll);
         let mut app = NativeApp { receiver, dialogs: Box::new(taskdialog::TaskDialogManager::new()) };
-        event_loop.run_app(&mut app).unwrap();
+        if let Err(e) = event_loop.run_app(&mut app) {
+            error!("xdialog: event loop exited with error: {:?}", e);
+        }
     }
 }

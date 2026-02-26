@@ -44,7 +44,7 @@ impl DialogManager for TaskDialogManager {
         let open_dialogs = self.open_dialogs.clone();
         // Insert a new dialog
         {
-            let mut dialogs = self.open_dialogs.lock().unwrap();
+            let mut dialogs = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner());
             let (sender, receiver) = channel();
             dialogs.insert(id, (sender, receiver));
         }
@@ -75,7 +75,7 @@ impl DialogManager for TaskDialogManager {
                 if msg == TDN_TIMER {
                     let config = unsafe { &mut *ref_data };
                     let open_dialogs = config.open_dialogs.clone();
-                    let mut open_dialogs = open_dialogs.lock().unwrap();
+                    let mut open_dialogs = open_dialogs.lock().unwrap_or_else(|e| e.into_inner());
 
                     if let Some(state) = open_dialogs.get_mut(&config.x_dialog_id) {
                         let mut desired_state = ProgressState::None;
@@ -117,7 +117,7 @@ impl DialogManager for TaskDialogManager {
 
             // Remove dialog
             {
-                let mut dialogs = open_dialogs.lock().unwrap();
+                let mut dialogs = open_dialogs.lock().unwrap_or_else(|e| e.into_inner());
                 dialogs.remove(&id);
             }
 
@@ -139,32 +139,32 @@ impl DialogManager for TaskDialogManager {
     }
 
     fn close(&mut self, id: usize) {
-        if let Some(obj) = self.open_dialogs.lock().unwrap().get_mut(&id) {
+        if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::Close);
         }
     }
 
     fn close_all(&mut self) {
-        let mut dialogs = self.open_dialogs.lock().unwrap();
+        let mut dialogs = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner());
         for (_id, obj) in dialogs.iter_mut() {
             let _ = obj.0.send(DialogRequest::Close);
         }
     }
 
     fn set_progress_value(&mut self, id: usize, progress: f32) {
-        if let Some(obj) = self.open_dialogs.lock().unwrap().get_mut(&id) {
+        if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::SetProgress(progress));
         }
     }
 
     fn set_progress_text(&mut self, id: usize, text: &str) {
-        if let Some(obj) = self.open_dialogs.lock().unwrap().get_mut(&id) {
+        if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::SetText(text.to_string()));
         }
     }
 
     fn set_progress_indeterminate(&mut self, id: usize) {
-        if let Some(obj) = self.open_dialogs.lock().unwrap().get_mut(&id) {
+        if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::SetIndeterminate);
         }
     }
@@ -256,38 +256,6 @@ impl TaskDialogConfig {
 }
 
 impl TaskDialogConfig {
-    /**
-    Add TDF_SHOW_PROGRESS_BAR flag on marquee is false;
-
-    Add TDF_SHOW_MARQUEE_PROGRESS_BAR flag on marquee is true;
-
-    https://docs.microsoft.com/en-us/windows/win32/controls/progress-bar-control
-    */
-    // pub fn enable_progress_bar(&mut self, marquee: bool) {
-    //     if marquee {
-    //         if self.flags & TDF_SHOW_MARQUEE_PROGRESS_BAR != TDF_SHOW_MARQUEE_PROGRESS_BAR {
-    //             self.flags |= TDF_SHOW_MARQUEE_PROGRESS_BAR;
-    //         }
-    //     } else {
-    //         if self.flags & TDF_SHOW_PROGRESS_BAR != TDF_SHOW_PROGRESS_BAR {
-    //             self.flags |= TDF_SHOW_PROGRESS_BAR;
-    //         }
-    //     }
-    // }
-
-    // /** disables progress bar */
-    // pub fn disable_progress_bar(&mut self, marquee: bool) {
-    //     if marquee {
-    //         if self.flags & TDF_SHOW_MARQUEE_PROGRESS_BAR == TDF_SHOW_MARQUEE_PROGRESS_BAR {
-    //             self.flags &= !TDF_SHOW_MARQUEE_PROGRESS_BAR;
-    //         }
-    //     } else {
-    //         if self.flags & TDF_SHOW_PROGRESS_BAR == TDF_SHOW_PROGRESS_BAR {
-    //             self.flags &= !TDF_SHOW_PROGRESS_BAR;
-    //         }
-    //     }
-    // }
-
     /** Set status or animation time of marquee progress bar */
     pub fn set_progress_bar_marquee_on_off(&mut self, enable: bool) {
         if self.dialog_hwnd.is_invalid() {
@@ -426,7 +394,7 @@ unsafe fn execute_task_dialog(conf: &mut TaskDialogConfig) -> Result<TaskDialogR
     let conf_long_ptr = conf_ptr as isize;
 
     // Call GetModuleHandleA on conf.instance is null
-    let instance = if conf.instance.is_invalid() { GetModuleHandleW(PCWSTR(std::ptr::null())).unwrap() } else { conf.instance };
+    let instance = if conf.instance.is_invalid() { GetModuleHandleW(PCWSTR(std::ptr::null()))? } else { conf.instance };
 
     // Some text
     let window_title: U16CString = U16CString::from_str_unchecked(&conf.window_title);
@@ -473,7 +441,7 @@ unsafe fn execute_task_dialog(conf: &mut TaskDialogConfig) -> Result<TaskDialogR
                 (*conf).is_destroyed = true;
             }
             TDN_HYPERLINK_CLICKED => {
-                let link = U16CString::from_ptr_str(_l_param.0 as *const u16).to_string().unwrap();
+                let link = U16CString::from_ptr_str(_l_param.0 as *const u16).to_string().unwrap_or_default();
                 if let Some(callback) = (*conf).hyperlink_callback {
                     callback(&link);
                 }

@@ -20,7 +20,7 @@ pub fn get_silent() -> bool {
 }
 
 pub fn insert_result(key: usize, result: XDialogResult) {
-    let mut map = RESULT_MAP.write().unwrap();
+    let mut map = RESULT_MAP.write().unwrap_or_else(|e| e.into_inner());
     if map.contains_key(&key) {
         return; // don't overwrite existing results
     }
@@ -28,7 +28,7 @@ pub fn insert_result(key: usize, result: XDialogResult) {
 }
 
 pub fn get_result(key: usize) -> Option<XDialogResult> {
-    let map = RESULT_MAP.read().unwrap();
+    let map = RESULT_MAP.read().unwrap_or_else(|e| e.into_inner());
     map.get(&key).cloned()
 }
 
@@ -37,15 +37,14 @@ pub fn get_next_id() -> usize {
 }
 
 pub fn init_sender(sender: Sender<DialogMessageRequest>) {
-    REQUEST_SEND.set(sender).unwrap();
+    if REQUEST_SEND.set(sender).is_err() {
+        warn!("xdialog: init_sender called more than once, ignoring");
+    }
 }
 
 pub fn send_request(message: DialogMessageRequest) -> Result<(), XDialogError> {
-    let once = REQUEST_SEND.get();
-    if once.is_none() {
-        return Err(XDialogError::NotInitialized);
+    match REQUEST_SEND.get() {
+        Some(sender) => sender.send(message).map_err(XDialogError::SendFailed),
+        None => Err(XDialogError::NotInitialized),
     }
-
-    once.unwrap().send(message).map_err(|e| XDialogError::SendFailed(e))?;
-    Ok(())
 }
