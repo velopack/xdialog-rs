@@ -278,6 +278,33 @@ impl CustomFltkDialog {
     pub fn show(&mut self) {
         self.wind.clone().show();
         // wind.set_on_top() - currently has bugs. https://github.com/fltk-rs/fltk-rs/issues/1573
+
+        #[cfg(target_os = "windows")]
+        self.remove_window_buttons();
+    }
+
+    #[cfg(target_os = "windows")]
+    fn remove_window_buttons(&self) {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::*;
+
+        let raw = self.wind.raw_handle();
+        if raw.is_null() {
+            return;
+        }
+        let hwnd = HWND(raw as *mut _);
+        unsafe {
+            let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+            let new_style = style & !(WS_SYSMENU.0 | WS_MINIMIZEBOX.0 | WS_MAXIMIZEBOX.0);
+            SetWindowLongW(hwnd, GWL_STYLE, new_style as i32);
+            // Force the title bar to redraw with the new style
+            let _ = SetWindowPos(
+                hwnd,
+                None,
+                0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED,
+            );
+        }
     }
 
     pub fn close(&mut self) {
