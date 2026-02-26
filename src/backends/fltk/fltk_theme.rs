@@ -24,6 +24,8 @@ pub struct DialogTheme {
 
     pub main_icon_size: i32,
     pub default_content_margin: i32,
+    pub content_margin_top: i32,
+    pub content_margin_bottom: i32,
 
     pub color_background: Color,
     pub color_background_alt: Color,
@@ -79,6 +81,8 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
 
         main_icon_size: 32,
         default_content_margin: 10,
+        content_margin_top: 8,
+        content_margin_bottom: 14,
 
         color_background: Color::from_hex(0xFFFFFF),
         color_background_alt: Color::from_hex(0xF0F0F0),
@@ -133,6 +137,8 @@ pub fn apply_ubuntu_theme(app_instance: &App) -> DialogTheme {
 
         main_icon_size: 48,
         default_content_margin: 12,
+        content_margin_top: 5,
+        content_margin_bottom: 16,
 
         color_background: Color::from_hex(0xFAFAFA),
         color_background_alt: Color::from_hex(0xFAFAFA),
@@ -187,6 +193,8 @@ pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
 
         main_icon_size: 48,
         default_content_margin: 15,
+        content_margin_top: 7,
+        content_margin_bottom: 20,
 
         color_background: Color::from_hex(0xECEDEB),
         color_background_alt: Color::from_hex(0xECEDEB),

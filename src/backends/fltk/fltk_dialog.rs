@@ -48,7 +48,12 @@ impl CustomFltkDialog {
 
         // Start Icon row
         let mut flex_icon_row = Flex::default().row();
-        flex_icon_row.set_margin(theme.default_content_margin);
+        flex_icon_row.set_margins(
+            theme.default_content_margin,
+            theme.content_margin_top,
+            theme.default_content_margin,
+            theme.content_margin_bottom,
+        );
 
         // Svg Icon
         let mut has_icon = true;
@@ -163,7 +168,7 @@ impl CustomFltkDialog {
         wind.end();
 
         // Before showing the window, try and compute the optimal window size.
-        let mut pad_y = theme.default_content_margin * 2;
+        let mut pad_y = theme.content_margin_top + theme.content_margin_bottom;
         if !data.buttons.is_empty() {
             pad_y += theme.button_panel_height;
         }
@@ -259,7 +264,7 @@ impl CustomFltkDialog {
         let ideal_title_size = if title_text.is_empty() {
             1
         } else {
-            (wrapped_title_height + title_line_height).max(self.theme.main_icon_size)
+            wrapped_title_height.max(self.theme.main_icon_size)
         };
         self.wind.set_size(final_window_width, final_window_height);
         self.root.clone().size_of_parent();
