@@ -1,6 +1,6 @@
 [package]
 name = "xdialog"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 description = "A small native-ish cross platform dialogs library with zero runtime dependencies."
@@ -32,6 +32,3 @@ windows = { version = "0.62", features = [
     "Win32_System_LibraryLoader",
 ] }
 widestring = "1.2"
-
-[target.'cfg(windows)'.build-dependencies]
-winres = "0.1"
