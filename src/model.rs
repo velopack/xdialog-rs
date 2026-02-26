@@ -9,8 +9,6 @@ pub enum XDialogBackend {
     Fltk,
     /// Use the Native backend for given platform (eg. Win32, GTK, Cocoa)
     Native,
-    // Use Windows-only XAML Islands
-    // XamlIsland,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

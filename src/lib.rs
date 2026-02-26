@@ -104,8 +104,6 @@
 #![warn(missing_docs)]
 
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate log;
 
 use std::{sync::mpsc::channel, thread};
@@ -169,13 +167,9 @@ impl XDialogBuilder {
         });
 
         match self.backend {
-            // XDialogBackend::Automatic => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
             XDialogBackend::Automatic => backends::native::NativeBackend::run_loop(receive_message, self.theme),
             XDialogBackend::Fltk => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
             XDialogBackend::Native => backends::native::NativeBackend::run_loop(receive_message, self.theme),
-            // XDialogBackend::XamlIsland => {
-            //     backends::xaml_island::XamlIslandBackend::run(main, receive_message, self.theme)
-            // }
         }
 
         result.join().unwrap()

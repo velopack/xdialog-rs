@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::LazyLock;
 
 use fltk::enums::{Color, FrameType};
 use fltk::{prelude::*, *};
@@ -22,22 +23,23 @@ pub struct CustomProgressBar {
     value_animator: Option<ProgressIndeterminateStateTimeline>,
 }
 
-lazy_static! {
-    static ref INDETERMINATE_TIMELINE: ProgressIndeterminateStateTimeline = timeline!(
-        ProgressIndeterminateState 2.50s
-        // first expanding cycle
-        from { x1: 0.0, x2: 0.0 }
-        10% { x1: 0.0, x2: 0.3 }
-        30% { x1: 0.5, x2: 1.0 }
-        50% { x1: 1.0, x2: 1.0 }
-        // second contracting cycle
-        60% { x1: 0.0, x2: 0.0 }
-        70% { x1: 0.0, x2: 0.5 }
-        80% { x1: 0.5, x2: 0.8 }
-        90% { x1: 0.85, x2: 1.0 }
-        to { x1: 1.0, x2: 1.0 }
-    );
-}
+static INDETERMINATE_TIMELINE: LazyLock<ProgressIndeterminateStateTimeline> =
+    LazyLock::new(|| {
+        timeline!(
+            ProgressIndeterminateState 2.50s
+            // first expanding cycle
+            from { x1: 0.0, x2: 0.0 }
+            10% { x1: 0.0, x2: 0.3 }
+            30% { x1: 0.5, x2: 1.0 }
+            50% { x1: 1.0, x2: 1.0 }
+            // second contracting cycle
+            60% { x1: 0.0, x2: 0.0 }
+            70% { x1: 0.0, x2: 0.5 }
+            80% { x1: 0.5, x2: 0.8 }
+            90% { x1: 0.85, x2: 1.0 }
+            to { x1: 1.0, x2: 1.0 }
+        )
+    });
 
 impl CustomProgressBar {
     // our constructor

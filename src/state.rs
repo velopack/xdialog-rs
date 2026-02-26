@@ -1,19 +1,15 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{OnceLock, RwLock};
-
-use atomic_counter::{AtomicCounter, RelaxedCounter};
+use std::sync::{LazyLock, OnceLock, RwLock};
 
 use crate::*;
 
 static REQUEST_SEND: OnceLock<Sender<DialogMessageRequest>> = OnceLock::new();
 static SILENT: AtomicBool = AtomicBool::new(false);
-
-lazy_static! {
-    static ref NEXT_ID: RelaxedCounter = RelaxedCounter::new(1);
-    static ref RESULT_MAP: RwLock<HashMap<usize, XDialogResult>> = RwLock::new(HashMap::new());
-}
+static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
+static RESULT_MAP: LazyLock<RwLock<HashMap<usize, XDialogResult>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 pub fn set_silent(silent: bool) {
     SILENT.store(silent, Ordering::Relaxed);
@@ -37,7 +33,7 @@ pub fn get_result(key: usize) -> Option<XDialogResult> {
 }
 
 pub fn get_next_id() -> usize {
-    NEXT_ID.inc()
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
 }
 
 pub fn init_sender(sender: Sender<DialogMessageRequest>) {
