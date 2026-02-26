@@ -1,3 +1,6 @@
+#[cfg(windows)]
+mod taskdialog;
+
 use std::sync::mpsc::Receiver;
 
 use winit::{
@@ -8,8 +11,8 @@ use winit::{
 };
 
 use crate::{
-    backends::{DialogManager, WebviewManager, XDialogBackendImpl},
-    sys, DialogMessageRequest, XDialogTheme,
+    backends::{DialogManager, XDialogBackendImpl},
+    DialogMessageRequest, XDialogTheme,
 };
 
 pub struct NativeBackend;
@@ -17,7 +20,6 @@ pub struct NativeBackend;
 struct NativeApp {
     pub receiver: Receiver<DialogMessageRequest>,
     pub dialogs: Box<dyn DialogManager>,
-    pub webviews: Box<dyn WebviewManager>,
 }
 
 impl ApplicationHandler for NativeApp {
@@ -40,13 +42,11 @@ impl ApplicationHandler for NativeApp {
                 }
                 DialogMessageRequest::ExitEventLoop => {
                     self.dialogs.close_all();
-                    self.webviews.close_all();
                     event_loop.exit();
                     return;
                 }
                 DialogMessageRequest::CloseWindow(id) => {
                     self.dialogs.close(id);
-                    self.webviews.close(id);
                 }
                 DialogMessageRequest::ShowProgressWindow(id, options, mut result) => {
                     result.send_result(self.dialogs.show(id, options, true));
@@ -60,30 +60,6 @@ impl ApplicationHandler for NativeApp {
                 DialogMessageRequest::SetProgressText(id, text) => {
                     self.dialogs.set_progress_text(id, &text);
                 }
-                DialogMessageRequest::WebviewWindowShow(id, options, mut result) => {
-                    result.send_result(self.webviews.show(id, options, event_loop));
-                }
-                DialogMessageRequest::WebviewSetTitle(id, title, mut result) => {
-                    result.send_result(self.webviews.set_title(id, &title));
-                }
-                DialogMessageRequest::WebviewSetHtml(id, html, mut result) => {
-                    result.send_result(self.webviews.set_html(id, &html));
-                }
-                DialogMessageRequest::WebviewSetPosition(id, x, y, mut result) => {
-                    result.send_result(self.webviews.set_position(id, x, y));
-                }
-                DialogMessageRequest::WebviewSetSize(id, w, h, mut result) => {
-                    result.send_result(self.webviews.set_size(id, w, h));
-                }
-                DialogMessageRequest::WebviewSetZoomLevel(id, zoom, mut result) => {
-                    result.send_result(self.webviews.set_zoom_level(id, zoom));
-                }
-                DialogMessageRequest::WebviewSetWindowState(id, state, mut result) => {
-                    result.send_result(self.webviews.set_window_state(id, state));
-                }
-                DialogMessageRequest::WebviewEval(id, js, mut result) => {
-                    result.send_result(self.webviews.eval_js(id, &js));
-                }
             }
         }
     }
@@ -95,15 +71,7 @@ impl XDialogBackendImpl for NativeBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
         let event_loop = EventLoop::new().unwrap();
         event_loop.set_control_flow(ControlFlow::Poll);
-        let mut app = NativeApp {
-            receiver,
-            dialogs: Box::new(sys::taskdialog::TaskDialogManager::new()),
-            webviews: if wry::webview_version().is_ok() {
-                Box::new(sys::webview2::WryWebview2Manager::new())
-            } else {
-                Box::new(sys::mshtml::MshtmlWebviewManager::new())
-            },
-        };
+        let mut app = NativeApp { receiver, dialogs: Box::new(taskdialog::TaskDialogManager::new()) };
         event_loop.run_app(&mut app).unwrap();
     }
 }

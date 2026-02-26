@@ -70,62 +70,6 @@ pub enum XDialogResult {
     ButtonPressed(usize),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Default)]
-/// Describes the state of a webview dialog window
-pub enum XDialogWindowState {
-    /// The window is in a normal state
-    #[default]
-    Normal,
-    /// The window is hidden from view (not visible in the taskbar)
-    Hidden,
-    /// The window is minimized to the taskbar
-    Minimized,
-    /// The window is maximized to fill the screen
-    Maximized,
-    /// The window is in fullscreen borderless mode
-    FullscreenBorderless,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-/// Options for constructing a new webview dialog
-pub struct XDialogWebviewOptions {
-    /// The title of the dialog window (required)
-    pub title: String,
-    /// The initial HTML content to display in the webview
-    pub html: String,
-    /// The initial size of the dialog window
-    pub size: Option<(i32, i32)>,
-    /// The initial position of the dialog window
-    pub position: Option<(i32, i32)>,
-    /// The minimum size of the dialog window
-    pub min_size: Option<(i32, i32)>,
-    /// If true, the dialog window can be resized by the user
-    pub resizable: bool,
-    /// If true, the dialog window will have a borderless frame
-    pub borderless: bool,
-    /// The initial state of the dialog window
-    pub state: XDialogWindowState,
-    /// A callback function which is executed when a javascript message is dispatched with
-    /// `window.ipc.postMessage(message)` (webview2) or `window.external.invoke(message)` (mshtml)
-    pub callback: Option<WebviewInvokeHandler>,
-}
-
-impl Default for XDialogWebviewOptions {
-    fn default() -> Self {
-        Self {
-            title: "XDialog WebView".to_string(),
-            html: "".to_string(),
-            size: None,
-            position: None,
-            min_size: None,
-            resizable: true,
-            borderless: false,
-            callback: None,
-            state: XDialogWindowState::Normal,
-        }
-    }
-}
-
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct ResultSender {
@@ -161,12 +105,6 @@ impl PartialEq for ResultSender {
     }
 }
 
-/// A callback function which is executed when a javascript message is dispatched with
-/// `window.external.invoke(message)`. The `WebviewDialogProxy` provided in this callback
-/// is not the same as the one returned by `show_webview`, but it can be used to interact
-/// with the webview in the same way.
-pub type WebviewInvokeHandler = fn(webview: crate::WebviewDialogProxy, message: String);
-
 #[allow(missing_docs)]
 #[derive(Debug, PartialEq)]
 pub enum DialogMessageRequest {
@@ -183,14 +121,4 @@ pub enum DialogMessageRequest {
     SetProgressIndeterminate(usize),
     SetProgressValue(usize, f32),
     SetProgressText(usize, String),
-
-    // webview
-    WebviewWindowShow(usize, XDialogWebviewOptions, ResultSender),
-    WebviewSetTitle(usize, String, ResultSender),
-    WebviewSetHtml(usize, String, ResultSender),
-    WebviewSetPosition(usize, i32, i32, ResultSender),
-    WebviewSetSize(usize, i32, i32, ResultSender),
-    WebviewSetZoomLevel(usize, f64, ResultSender),
-    WebviewSetWindowState(usize, XDialogWindowState, ResultSender),
-    WebviewEval(usize, String, ResultSender),
 }

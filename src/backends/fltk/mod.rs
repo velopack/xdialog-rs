@@ -95,7 +95,6 @@ impl XDialogBackendImpl for FltkBackend {
                             dialog.set_body_text(&text);
                         }
                     }
-                    _ => {},
                 }
             }
         }
