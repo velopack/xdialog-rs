@@ -122,6 +122,12 @@ use state::*;
 use crate::backends::XDialogBackendImpl;
 
 mod backends;
+
+// Re-export TaskDialogManager and DialogManager for direct use (bypassing XDialogBuilder run loop)
+#[cfg(all(windows, feature = "public-backends"))]
+pub use backends::win32::taskdialog::TaskDialogManager;
+#[cfg(all(windows, feature = "public-backends"))]
+pub use backends::DialogManager;
 mod images;
 mod message;
 mod model;

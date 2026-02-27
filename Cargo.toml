@@ -1,6 +1,6 @@
 [package]
 name = "xdialog"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 license = "MIT"
 description = "A small native-ish cross platform dialogs library with zero runtime dependencies."
@@ -12,6 +12,7 @@ categories = ["graphics", "gui", "visualization"]
 [features]
 default = ["fltk-bundled"]
 fltk-bundled = ["fltk/fltk-bundled"]
+public-backends = []
 
 [dependencies]
 log = "0.4"

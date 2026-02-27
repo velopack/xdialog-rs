@@ -29,11 +29,13 @@ enum DialogRequest {
     SetText(String),
 }
 
+/// Manages Win32 Task Dialogs. Each dialog runs on its own thread and communicates via channels.
 pub struct TaskDialogManager {
     open_dialogs: Arc<Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>>>,
 }
 
 impl TaskDialogManager {
+    /// Create a new TaskDialogManager.
     pub fn new() -> Self {
         TaskDialogManager { open_dialogs: Arc::new(Mutex::new(HashMap::new())) }
     }

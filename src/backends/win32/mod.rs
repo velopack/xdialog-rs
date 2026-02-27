@@ -1,5 +1,5 @@
 #[cfg(windows)]
-mod taskdialog;
+pub(crate) mod taskdialog;
 
 use std::sync::mpsc::Receiver;
 
