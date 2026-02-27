@@ -2,10 +2,10 @@ fn main() {
     println!("Starting Example...");
     xdialog::XDialogBuilder::new()
         // .with_backend(xdialog::XDialogBackend::NativePreferred)
-        .run_loop(run);
+        .run(run);
 }
 
-fn run() -> i32 {
+fn run() {
     println!("Showing OK/Cancel Dialog!");
     let result =
         xdialog::show_message_ok_cancel("Title", "Main instruction", "Are you happy with things?", xdialog::XDialogIcon::Information)
@@ -16,6 +16,4 @@ fn run() -> i32 {
     } else {
         println!("Cancel button pressed")
     }
-
-    return 0;
 }

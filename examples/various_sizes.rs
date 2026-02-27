@@ -2,10 +2,10 @@ use xdialog::XDialogIcon;
 
 fn main() {
     println!("Showing OK/Cancel Dialog!");
-    xdialog::XDialogBuilder::new().run_loop(run);
+    xdialog::XDialogBuilder::new().run(run);
 }
 
-fn run() -> i32 {
+fn run() {
     let _ = xdialog::show_message_ok_cancel(
         "Title",
         "Main instruction",
@@ -45,5 +45,4 @@ fn run() -> i32 {
         XDialogIcon::Information,
     ).unwrap();
 
-    return 0;
 }

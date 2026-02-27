@@ -39,10 +39,17 @@
 //! use xdialog::*;
 //!
 //! fn main() {
+//!   // Use run() for the simplest case:
 //!   XDialogBuilder::new().run(your_main_logic);
+//!
+//!   // Or run_i32() to return a process exit code:
+//!   // let code = XDialogBuilder::new().run_i32(your_main_logic_i32);
+//!
+//!   // Or run_result() for Result-based error handling:
+//!   // let result = XDialogBuilder::new().run_result(your_main_logic_result);
 //! }
 //!
-//! fn your_main_logic() -> i32 {
+//! fn your_main_logic() {
 //!
 //!   // ... do something here
 //!
@@ -54,7 +61,7 @@
 //!   ).unwrap();
 //!
 //!   if !should_update_now {
-//!     return -1; // user declined the dialog
+//!     return; // user declined the dialog
 //!   }
 //!
 //!   // ... do something here
@@ -79,7 +86,6 @@
 //!   std::thread::sleep(std::time::Duration::from_secs(3));
 //!
 //!   progress.close().unwrap();
-//!   0 // return exit code
 //! }
 //! ```
 //!
@@ -154,8 +160,39 @@ impl XDialogBuilder {
         self
     }
 
-    /// Run the XDialog library with the specified configuration. This function will block the main
-    /// thread and run the specified `main` function in a separate thread.
+    /// Run with no return value. This is the simplest way to use xdialog when your application
+    /// logic does not need to return an exit code or result.
+    ///
+    /// This function will block the main thread and run the specified `main` function in a
+    /// separate thread.
+    pub fn run(self, main: fn()) {
+        self.run_loop(main);
+    }
+
+    /// Run and return an `i32` exit code. This is useful for applications that want to return
+    /// a process exit code from their main function.
+    ///
+    /// This function will block the main thread and run the specified `main` function in a
+    /// separate thread.
+    pub fn run_i32(self, main: fn() -> i32) -> i32 {
+        self.run_loop(main)
+    }
+
+    /// Run and return a `Result`. This is useful for applications that use `Result`-based error
+    /// handling in their main function.
+    ///
+    /// This function will block the main thread and run the specified `main` function in a
+    /// separate thread.
+    pub fn run_result<T: Send + 'static, E: Send + 'static>(self, main: fn() -> Result<T, E>) -> Result<T, E> {
+        self.run_loop(main)
+    }
+
+    /// Run the XDialog library with the specified configuration, returning an arbitrary type.
+    /// For most use cases, prefer [`run`](Self::run), [`run_i32`](Self::run_i32), or
+    /// [`run_result`](Self::run_result) instead.
+    ///
+    /// This function will block the main thread and run the specified `main` function in a
+    /// separate thread.
     pub fn run_loop<T: Send + 'static>(self, main: fn() -> T) -> T {
         let (send_message, receive_message) = channel::<DialogMessageRequest>();
         init_sender(send_message);

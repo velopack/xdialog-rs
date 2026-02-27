@@ -1,8 +1,8 @@
 fn main() {
-    xdialog::XDialogBuilder::new().run_loop(run);
+    xdialog::XDialogBuilder::new().run(run);
 }
 
-fn run() -> i32 {
+fn run() {
     let result =
         xdialog::show_progress("My App Incorporated", "Doing some hard thing", "Solving string theory...", xdialog::XDialogIcon::Warning)
             .unwrap();
@@ -25,5 +25,4 @@ fn run() -> i32 {
     result.set_indeterminate().unwrap();
     std::thread::sleep(std::time::Duration::from_secs(5));
     result.close().unwrap();
-    return 0;
 }
