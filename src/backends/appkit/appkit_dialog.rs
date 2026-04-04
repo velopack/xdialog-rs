@@ -167,8 +167,8 @@ impl AppKitDialog {
 
         let mut content_width = WINDOW_MIN_WIDTH - WINDOW_PADDING * 2.0;
 
-        // For progress with icon, text is narrower
-        let text_area_width = if self.has_progress && has_icon {
+        // When icon is present (any dialog type), text area is narrower
+        let text_area_width = if has_icon {
             content_width - icon_size - WINDOW_PADDING
         } else {
             content_width
@@ -191,7 +191,7 @@ impl AppKitDialog {
             content_width = (content_width + 100.0).min(WINDOW_MAX_WIDTH - WINDOW_PADDING * 2.0);
         }
 
-        let text_area_width = if self.has_progress && has_icon {
+        let text_area_width = if has_icon {
             content_width - icon_size - WINDOW_PADDING
         } else {
             content_width
@@ -209,74 +209,71 @@ impl AppKitDialog {
             0.0
         };
 
-        // Compute total height (macOS origin is bottom-left)
-        let mut total_height = WINDOW_PADDING;
-
-        if !self.has_progress && has_icon {
-            total_height += icon_size + TEXT_SPACING;
-        }
+        // Compute text block height
+        let mut text_block_height = 0.0;
         if title_height > 0.0 {
-            total_height += title_height + TEXT_SPACING;
+            text_block_height += title_height + TEXT_SPACING;
         }
         if self.has_progress {
-            total_height += PROGRESS_HEIGHT + TEXT_SPACING;
+            text_block_height += PROGRESS_HEIGHT + TEXT_SPACING;
         }
         if body_height > 0.0 {
-            total_height += body_height + TEXT_SPACING;
+            text_block_height += body_height + TEXT_SPACING;
         }
+
+        // Main area is the taller of icon or text block
+        let main_area_height = if has_icon {
+            text_block_height.max(icon_size)
+        } else {
+            text_block_height
+        };
+
+        let mut total_height = WINDOW_PADDING + main_area_height;
         if !self.options.buttons.is_empty() {
             total_height += BUTTON_PANEL_HEIGHT;
         }
         total_height += WINDOW_PADDING;
 
-        // Ensure minimum height for progress icon
-        if self.has_progress && has_icon {
-            let min_h = icon_size + WINDOW_PADDING * 2.0
-                + if !self.options.buttons.is_empty() { BUTTON_PANEL_HEIGHT } else { 0.0 };
-            if total_height < min_h {
-                total_height = min_h;
-            }
-        }
-
         let window_width = content_width + WINDOW_PADDING * 2.0;
 
-        // Resize window (preserve top-left position)
-        let frame = self.window.frame();
-        let new_frame = NSRect::new(
-            NSPoint::new(frame.origin.x, frame.origin.y + frame.size.height - total_height),
+        // Convert desired content size to window frame size (accounts for title bar)
+        let content_rect = NSRect::new(
+            NSPoint::new(0.0, 0.0),
             NSSize::new(window_width, total_height),
+        );
+        let frame_rect = self.window.frameRectForContentRect(content_rect);
+
+        // Resize window (preserve top-left position)
+        let old_frame = self.window.frame();
+        let new_frame = NSRect::new(
+            NSPoint::new(old_frame.origin.x, old_frame.origin.y + old_frame.size.height - frame_rect.size.height),
+            frame_rect.size,
         );
         self.window.setFrame_display(new_frame, true);
 
-        // Position subviews top-down
+        // Position subviews top-down within the content view (total_height is content height)
         let mut y = total_height - WINDOW_PADDING;
 
-        // Message dialog: icon centered above text
-        if !self.has_progress && has_icon {
-            if let Some(ref iv) = self.icon_view {
-                let icon_x = (window_width - icon_size) / 2.0;
-                y -= icon_size;
-                iv.setFrame(NSRect::new(
-                    NSPoint::new(icon_x, y),
-                    NSSize::new(icon_size, icon_size),
-                ));
-                y -= TEXT_SPACING;
-            }
+        // Icon on the left, vertically centered in the main area
+        if let Some(ref iv) = self.icon_view {
+            let icon_y = y - icon_size;
+            iv.setFrame(NSRect::new(
+                NSPoint::new(WINDOW_PADDING, icon_y),
+                NSSize::new(icon_size, icon_size),
+            ));
         }
 
-        // Progress dialog: icon on left
-        let text_x = if self.has_progress && has_icon {
-            if let Some(ref iv) = self.icon_view {
-                let icon_y = y - icon_size;
-                iv.setFrame(NSRect::new(
-                    NSPoint::new(WINDOW_PADDING, icon_y),
-                    NSSize::new(icon_size, icon_size),
-                ));
-            }
+        // Text starts to the right of the icon (or at left padding if no icon)
+        let text_x = if has_icon {
             WINDOW_PADDING + icon_size + WINDOW_PADDING
         } else {
             WINDOW_PADDING
         };
+
+        // Vertically center text block if shorter than icon
+        if has_icon && text_block_height < main_area_height {
+            y -= (main_area_height - text_block_height) / 2.0;
+        }
 
         // Title
         if let Some(ref tf) = self.title_field {
