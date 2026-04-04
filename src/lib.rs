@@ -214,7 +214,9 @@ impl XDialogBuilder {
                 XDialogBackend::Automatic | XDialogBackend::NativePreferred => {
                     #[cfg(windows)]
                     { backends::win32::Win32Backend::run_loop(receive_message, self.theme) }
-                    #[cfg(not(windows))]
+                    #[cfg(target_os = "macos")]
+                    { backends::appkit::AppKitBackend::run_loop(receive_message, self.theme) }
+                    #[cfg(not(any(windows, target_os = "macos")))]
                     { backends::fltk::FltkBackend::run_loop(receive_message, self.theme) }
                 }
                 XDialogBackend::Fltk => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),

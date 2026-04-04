@@ -5,6 +5,8 @@ use std::sync::mpsc::Receiver;
 use crate::{XDialogError, XDialogOptions};
 
 pub mod fltk;
+#[cfg(target_os = "macos")]
+pub mod appkit;
 #[cfg(windows)]
 pub mod win32;
 
