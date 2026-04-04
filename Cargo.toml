@@ -10,8 +10,9 @@ keywords = ["dialog", "message-box", "messagebox", "cross-platform"]
 categories = ["graphics", "gui", "visualization"]
 
 [features]
-default = ["fltk-bundled"]
+default = ["fltk-bundled", "gtk-backend"]
 fltk-bundled = ["fltk/fltk-bundled"]
+gtk-backend = ["gtk", "glib"]
 public-backends = []
 
 [dependencies]
@@ -23,6 +24,10 @@ fltk = "1.5"
 font-kit = "0.14"
 dark-light = "2.0"
 mina = "0.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = { version = "0.18", optional = true }
+glib = { version = "0.18", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [

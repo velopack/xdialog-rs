@@ -214,10 +214,19 @@ impl XDialogBuilder {
                 XDialogBackend::Automatic | XDialogBackend::NativePreferred => {
                     #[cfg(windows)]
                     { backends::win32::Win32Backend::run_loop(receive_message, self.theme) }
-                    #[cfg(not(windows))]
+                    #[cfg(all(target_os = "linux", feature = "gtk-backend"))]
+                    { backends::gtk3::GtkBackend::run_loop(receive_message, self.theme) }
+                    #[cfg(all(not(windows), not(all(target_os = "linux", feature = "gtk-backend"))))]
                     { backends::fltk::FltkBackend::run_loop(receive_message, self.theme) }
                 }
                 XDialogBackend::Fltk => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
+                #[cfg(all(target_os = "linux", feature = "gtk-backend"))]
+                XDialogBackend::Gtk => backends::gtk3::GtkBackend::run_loop(receive_message, self.theme),
+                #[cfg(not(all(target_os = "linux", feature = "gtk-backend")))]
+                XDialogBackend::Gtk => {
+                    error!("xdialog: GTK backend not available, falling back to FLTK");
+                    backends::fltk::FltkBackend::run_loop(receive_message, self.theme)
+                }
             }
         }));
         

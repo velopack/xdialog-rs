@@ -5,6 +5,8 @@ use std::sync::mpsc::Receiver;
 use crate::{XDialogError, XDialogOptions};
 
 pub mod fltk;
+#[cfg(all(target_os = "linux", feature = "gtk-backend"))]
+pub mod gtk3;
 #[cfg(windows)]
 pub mod win32;
 
