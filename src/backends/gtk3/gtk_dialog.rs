@@ -98,10 +98,14 @@ impl GtkDialog {
             button_box.set_layout(gtk::ButtonBoxStyle::End);
             button_box.set_spacing(6);
 
+            let last_idx = options.buttons.len() - 1;
+            let mut default_button = None;
             for (idx, text) in options.buttons.iter().enumerate() {
                 let button = gtk::Button::with_label(text);
-                if idx == 0 {
+                if idx == last_idx {
                     button.style_context().add_class("suggested-action");
+                    button.set_can_default(true);
+                    default_button = Some(button.clone());
                 }
                 let win = window.clone();
                 button.connect_clicked(move |_| {
@@ -112,9 +116,17 @@ impl GtkDialog {
             }
 
             vbox.pack_start(&button_box, false, false, 0);
-        }
 
-        window.add(&vbox);
+            window.add(&vbox);
+
+            // Set default button after widget hierarchy is established
+            if let Some(ref btn) = default_button {
+                window.set_default(Some(btn));
+                btn.grab_focus();
+            }
+        } else {
+            window.add(&vbox);
+        }
 
         // Handle window close via X button
         window.connect_delete_event(move |win, _| {

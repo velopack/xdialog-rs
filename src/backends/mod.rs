@@ -4,8 +4,9 @@ use std::sync::mpsc::Receiver;
 #[cfg(windows)]
 use crate::{XDialogError, XDialogOptions};
 
+#[cfg(feature = "fltk")]
 pub mod fltk;
-#[cfg(all(target_os = "linux", feature = "gtk-backend"))]
+#[cfg(all(target_os = "linux", feature = "gtk3"))]
 pub mod gtk3;
 #[cfg(windows)]
 pub mod win32;
@@ -31,6 +32,7 @@ pub trait DialogManager {
     fn set_progress_indeterminate(&mut self, id: usize);
 }
 
+#[cfg(feature = "fltk")]
 pub trait Tick {
     fn tick(&mut self, elapsed_secs: f32);
 }

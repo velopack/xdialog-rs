@@ -128,6 +128,7 @@ mod backends;
 pub use backends::win32::taskdialog::TaskDialogManager;
 #[cfg(all(windows, feature = "public-backends"))]
 pub use backends::DialogManager;
+#[cfg(feature = "fltk")]
 mod images;
 mod message;
 mod model;
@@ -210,24 +211,7 @@ impl XDialogBuilder {
         });
 
         let backend_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            match self.backend {
-                XDialogBackend::Automatic | XDialogBackend::NativePreferred => {
-                    #[cfg(windows)]
-                    { backends::win32::Win32Backend::run_loop(receive_message, self.theme) }
-                    #[cfg(all(target_os = "linux", feature = "gtk-backend"))]
-                    { backends::gtk3::GtkBackend::run_loop(receive_message, self.theme) }
-                    #[cfg(all(not(windows), not(all(target_os = "linux", feature = "gtk-backend"))))]
-                    { backends::fltk::FltkBackend::run_loop(receive_message, self.theme) }
-                }
-                XDialogBackend::Fltk => backends::fltk::FltkBackend::run_loop(receive_message, self.theme),
-                #[cfg(all(target_os = "linux", feature = "gtk-backend"))]
-                XDialogBackend::Gtk => backends::gtk3::GtkBackend::run_loop(receive_message, self.theme),
-                #[cfg(not(all(target_os = "linux", feature = "gtk-backend")))]
-                XDialogBackend::Gtk => {
-                    error!("xdialog: GTK backend not available, falling back to FLTK");
-                    backends::fltk::FltkBackend::run_loop(receive_message, self.theme)
-                }
-            }
+            Self::dispatch_backend(self.backend, receive_message, self.theme);
         }));
         
         if let Err(e) = backend_result {
@@ -237,6 +221,61 @@ impl XDialogBuilder {
         match result.join() {
             Ok(val) => val,
             Err(payload) => std::panic::resume_unwind(payload),
+        }
+    }
+}
+
+impl XDialogBuilder {
+    #[cfg(feature = "fltk")]
+    fn run_fltk(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
+        backends::fltk::FltkBackend::run_loop(receiver, theme);
+    }
+
+    #[cfg(windows)]
+    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
+        backends::win32::Win32Backend::run_loop(receiver, theme);
+    }
+
+    #[cfg(all(target_os = "linux", feature = "gtk3"))]
+    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
+        backends::gtk3::GtkBackend::run_loop(receiver, theme);
+    }
+
+    #[cfg(all(not(windows), not(all(target_os = "linux", feature = "gtk3")), feature = "fltk"))]
+    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
+        Self::run_fltk(receiver, theme);
+    }
+
+    #[cfg(all(not(windows), not(all(target_os = "linux", feature = "gtk3")), not(feature = "fltk")))]
+    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
+        error!("xdialog: no backend available");
+        // Drain the receiver so the sender thread doesn't block
+        for _ in receiver {}
+    }
+
+    fn dispatch_backend(
+        backend: XDialogBackend,
+        receiver: std::sync::mpsc::Receiver<DialogMessageRequest>,
+        theme: XDialogTheme,
+    ) {
+        match backend {
+            XDialogBackend::Automatic | XDialogBackend::NativePreferred => {
+                Self::run_default_backend(receiver, theme);
+            }
+            #[cfg(feature = "fltk")]
+            XDialogBackend::Fltk => Self::run_fltk(receiver, theme),
+            #[cfg(not(feature = "fltk"))]
+            XDialogBackend::Fltk => {
+                error!("xdialog: FLTK backend not compiled in");
+                Self::dispatch_backend(XDialogBackend::Automatic, receiver, theme);
+            }
+            #[cfg(all(target_os = "linux", feature = "gtk3"))]
+            XDialogBackend::Gtk => backends::gtk3::GtkBackend::run_loop(receiver, theme),
+            #[cfg(not(all(target_os = "linux", feature = "gtk3")))]
+            XDialogBackend::Gtk => {
+                error!("xdialog: GTK backend not available on this platform");
+                Self::dispatch_backend(XDialogBackend::Automatic, receiver, theme);
+            }
         }
     }
 }
