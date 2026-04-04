@@ -4,7 +4,7 @@ pub(crate) mod taskdialog;
 use std::sync::mpsc::Receiver;
 
 use crate::{
-    backends::{DialogManager, XDialogBackendImpl},
+    backends::XDialogBackendImpl,
     DialogMessageRequest, XDialogTheme,
 };
 
@@ -12,8 +12,7 @@ pub struct Win32Backend;
 
 impl XDialogBackendImpl for Win32Backend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
-        let mut dialogs: Box<dyn DialogManager> =
-            Box::new(taskdialog::TaskDialogManager::new());
+        let mut dialogs = taskdialog::TaskDialogManager::new();
         while let Ok(message) = receiver.recv() {
             match message {
                 DialogMessageRequest::None => {}

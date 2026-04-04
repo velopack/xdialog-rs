@@ -7,7 +7,7 @@ use fltk::{prelude::*, *};
 use mina::prelude::*;
 
 use super::fltk_theme::DialogTheme;
-use crate::backends::Tick;
+use super::Tick;
 
 #[derive(Animate, Clone, Debug, Default, PartialEq)]
 struct ProgressIndeterminateState {

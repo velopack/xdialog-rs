@@ -3,6 +3,7 @@ mod fltk_dialog;
 mod fltk_fonts;
 mod fltk_progress;
 mod fltk_theme;
+mod images;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -12,7 +13,9 @@ use std::time::Instant;
 
 use fltk::app;
 
-use crate::backends::Tick;
+pub trait Tick {
+    fn tick(&mut self, elapsed_secs: f32);
+}
 use crate::model::*;
 
 use super::{fltk::fltk_dialog::CustomFltkDialog, XDialogBackendImpl};

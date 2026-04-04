@@ -18,7 +18,7 @@ use windows::Win32::UI::Controls::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{EndDialog, SendMessageW, HICON};
 
-use crate::{backends::DialogManager, insert_result, XDialogError, XDialogIcon, XDialogOptions, XDialogResult};
+use crate::{insert_result, XDialogError, XDialogIcon, XDialogOptions, XDialogResult};
 
 #[derive(Debug, PartialEq)]
 enum DialogRequest {
@@ -41,8 +41,8 @@ impl TaskDialogManager {
     }
 }
 
-impl DialogManager for TaskDialogManager {
-    fn show(&mut self, id: usize, data: XDialogOptions, has_progress: bool) -> Result<(), XDialogError> {
+impl TaskDialogManager {
+    pub fn show(&mut self, id: usize, data: XDialogOptions, has_progress: bool) -> Result<(), XDialogError> {
         let open_dialogs = self.open_dialogs.clone();
         // Insert a new dialog
         {
@@ -140,32 +140,32 @@ impl DialogManager for TaskDialogManager {
         Ok(())
     }
 
-    fn close(&mut self, id: usize) {
+    pub fn close(&mut self, id: usize) {
         if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::Close);
         }
     }
 
-    fn close_all(&mut self) {
+    pub fn close_all(&mut self) {
         let mut dialogs = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner());
         for (_id, obj) in dialogs.iter_mut() {
             let _ = obj.0.send(DialogRequest::Close);
         }
     }
 
-    fn set_progress_value(&mut self, id: usize, progress: f32) {
+    pub fn set_progress_value(&mut self, id: usize, progress: f32) {
         if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::SetProgress(progress));
         }
     }
 
-    fn set_progress_text(&mut self, id: usize, text: &str) {
+    pub fn set_progress_text(&mut self, id: usize, text: &str) {
         if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::SetText(text.to_string()));
         }
     }
 
-    fn set_progress_indeterminate(&mut self, id: usize) {
+    pub fn set_progress_indeterminate(&mut self, id: usize) {
         if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::SetIndeterminate);
         }

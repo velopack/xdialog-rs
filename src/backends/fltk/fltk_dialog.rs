@@ -11,7 +11,7 @@ use super::{
     fltk_theme::{get_theme_icon_svg, DialogTheme},
 };
 
-use crate::backends::Tick;
+use super::Tick;
 
 pub struct CustomFltkDialog {
     id: usize,
