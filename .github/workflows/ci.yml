@@ -50,7 +50,6 @@ jobs:
           - os: macos-latest
             name: macOS (fltk-bundled)
             cargo-args: --no-default-features --features fltk-bundled
-            test-args: --lib
 
     steps:
       - uses: actions/checkout@v4
@@ -78,7 +77,7 @@ jobs:
         run: cargo build ${{ matrix.cargo-args }}
 
       - name: Test
-        run: cargo test ${{ matrix.test-args || '--lib --tests' }} ${{ matrix.cargo-args }}
+        run: cargo test --lib --tests ${{ matrix.cargo-args }}
 
   win32-direct:
     name: Windows (win32-direct)
