@@ -46,14 +46,9 @@ fn try_load_font<S: font_kit::source::Source>(
     font_properties_thin: &Properties,
     target: &OnceLock<String>,
 ) {
-    if let Ok(font_handle) = font_source.select_best_match(&font_families, &font_properties_thin) {
-        match font_handle {
-            Handle::Path { path, .. } => {
-                if let Ok(font) = app.load_font(path) {
-                    let _ = target.set(font);
-                }
-            }
-            _ => {}
+    if let Ok(Handle::Path { path, .. }) = font_source.select_best_match(font_families, font_properties_thin) {
+        if let Ok(font) = app.load_font(path) {
+            let _ = target.set(font);
         }
     }
 

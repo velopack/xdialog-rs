@@ -69,11 +69,11 @@ impl CustomFltkDialog {
                 let svg2 = svg_img.clone();
                 svg_img.scale(theme.main_icon_size, theme.main_icon_size, true, true);
                 icon_frame.set_image(Some(svg_img));
-                flex_icon_row.fixed(&mut icon_frame, theme.main_icon_size);
+                flex_icon_row.fixed(&icon_frame, theme.main_icon_size);
                 wind.set_icon(Some(svg2));
                 has_icon = true;
             } else {
-                flex_icon_row.fixed(&mut icon_frame, 0);
+                flex_icon_row.fixed(&icon_frame, 0);
             }
             icon_frame.set_align(Align::Top | Align::Center | Align::Inside);
         }
@@ -89,7 +89,7 @@ impl CustomFltkDialog {
         title_text.set_label_font(get_main_instruction_font());
         title_text.set_label_color(theme.color_title_text);
         title_text.set_align(Align::Left | Align::Inside | Align::Wrap);
-        flex_main_col.fixed(&mut title_text, 10);
+        flex_main_col.fixed(&title_text, 10);
 
         let mut progress_option: Option<CustomProgressBar> = None;
 
@@ -97,11 +97,11 @@ impl CustomFltkDialog {
             let mut flex_progress_col = Flex::default().column();
             flex_progress_col.set_margin(3);
 
-            let progress_bar = CustomProgressBar::new(&theme);
+            let progress_bar = CustomProgressBar::new(theme);
             progress_option = Some(progress_bar);
 
             flex_progress_col.end();
-            flex_main_col.fixed(&mut flex_progress_col, 12);
+            flex_main_col.fixed(&flex_progress_col, 12);
         }
 
         // Body text
@@ -140,7 +140,7 @@ impl CustomFltkDialog {
             };
             for (index, button_text) in button_iter {
                 let mut wnd_btn_click = wind.clone();
-                let mut flex_button_wrapper = Flex::default().column();
+                let flex_button_wrapper = Flex::default().column();
                 let mut button = CustomButton::new(theme);
                 button.set_label(button_text.as_str());
                 button.set_label_size(get_body_size());
@@ -155,7 +155,7 @@ impl CustomFltkDialog {
                 flex_button_wrapper.end();
                 let (w, _) = button.measure_label();
                 flex_button_row.fixed(
-                    &mut flex_button_wrapper,
+                    &flex_button_wrapper,
                     w + (theme.button_text_padding * 2),
                 );
 
@@ -167,7 +167,7 @@ impl CustomFltkDialog {
 
             // End Button background
             flex_button_background.end();
-            flex_root_col.fixed(&mut flex_button_background, theme.button_panel_height);
+            flex_root_col.fixed(&flex_button_background, theme.button_panel_height);
         }
 
         // End Root column
@@ -277,7 +277,7 @@ impl CustomFltkDialog {
         };
         self.wind.set_size(final_window_width, final_window_height);
         self.root.clone().size_of_parent();
-        self.main_col.fixed(&mut self.title_text, ideal_title_size);
+        self.main_col.fixed(&self.title_text, ideal_title_size);
     }
 
     fn center_screen(&mut self) {
