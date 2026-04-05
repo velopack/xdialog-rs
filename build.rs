@@ -5,5 +5,7 @@ fn main() {
         let manifest_path = format!("{}/app.manifest", manifest_dir);
         println!("cargo:rustc-link-arg-examples=/MANIFEST:EMBED");
         println!("cargo:rustc-link-arg-examples=/MANIFESTINPUT:{}", manifest_path);
+        println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
+        println!("cargo:rustc-link-arg-tests=/MANIFESTINPUT:{}", manifest_path);
     }
 }
