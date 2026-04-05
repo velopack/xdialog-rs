@@ -27,7 +27,7 @@ fn main() {
 
     for i in 1..=5 {
         progress.set_value(i as f32 / 5.0).unwrap();
-        progress.set_text(&format!("Step {i} of 5...")).unwrap();
+        progress.set_text(format!("Step {i} of 5...")).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
