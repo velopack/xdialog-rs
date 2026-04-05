@@ -81,6 +81,10 @@ windows = { version = "0.62", features = [
 ] }
 widestring = "1.2"
 
+[[test]]
+name = "macos_ui"
+harness = false
+
 [dev-dependencies]
 ntest = "0.9"
 image = "0.25"

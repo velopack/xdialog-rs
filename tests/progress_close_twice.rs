@@ -1,3 +1,5 @@
+#![cfg(not(target_os = "macos"))]
+
 use std::time::Duration;
 use xdialog::*;
 
