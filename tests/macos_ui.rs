@@ -1,6 +1,7 @@
 fn main() {
     #[cfg(target_os = "macos")]
     {
+        use xdialog::XDialogBuilder;
         XDialogBuilder::new().run(run);
     }
 }
