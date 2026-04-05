@@ -10,7 +10,7 @@ use crate::*;
 /// use xdialog::*;
 ///
 /// fn main() {
-///   XDialogBuilder::new().run(run);
+///   XDialogBuilder::new().run_i32(run);
 /// }
 ///
 /// fn run() -> i32 {
@@ -39,6 +39,10 @@ pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
 ) -> Result<ProgressDialogProxy, XDialogError> {
     let id = get_next_id();
 
+    if get_silent() {
+        return Ok(ProgressDialogProxy { id, silent: true });
+    }
+
     let data = XDialogOptions {
         title: title.as_ref().to_string(),
         main_instruction: main_instruction.as_ref().to_string(),
@@ -50,32 +54,43 @@ pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
     let (result_sender, result_receiver) = ResultSender::create();
     send_request(DialogMessageRequest::ShowProgressWindow(id, data, result_sender))?;
     result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
-    Ok(ProgressDialogProxy { id })
+    Ok(ProgressDialogProxy { id, silent: false })
 }
 
 /// A proxy object to control a progress dialog. See `show_progress` for more information.
 pub struct ProgressDialogProxy {
     id: usize,
+    silent: bool,
 }
 
 impl ProgressDialogProxy {
     /// Sets the progress bar to indeterminate mode.
     pub fn set_indeterminate(&self) -> Result<(), XDialogError> {
+        if self.silent { return Ok(()); }
         send_request(DialogMessageRequest::SetProgressIndeterminate(self.id))
     }
 
     /// Sets the progress bar to a specific value between 0.0 and 1.0.
     pub fn set_value(&self, value: f32) -> Result<(), XDialogError> {
+        if self.silent { return Ok(()); }
         send_request(DialogMessageRequest::SetProgressValue(self.id, value))
     }
 
     /// Sets the text displayed below the progress bar.
     pub fn set_text<P: AsRef<str>>(&self, text: P) -> Result<(), XDialogError> {
+        if self.silent { return Ok(()); }
         send_request(DialogMessageRequest::SetProgressText(self.id, text.as_ref().to_string()))
     }
 
     /// Closes the progress dialog.
     pub fn close(&self) -> Result<(), XDialogError> {
+        if self.silent { return Ok(()); }
         send_request(DialogMessageRequest::CloseWindow(self.id))
+    }
+}
+
+impl Drop for ProgressDialogProxy {
+    fn drop(&mut self) {
+        let _ = self.close();
     }
 }
