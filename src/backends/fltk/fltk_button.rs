@@ -6,7 +6,7 @@ use fltk::prelude::{WidgetBase, WidgetExt};
 use fltk::{app, draw::*, widget, widget_extends};
 use mina::{prelude::*, Animate};
 
-use crate::backends::Tick;
+use super::Tick;
 
 use super::fltk_theme::DialogTheme;
 

@@ -1,5 +1,3 @@
-use crate::*;
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 /// The backend to use for the dialog. Automatic will choose the best backend for the current platform.
 pub enum XDialogBackend {
@@ -9,6 +7,8 @@ pub enum XDialogBackend {
     Fltk,
     /// Prefer the native backend for the current platform (eg. Win32), falling back to FLTK
     NativePreferred,
+    /// Use the GTK3 backend (Linux only)
+    Gtk,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -68,43 +68,12 @@ pub enum XDialogResult {
     ButtonPressed(usize),
 }
 
+/// Channel sender used by backends to deliver the dialog result receiver back to the caller.
+/// Sends `Ok(receiver)` on successful dialog creation, or `Err(e)` on failure.
+pub type CreationSender = oneshot::Sender<Result<oneshot::Receiver<XDialogResult>, crate::XDialogError>>;
+
 #[allow(missing_docs)]
 #[derive(Debug)]
-pub struct ResultSender {
-    pub sender: Option<oneshot::Sender<Result<(), XDialogError>>>,
-}
-
-#[allow(missing_docs)]
-impl ResultSender {
-    pub fn send_result(&mut self, result: Result<(), XDialogError>) {
-        if let Some(sender) = self.sender.take() {
-            let _ = sender.send(result);
-        }
-    }
-
-    pub fn send_ok(&mut self) {
-        self.send_result(Ok(()));
-    }
-
-    pub fn send_error(&mut self, error: XDialogError) {
-        self.send_result(Err(error));
-    }
-
-    pub fn create() -> (Self, oneshot::Receiver<Result<(), XDialogError>>) {
-        let (sender, receiver) = oneshot::channel();
-        let result_sender = ResultSender { sender: Some(sender) };
-        (result_sender, receiver)
-    }
-}
-
-impl PartialEq for ResultSender {
-    fn eq(&self, _: &Self) -> bool {
-        true
-    }
-}
-
-#[allow(missing_docs)]
-#[derive(Debug, PartialEq)]
 pub enum DialogMessageRequest {
     // generic
     None,
@@ -112,10 +81,10 @@ pub enum DialogMessageRequest {
     CloseWindow(usize),
 
     // messagebox
-    ShowMessageWindow(usize, XDialogOptions, ResultSender),
+    ShowMessageWindow(usize, XDialogOptions, CreationSender),
 
     // progress
-    ShowProgressWindow(usize, XDialogOptions, ResultSender),
+    ShowProgressWindow(usize, XDialogOptions, CreationSender),
     SetProgressIndeterminate(usize),
     SetProgressValue(usize, f32),
     SetProgressText(usize, String),

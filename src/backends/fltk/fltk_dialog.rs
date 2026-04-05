@@ -1,5 +1,7 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::model::*;
-use crate::state::insert_result;
 use fltk::{
     enums::*, frame::Frame, group::Flex, image::SvgImage, prelude::*, window::DoubleWindow, *,
 };
@@ -11,10 +13,9 @@ use super::{
     fltk_theme::{get_theme_icon_svg, DialogTheme},
 };
 
-use crate::backends::Tick;
+use super::Tick;
 
 pub struct CustomFltkDialog {
-    id: usize,
     pad_x: i32,
     pad_y: i32,
     wind: DoubleWindow,
@@ -26,21 +27,26 @@ pub struct CustomFltkDialog {
     title_text: Frame,
     main_col: Flex,
     theme: DialogTheme,
+    result_sender: Rc<RefCell<Option<oneshot::Sender<XDialogResult>>>>,
 }
 
 impl CustomFltkDialog {
     pub fn new(
-        id: usize,
         data: XDialogOptions,
         theme: &DialogTheme,
         has_progress: bool,
+        result_sender: oneshot::Sender<XDialogResult>,
     ) -> CustomFltkDialog {
+        let result_sender = Rc::new(RefCell::new(Some(result_sender)));
         let mut wind = DoubleWindow::new(0, 0, 50, 50, data.title.as_str()).center_screen();
         let data2 = data.clone();
 
+        let rs = result_sender.clone();
         wind.set_callback(move |wnd| {
             wnd.hide();
-            insert_result(id, XDialogResult::WindowClosed);
+            if let Some(sender) = rs.borrow_mut().take() {
+                let _ = sender.send(XDialogResult::WindowClosed);
+            }
         });
 
         // Start Root column
@@ -139,9 +145,12 @@ impl CustomFltkDialog {
                 button.set_label(button_text.as_str());
                 button.set_label_size(get_body_size());
                 button.set_label_font(get_body_font());
+                let rs = result_sender.clone();
                 button.set_callback(move |_| {
                     wnd_btn_click.hide();
-                    insert_result(id, XDialogResult::ButtonPressed(index));
+                    if let Some(sender) = rs.borrow_mut().take() {
+                        let _ = sender.send(XDialogResult::ButtonPressed(index));
+                    }
                 });
                 flex_button_wrapper.end();
                 let (w, _) = button.measure_label();
@@ -182,7 +191,6 @@ impl CustomFltkDialog {
         }
 
         let mut ret = Self {
-            id,
             pad_x,
             pad_y,
             wind,
@@ -194,6 +202,7 @@ impl CustomFltkDialog {
             title_text,
             main_col: flex_main_col,
             theme: theme.clone(),
+            result_sender,
         };
 
         ret.auto_size();
@@ -313,7 +322,9 @@ impl CustomFltkDialog {
 
     pub fn close(&mut self) {
         self.wind.clone().hide();
-        insert_result(self.id, XDialogResult::WindowClosed);
+        if let Some(sender) = self.result_sender.borrow_mut().take() {
+            let _ = sender.send(XDialogResult::WindowClosed);
+        }
     }
 
     pub fn set_progress_value(&mut self, value: f32) {

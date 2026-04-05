@@ -3,27 +3,70 @@ name = "xdialog"
 version = "0.2.3"
 edition = "2021"
 license = "MIT"
-description = "A small native-ish cross platform dialogs library with zero runtime dependencies."
+description = "A small cross-platform native dialogs library."
 authors = ["Caelan Sayler <git@caesay.com>"]
 repository = "https://github.com/velopack/xdialog"
 keywords = ["dialog", "message-box", "messagebox", "cross-platform"]
 categories = ["graphics", "gui", "visualization"]
 
 [features]
-default = ["fltk-bundled"]
-fltk-bundled = ["fltk/fltk-bundled"]
-public-backends = []
+default = []
+win32-direct = []
 
 [dependencies]
 log = "0.4"
-enum-map = "2.7"
 oneshot = { version = "0.2", features = ["std"] }
 thiserror = "2.0"
-fltk = "1.5"
+
+# AppKit Backend
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = [
+    "NSString",
+    "NSDate",
+    "NSRunLoop",
+    "NSObject",
+    "NSDictionary",
+    "NSAttributedString",
+    "NSGeometry",
+    "NSValue",
+    "NSArray",
+] }
+objc2-app-kit = { version = "0.3", features = [
+    "NSApplication",
+    "NSWindow",
+    "NSView",
+    "NSTextField",
+    "NSButton",
+    "NSImageView",
+    "NSImage",
+    "NSProgressIndicator",
+    "NSFont",
+    "NSColor",
+    "NSScreen",
+    "NSEvent",
+    "NSControl",
+    "NSResponder",
+    "NSCell",
+    "NSButtonCell",
+    "NSRunningApplication",
+    "NSGraphics",
+    "NSText",
+    "NSPanel",
+] }
+block2 = "0.6"
+
+# GTK3 Backend
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+glib = "0.18"
+# FLTK Backend (fallback when GTK unavailable)
+enum-map = "2.7"
+fltk = { version = "1.5", features = ["fltk-bundled"] }
 font-kit = "0.14"
-dark-light = "2.0"
 mina = "0.1"
 
+# Win32 Backend
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_System",
@@ -33,3 +76,23 @@ windows = { version = "0.62", features = [
     "Win32_System_LibraryLoader",
 ] }
 widestring = "1.2"
+
+[[test]]
+name = "macos_ui"
+harness = false
+
+[[test]]
+name = "visual_regression"
+harness = false
+
+[dev-dependencies]
+ntest = "0.9"
+image = "0.25"
+xcap = "0.9"
+
+[target.'cfg(windows)'.dev-dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+] }

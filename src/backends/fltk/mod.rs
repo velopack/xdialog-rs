@@ -3,6 +3,7 @@ mod fltk_dialog;
 mod fltk_fonts;
 mod fltk_progress;
 mod fltk_theme;
+mod images;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -12,7 +13,9 @@ use std::time::Instant;
 
 use fltk::app;
 
-use crate::backends::Tick;
+pub trait Tick {
+    fn tick(&mut self, elapsed_secs: f32);
+}
 use crate::model::*;
 
 use super::{fltk::fltk_dialog::CustomFltkDialog, XDialogBackendImpl};
@@ -65,11 +68,12 @@ impl XDialogBackendImpl for FltkBackend {
 
                 match message {
                     DialogMessageRequest::None => {}
-                    DialogMessageRequest::ShowMessageWindow(id, data, mut result) => {
-                        let mut d = CustomFltkDialog::new(id, data, &spacing, false);
+                    DialogMessageRequest::ShowMessageWindow(id, data, creation) => {
+                        let (dialog_sender, dialog_receiver) = oneshot::channel();
+                        let mut d = CustomFltkDialog::new(data, &spacing, false, dialog_sender);
                         d.show();
                         dialogs2.borrow_mut().insert(id, d);
-                        result.send_ok();
+                        let _ = creation.send(Ok(dialog_receiver));
                     }
                     DialogMessageRequest::ExitEventLoop => {
                         app::quit();
@@ -80,11 +84,12 @@ impl XDialogBackendImpl for FltkBackend {
                             dialog.close();
                         }
                     }
-                    DialogMessageRequest::ShowProgressWindow(id, data, mut result) => {
-                        let mut d = CustomFltkDialog::new(id, data, &spacing, true);
+                    DialogMessageRequest::ShowProgressWindow(id, data, creation) => {
+                        let (dialog_sender, dialog_receiver) = oneshot::channel();
+                        let mut d = CustomFltkDialog::new(data, &spacing, true, dialog_sender);
                         d.show();
                         dialogs2.borrow_mut().insert(id, d);
-                        result.send_ok();
+                        let _ = creation.send(Ok(dialog_receiver));
                     }
                     DialogMessageRequest::SetProgressIndeterminate(id) => {
                         if let Some(dialog) = dialogs2.borrow_mut().get_mut(&id) {

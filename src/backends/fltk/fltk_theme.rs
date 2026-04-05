@@ -43,8 +43,7 @@ pub struct DialogTheme {
 pub fn apply_theme(app_instance: &App, theme: XDialogTheme) -> DialogTheme {
     let theme = match theme {
         XDialogTheme::SystemDefault => {
-            let mode = dark_light::detect().unwrap_or(dark_light::Mode::Light);
-            let is_dark = mode == dark_light::Mode::Dark;
+            let is_dark = false;
             if cfg!(target_os = "windows") {
                 apply_windows_theme(app_instance)
             } else if cfg!(target_os = "macos") {
@@ -255,9 +254,9 @@ pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
 pub fn get_theme_icon_svg(icon: XDialogIcon) -> Option<&'static str> {
     match icon {
         XDialogIcon::None => None,
-        XDialogIcon::Error => Some(crate::images::IMAGE_ERROR_SVG),
-        XDialogIcon::Warning => Some(crate::images::IMAGE_WARNING_SVG),
-        XDialogIcon::Information => Some(crate::images::IMAGE_INFO_SVG),
+        XDialogIcon::Error => Some(super::images::IMAGE_ERROR_SVG),
+        XDialogIcon::Warning => Some(super::images::IMAGE_WARNING_SVG),
+        XDialogIcon::Information => Some(super::images::IMAGE_INFO_SVG),
     }
 }
 

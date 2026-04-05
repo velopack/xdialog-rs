@@ -1,0 +1,145 @@
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+
+          - os: ubuntu-latest
+            name: Linux
+            apt-deps: libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev
+
+          - os: macos-latest
+            name: macOS
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        if: matrix.apt-deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt-deps }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.name }}
+
+      - name: Start virtual display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
+      - name: Build
+        run: cargo build ${{ matrix.cargo-args }}
+
+      - name: Test
+        run: cargo test --lib --tests ${{ matrix.cargo-args }}
+
+  win32-direct:
+    name: Windows (win32-direct)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: win32-direct
+
+      - name: Build
+        run: cargo build --no-default-features --features win32-direct
+
+  doctest:
+    name: Doc Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: doctest
+
+      - name: Run doc tests
+        run: cargo test --doc
+
+  visual-regression:
+    name: Visual Regression (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: macos-latest
+            name: macOS
+          - os: ubuntu-latest
+            name: Linux
+            apt-deps: libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        if: matrix.apt-deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt-deps }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: visual-regression-${{ matrix.name }}
+
+      - name: Start virtual display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb openbox
+          Xvfb :99 -screen 0 1280x1024x24 &
+          sleep 1
+          DISPLAY=:99 openbox &
+          sleep 2
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          # Verify window manager is running
+          DISPLAY=:99 xprop -root _NET_CLIENT_LIST_STACKING || echo "Warning: WM may not be ready"
+
+      - name: Run visual regression tests
+        env:
+          XDIALOG_VISUAL_TEST: "1"
+        run: cargo test ${{ matrix.cargo-args }} --test visual_regression
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-output-${{ matrix.name }}
+          path: tests/visual_output/
