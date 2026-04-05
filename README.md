@@ -2,9 +2,9 @@
 [![Version](https://img.shields.io/crates/v/xdialog?style=flat-square)](https://crates.io/crates/xdialog)
 [![License](https://img.shields.io/crates/l/xdialog?style=flat-square)](https://github.com/velopack/xdialog/blob/master/LICENSE)
 
-A cross-platform library for displaying native(-ish) dialogs in Rust. This library does not
-use native system dialogs, but instead creates its own dialog windows which are designed to
-look and feel like native dialogs. This allows for a simplified API and consistent behavior.
+A cross-platform library for displaying native dialogs in Rust. On Windows and macOS, this
+library uses native system dialogs (Win32 TaskDialog and AppKit). On Linux, it uses GTK3 with
+an FLTK fallback. This allows for a simplified API and consistent behavior across platforms.
 
 This is not a replacement for a proper GUI framework. It is meant to be used for CLI / background
 applications which occasionally need to show dialogs (such as alerts, or progress) to the user.
