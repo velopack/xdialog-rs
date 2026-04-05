@@ -51,9 +51,10 @@ pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
         buttons: vec![],
     };
 
-    let (result_sender, result_receiver) = ResultSender::create();
-    send_request(DialogMessageRequest::ShowProgressWindow(id, data, result_sender))?;
-    result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
+    let (creation_sender, creation_receiver) = oneshot::channel();
+    send_request(DialogMessageRequest::ShowProgressWindow(id, data, creation_sender))?;
+    // Wait for creation confirmation, discard the dialog result receiver
+    let _ = creation_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
     Ok(ProgressDialogProxy { id, silent: false })
 }
 

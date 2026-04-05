@@ -11,12 +11,12 @@ fn manager() -> &'static TaskDialogManager {
 
 pub fn send_request(message: DialogMessageRequest) -> Result<(), XDialogError> {
     match message {
-        DialogMessageRequest::ShowMessageWindow(id, options, mut result) => {
-            result.send_result(manager().show(id, options, false));
+        DialogMessageRequest::ShowMessageWindow(id, options, result) => {
+            manager().show(id, options, false, result);
             Ok(())
         }
-        DialogMessageRequest::ShowProgressWindow(id, options, mut result) => {
-            result.send_result(manager().show(id, options, true));
+        DialogMessageRequest::ShowProgressWindow(id, options, result) => {
+            manager().show(id, options, true, result);
             Ok(())
         }
         DialogMessageRequest::SetProgressValue(id, value) => {

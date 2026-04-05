@@ -13,8 +13,8 @@ impl XDialogBackendImpl for Win32Backend {
         while let Ok(message) = receiver.recv() {
             match message {
                 DialogMessageRequest::None => {}
-                DialogMessageRequest::ShowMessageWindow(id, options, mut result) => {
-                    result.send_result(dialogs.show(id, options, false));
+                DialogMessageRequest::ShowMessageWindow(id, options, result) => {
+                    dialogs.show(id, options, false, result);
                 }
                 DialogMessageRequest::ExitEventLoop => {
                     dialogs.close_all();
@@ -23,8 +23,8 @@ impl XDialogBackendImpl for Win32Backend {
                 DialogMessageRequest::CloseWindow(id) => {
                     dialogs.close(id);
                 }
-                DialogMessageRequest::ShowProgressWindow(id, options, mut result) => {
-                    result.send_result(dialogs.show(id, options, true));
+                DialogMessageRequest::ShowProgressWindow(id, options, result) => {
+                    dialogs.show(id, options, true, result);
                 }
                 DialogMessageRequest::SetProgressIndeterminate(id) => {
                     dialogs.set_progress_indeterminate(id);

@@ -92,21 +92,19 @@ pub fn show_message(options: XDialogOptions, timeout: Option<Duration>) -> Resul
     }
 
     let id = get_next_id();
-    let (result_sender, result_receiver) = ResultSender::create();
-    send_request(DialogMessageRequest::ShowMessageWindow(id, options, result_sender))?;
-    result_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
+    let (creation_sender, creation_receiver) = oneshot::channel();
+    send_request(DialogMessageRequest::ShowMessageWindow(id, options, creation_sender))?;
+    let dialog_receiver = creation_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
 
-    let start = std::time::Instant::now();
-    loop {
-        if let Some(result) = get_result(id) {
-            return Ok(result);
-        }
-        if let Some(timeout) = timeout {
-            if start.elapsed() >= timeout {
-                send_request(DialogMessageRequest::CloseWindow(id))?; // close the dialog
-                return Ok(XDialogResult::TimeoutElapsed);
+    match timeout {
+        Some(timeout) => match dialog_receiver.recv_timeout(timeout) {
+            Ok(result) => Ok(result),
+            Err(oneshot::RecvTimeoutError::Timeout) => {
+                send_request(DialogMessageRequest::CloseWindow(id))?;
+                Ok(XDialogResult::TimeoutElapsed)
             }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(16));
+            Err(oneshot::RecvTimeoutError::Disconnected) => Err(XDialogError::NoResult(oneshot::RecvError)),
+        },
+        None => dialog_receiver.recv().map_err(XDialogError::NoResult),
     }
 }

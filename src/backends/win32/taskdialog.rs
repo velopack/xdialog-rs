@@ -18,7 +18,8 @@ use windows::Win32::UI::Controls::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{EndDialog, SendMessageW, HICON};
 
-use crate::{insert_result, XDialogError, XDialogIcon, XDialogOptions, XDialogResult};
+use crate::{XDialogIcon, XDialogOptions, XDialogResult};
+use crate::model::CreationSender;
 
 #[derive(Debug, PartialEq)]
 enum DialogRequest {
@@ -42,7 +43,7 @@ impl TaskDialogManager {
 }
 
 impl TaskDialogManager {
-    pub fn show(&self, id: usize, data: XDialogOptions, has_progress: bool) -> Result<(), XDialogError> {
+    pub fn show(&self, id: usize, data: XDialogOptions, has_progress: bool, creation: CreationSender) {
         let open_dialogs = self.open_dialogs.clone();
         // Insert a new dialog
         {
@@ -51,6 +52,8 @@ impl TaskDialogManager {
             dialogs.insert(id, (sender, receiver));
         }
 
+        let (dialog_sender, dialog_receiver) = oneshot::channel();
+        let _ = creation.send(Ok(dialog_receiver));
         std::thread::spawn(move || {
             let mut config = TaskDialogConfig::new(open_dialogs.clone());
             config.window_title = data.title;
@@ -134,10 +137,8 @@ impl TaskDialogManager {
                 Err(_) => XDialogResult::WindowClosed,
             };
 
-            insert_result(id, xresult);
+            let _ = dialog_sender.send(xresult);
         });
-
-        Ok(())
     }
 
     pub fn close(&self, id: usize) {

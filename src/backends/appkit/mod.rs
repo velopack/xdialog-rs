@@ -3,6 +3,7 @@ mod appkit_dialog;
 use std::collections::HashMap;
 use std::ptr::NonNull;
 use std::sync::mpsc::{Receiver, TryRecvError};
+use std::sync::{LazyLock, Mutex};
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, ClassBuilder, Sel};
@@ -12,9 +13,21 @@ use objc2_foundation::{NSDate, NSDefaultRunLoopMode};
 
 use crate::backends::XDialogBackendImpl;
 use crate::model::*;
-use crate::state::insert_result;
 
 use appkit_dialog::AppKitDialog;
+
+// Global map of dialog result senders, keyed by dialog id.
+// Required because the button_clicked handler is an extern "C" callback
+// that can't capture Rust state — it looks up the sender by dialog id
+// extracted from the button's tag.
+static RESULT_SENDERS: LazyLock<Mutex<HashMap<usize, oneshot::Sender<XDialogResult>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn send_dialog_result(id: usize, result: XDialogResult) {
+    if let Some(sender) = RESULT_SENDERS.lock().unwrap_or_else(|e| e.into_inner()).remove(&id) {
+        let _ = sender.send(result);
+    }
+}
 
 pub struct AppKitBackend;
 
@@ -45,7 +58,7 @@ unsafe extern "C" fn button_clicked(
     let tag: isize = unsafe { msg_send![sender, tag] };
     let dialog_id = (tag >> 16) as usize;
     let button_index = (tag & 0xFFFF) as usize;
-    insert_result(dialog_id, XDialogResult::ButtonPressed(button_index));
+    send_dialog_result(dialog_id, XDialogResult::ButtonPressed(button_index));
     let window: Option<Retained<AnyObject>> = unsafe { msg_send![sender, window] };
     if let Some(window) = window {
         let () = unsafe { msg_send![&*window, orderOut: std::ptr::null::<AnyObject>()] };
@@ -111,7 +124,7 @@ impl XDialogBackendImpl for AppKitBackend {
                 if dialog.is_visible() {
                     true
                 } else {
-                    insert_result(*id, XDialogResult::WindowClosed);
+                    send_dialog_result(*id, XDialogResult::WindowClosed);
                     false
                 }
             });
@@ -135,20 +148,24 @@ impl XDialogBackendImpl for AppKitBackend {
                     DialogMessageRequest::CloseWindow(id) => {
                         if let Some(dialog) = dialogs.remove(&id) {
                             dialog.close();
-                            insert_result(id, XDialogResult::WindowClosed);
+                            send_dialog_result(id, XDialogResult::WindowClosed);
                         }
                     }
-                    DialogMessageRequest::ShowMessageWindow(id, options, mut result) => {
+                    DialogMessageRequest::ShowMessageWindow(id, options, creation) => {
+                        let (dialog_sender, dialog_receiver) = oneshot::channel();
+                        RESULT_SENDERS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, dialog_sender);
                         let dialog = AppKitDialog::new(id, options, false, &handler);
                         dialog.show();
                         dialogs.insert(id, dialog);
-                        result.send_ok();
+                        let _ = creation.send(Ok(dialog_receiver));
                     }
-                    DialogMessageRequest::ShowProgressWindow(id, options, mut result) => {
+                    DialogMessageRequest::ShowProgressWindow(id, options, creation) => {
+                        let (dialog_sender, dialog_receiver) = oneshot::channel();
+                        RESULT_SENDERS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, dialog_sender);
                         let dialog = AppKitDialog::new(id, options, true, &handler);
                         dialog.show();
                         dialogs.insert(id, dialog);
-                        result.send_ok();
+                        let _ = creation.send(Ok(dialog_receiver));
                     }
                     DialogMessageRequest::SetProgressIndeterminate(id) => {
                         if let Some(dialog) = dialogs.get_mut(&id) {

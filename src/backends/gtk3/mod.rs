@@ -54,19 +54,21 @@ impl XDialogBackendImpl for GtkBackend {
                         gtk::main_quit();
                         return glib::ControlFlow::Break;
                     }
-                    DialogMessageRequest::ShowMessageWindow(id, options, mut result) => {
-                        let dialog = gtk_dialog::GtkDialog::new(id, options, false);
+                    DialogMessageRequest::ShowMessageWindow(id, options, creation) => {
+                        let (dialog_sender, dialog_receiver) = oneshot::channel();
+                        let dialog = gtk_dialog::GtkDialog::new(options, false, dialog_sender);
                         dialogs_ref.borrow_mut().insert(id, dialog);
-                        result.send_ok();
+                        let _ = creation.send(Ok(dialog_receiver));
                     }
-                    DialogMessageRequest::ShowProgressWindow(id, options, mut result) => {
-                        let dialog = gtk_dialog::GtkDialog::new(id, options, true);
+                    DialogMessageRequest::ShowProgressWindow(id, options, creation) => {
+                        let (dialog_sender, dialog_receiver) = oneshot::channel();
+                        let dialog = gtk_dialog::GtkDialog::new(options, true, dialog_sender);
                         dialogs_ref.borrow_mut().insert(id, dialog);
-                        result.send_ok();
+                        let _ = creation.send(Ok(dialog_receiver));
                     }
                     DialogMessageRequest::CloseWindow(id) => {
                         if let Some(dialog) = dialogs_ref.borrow_mut().remove(&id) {
-                            dialog.close(id);
+                            dialog.close();
                         }
                     }
                     DialogMessageRequest::SetProgressIndeterminate(id) => {

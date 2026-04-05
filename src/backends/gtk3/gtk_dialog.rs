@@ -1,20 +1,21 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use gtk::prelude::*;
 
-use crate::model::*;
-use crate::state::insert_result;
+use crate::model::{XDialogIcon, XDialogOptions, XDialogResult};
 
 pub struct GtkDialog {
     window: gtk::Window,
     progress_bar: Option<gtk::ProgressBar>,
     content_label: gtk::Label,
     is_indeterminate: Rc<Cell<bool>>,
+    result_sender: Rc<RefCell<Option<oneshot::Sender<XDialogResult>>>>,
 }
 
 impl GtkDialog {
-    pub fn new(id: usize, options: XDialogOptions, has_progress: bool) -> Self {
+    pub fn new(options: XDialogOptions, has_progress: bool, result_sender: oneshot::Sender<XDialogResult>) -> Self {
+        let result_sender = Rc::new(RefCell::new(Some(result_sender)));
         let window = gtk::Window::new(gtk::WindowType::Toplevel);
         window.set_title(&options.title);
         window.set_default_size(420, -1);
@@ -108,8 +109,11 @@ impl GtkDialog {
                     default_button = Some(button.clone());
                 }
                 let win = window.clone();
+                let rs = result_sender.clone();
                 button.connect_clicked(move |_| {
-                    insert_result(id, XDialogResult::ButtonPressed(idx));
+                    if let Some(sender) = rs.borrow_mut().take() {
+                        let _ = sender.send(XDialogResult::ButtonPressed(idx));
+                    }
                     unsafe { win.destroy(); }
                 });
                 button_box.pack_start(&button, false, false, 0);
@@ -129,8 +133,11 @@ impl GtkDialog {
         }
 
         // Handle window close via X button
+        let rs = result_sender.clone();
         window.connect_delete_event(move |win, _| {
-            insert_result(id, XDialogResult::WindowClosed);
+            if let Some(sender) = rs.borrow_mut().take() {
+                let _ = sender.send(XDialogResult::WindowClosed);
+            }
             unsafe { win.destroy(); }
             glib::Propagation::Stop
         });
@@ -144,6 +151,7 @@ impl GtkDialog {
             progress_bar,
             content_label,
             is_indeterminate,
+            result_sender,
         }
     }
 
@@ -170,8 +178,10 @@ impl GtkDialog {
         }
     }
 
-    pub fn close(&self, id: usize) {
-        insert_result(id, XDialogResult::WindowClosed);
+    pub fn close(&self) {
+        if let Some(sender) = self.result_sender.borrow_mut().take() {
+            let _ = sender.send(XDialogResult::WindowClosed);
+        }
         unsafe { self.window.destroy(); }
         while gtk::events_pending() {
             gtk::main_iteration_do(false);
