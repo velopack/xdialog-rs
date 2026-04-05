@@ -105,17 +105,22 @@ impl XDialogBuilder {
         crate::backends::win32::Win32Backend::run_loop(receiver, theme);
     }
 
+    #[cfg(target_os = "macos")]
+    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
+        crate::backends::appkit::AppKitBackend::run_loop(receiver, theme);
+    }
+
     #[cfg(all(target_os = "linux", feature = "gtk3"))]
     fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
         crate::backends::gtk3::GtkBackend::run_loop(receiver, theme);
     }
 
-    #[cfg(all(not(windows), not(all(target_os = "linux", feature = "gtk3")), feature = "fltk"))]
+    #[cfg(all(not(windows), not(target_os = "macos"), not(all(target_os = "linux", feature = "gtk3")), feature = "fltk"))]
     fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
         Self::run_fltk(receiver, theme);
     }
 
-    #[cfg(all(not(windows), not(all(target_os = "linux", feature = "gtk3")), not(feature = "fltk")))]
+    #[cfg(all(not(windows), not(target_os = "macos"), not(all(target_os = "linux", feature = "gtk3")), not(feature = "fltk")))]
     fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
         error!("xdialog: no backend available");
         // Drain the receiver so the sender thread doesn't block
