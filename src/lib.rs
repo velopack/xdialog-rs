@@ -3,7 +3,7 @@
 //! [![License](https://img.shields.io/crates/l/xdialog?style=flat-square)](https://github.com/velopack/xdialog/blob/master/LICENSE)
 //!
 //! A cross-platform library for displaying native dialogs in Rust. On Windows and macOS, this
-//! library uses native system dialogs (Win32 TaskDialog and AppKit). On Linux, it uses GTK3 with
+//! library uses native system dialogs (Win32 TaskDialog and AppKit). On Linux, it uses GTK4 with
 //! an FLTK fallback. This allows for a simplified API and consistent behavior across platforms.
 //!
 //! This is not a replacement for a proper GUI framework. It is meant to be used for CLI / background
@@ -15,7 +15,7 @@
 //! ## Features
 //! - Cross-platform: works on Windows, macOS, and Linux
 //! - Native backends on Windows (Win32) and macOS (AppKit) with zero additional build dependencies
-//! - GTK3 primary backend on Linux with FLTK fallback
+//! - GTK4 primary backend on Linux with FLTK fallback
 //! - Simple and consistent API across all platforms
 //!
 //! ## Installation
@@ -96,7 +96,7 @@
 //!
 //! ## Build Dependencies
 //! This library uses native backends on Windows (Win32) and macOS (AppKit) with zero additional
-//! build dependencies. On Linux, the library uses GTK3 as the primary backend and falls back to
+//! build dependencies. On Linux, the library uses GTK4 as the primary backend and falls back to
 //! [fltk-rs](https://github.com/fltk-rs/fltk-rs) when GTK is unavailable.
 //!
 

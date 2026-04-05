@@ -13,19 +13,22 @@ pub struct GtkBackend;
 
 impl XDialogBackendImpl for GtkBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
-        // GTK3 uses the system's native theme, so _theme is intentionally unused.
-        if gtk::init().is_err() {
-            error!("xdialog: Failed to initialize GTK3, falling back to FLTK backend");
+        // GTK4 uses the system's native theme, so _theme is intentionally unused.
+        if gtk4::init().is_err() {
+            error!("xdialog: Failed to initialize GTK4, falling back to FLTK backend");
             super::fltk::FltkBackend::run_loop(receiver, _theme);
             return;
         }
+
+        let main_loop = gtk4::glib::MainLoop::new(None, false);
+        let main_loop_quit = main_loop.clone();
 
         let dialogs: Rc<RefCell<HashMap<usize, gtk_dialog::GtkDialog>>> =
             Rc::new(RefCell::new(HashMap::new()));
         let dialogs_ref = dialogs.clone();
 
         // Poll the receiver channel from within the GTK main loop
-        gtk::glib::timeout_add_local(Duration::from_millis(50), move || {
+        gtk4::glib::timeout_add_local(Duration::from_millis(50), move || {
             loop {
                 let message = match receiver.try_recv() {
                     Ok(msg) => msg,
@@ -35,8 +38,8 @@ impl XDialogBackendImpl for GtkBackend {
                         for (_, dialog) in d.drain() {
                             dialog.destroy();
                         }
-                        gtk::main_quit();
-                        return gtk::glib::ControlFlow::Break;
+                        main_loop_quit.quit();
+                        return gtk4::glib::ControlFlow::Break;
                     }
                 };
 
@@ -47,8 +50,8 @@ impl XDialogBackendImpl for GtkBackend {
                         for (_, dialog) in d.drain() {
                             dialog.destroy();
                         }
-                        gtk::main_quit();
-                        return gtk::glib::ControlFlow::Break;
+                        main_loop_quit.quit();
+                        return gtk4::glib::ControlFlow::Break;
                     }
                     DialogMessageRequest::ShowMessageWindow(id, options, creation) => {
                         let (dialog_sender, dialog_receiver) = oneshot::channel();
@@ -91,9 +94,9 @@ impl XDialogBackendImpl for GtkBackend {
                 dialog.pulse_if_indeterminate();
             }
 
-            gtk::glib::ControlFlow::Continue
+            gtk4::glib::ControlFlow::Continue
         });
 
-        gtk::main();
+        main_loop.run();
     }
 }

@@ -107,7 +107,7 @@ impl XDialogBuilder {
 
     #[cfg(target_os = "linux")]
     fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
-        crate::backends::gtk3::GtkBackend::run_loop(receiver, theme);
+        crate::backends::gtk4::GtkBackend::run_loop(receiver, theme);
     }
 
     fn dispatch_backend(
@@ -127,7 +127,7 @@ impl XDialogBuilder {
                 Self::dispatch_backend(XDialogBackend::Automatic, receiver, theme);
             }
             #[cfg(target_os = "linux")]
-            XDialogBackend::Gtk => crate::backends::gtk3::GtkBackend::run_loop(receiver, theme),
+            XDialogBackend::Gtk => crate::backends::gtk4::GtkBackend::run_loop(receiver, theme),
             #[cfg(not(target_os = "linux"))]
             XDialogBackend::Gtk => {
                 error!("xdialog: GTK backend is only available on Linux");

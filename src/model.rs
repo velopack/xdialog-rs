@@ -7,7 +7,7 @@ pub enum XDialogBackend {
     Fltk,
     /// Prefer the native backend for the current platform (eg. Win32), falling back to FLTK
     NativePreferred,
-    /// Use the GTK3 backend (Linux only)
+    /// Use the GTK4 backend (Linux only)
     Gtk,
 }
 

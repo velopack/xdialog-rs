@@ -56,9 +56,9 @@ objc2-app-kit = { version = "0.3", features = [
 ] }
 block2 = "0.6"
 
-# GTK3 Backend
+# GTK4 Backend
 [target.'cfg(target_os = "linux")'.dependencies]
-gtk = "0.18"
+gtk4 = "0.9"
 # FLTK Backend (fallback when GTK unavailable)
 enum-map = "2.7"
 fltk = { version = "1.5", features = ["fltk-bundled"] }

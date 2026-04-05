@@ -1,14 +1,14 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use gtk::prelude::*;
+use gtk4::prelude::*;
 
 use crate::model::{XDialogIcon, XDialogOptions, XDialogResult};
 
 pub struct GtkDialog {
-    window: gtk::Window,
-    progress_bar: Option<gtk::ProgressBar>,
-    content_label: gtk::Label,
+    window: gtk4::Window,
+    progress_bar: Option<gtk4::ProgressBar>,
+    content_label: gtk4::Label,
     is_indeterminate: Rc<Cell<bool>>,
     result_sender: Rc<RefCell<Option<oneshot::Sender<XDialogResult>>>>,
 }
@@ -16,22 +16,21 @@ pub struct GtkDialog {
 impl GtkDialog {
     pub fn new(options: XDialogOptions, has_progress: bool, result_sender: oneshot::Sender<XDialogResult>) -> Self {
         let result_sender = Rc::new(RefCell::new(Some(result_sender)));
-        let window = gtk::Window::new(gtk::WindowType::Toplevel);
-        window.set_title(&options.title);
+        let window = gtk4::Window::new();
+        window.set_title(Some(&options.title));
         window.set_default_size(420, -1);
         window.set_resizable(false);
-        window.set_position(gtk::WindowPosition::Center);
-        window.set_keep_above(true);
+        window.set_modal(true);
 
         // Root vertical box
-        let vbox = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        let vbox = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
         vbox.set_margin_start(18);
         vbox.set_margin_end(18);
         vbox.set_margin_top(18);
         vbox.set_margin_bottom(18);
 
         // Header area: icon + text side-by-side
-        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 12);
+        let hbox = gtk4::Box::new(gtk4::Orientation::Horizontal, 12);
 
         let icon_name = match options.icon {
             XDialogIcon::Error => Some("dialog-error"),
@@ -40,48 +39,55 @@ impl GtkDialog {
             XDialogIcon::None => None,
         };
         if let Some(name) = icon_name {
-            let image = gtk::Image::from_icon_name(Some(name), gtk::IconSize::Dialog);
-            image.set_valign(gtk::Align::Start);
-            hbox.pack_start(&image, false, false, 0);
+            let image = gtk4::Image::from_icon_name(name);
+            image.set_icon_size(gtk4::IconSize::Large);
+            image.set_valign(gtk4::Align::Start);
+            hbox.append(&image);
         }
 
-        let text_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        let text_box = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
 
         // Main instruction: bold, larger text
         if !options.main_instruction.is_empty() {
-            let label = gtk::Label::new(None);
+            let label = gtk4::Label::new(None);
             label.set_markup(&format!(
                 "<span size='large' weight='bold'>{}</span>",
-                gtk::glib::markup_escape_text(&options.main_instruction)
+                gtk4::glib::markup_escape_text(&options.main_instruction)
             ));
             label.set_xalign(0.0);
-            label.set_line_wrap(true);
+            label.set_wrap(true);
             label.set_max_width_chars(50);
             label.set_selectable(true);
-            label.set_can_focus(false);
-            text_box.pack_start(&label, false, false, 0);
+            label.set_focusable(false);
+            text_box.append(&label);
         }
 
         // Body message
-        let content_label = gtk::Label::new(None);
+        let content_label = gtk4::Label::new(None);
         if !options.message.is_empty() {
             content_label.set_text(&options.message);
         }
         content_label.set_xalign(0.0);
-        content_label.set_line_wrap(true);
+        content_label.set_wrap(true);
         content_label.set_max_width_chars(50);
         content_label.set_selectable(true);
-        content_label.set_can_focus(false);
-        text_box.pack_start(&content_label, false, false, 0);
+        content_label.set_focusable(false);
 
-        hbox.pack_start(&text_box, true, true, 0);
-        vbox.pack_start(&hbox, true, true, 0);
+        text_box.set_hexpand(true);
+        text_box.set_vexpand(true);
+        text_box.append(&content_label);
+
+        hbox.append(&text_box);
+
+        hbox.set_hexpand(true);
+        hbox.set_vexpand(true);
+        vbox.append(&hbox);
 
         // Progress bar (optional)
         let progress_bar = if has_progress {
-            let pb = gtk::ProgressBar::new();
+            let pb = gtk4::ProgressBar::new();
             pb.set_show_text(false);
-            vbox.pack_start(&pb, false, false, 0);
+            vbox.append(&pb);
             Some(pb)
         } else {
             None
@@ -89,23 +95,21 @@ impl GtkDialog {
 
         // Separator before buttons
         if !options.buttons.is_empty() {
-            let sep = gtk::Separator::new(gtk::Orientation::Horizontal);
-            vbox.pack_start(&sep, false, false, 0);
+            let sep = gtk4::Separator::new(gtk4::Orientation::Horizontal);
+            vbox.append(&sep);
         }
 
         // Buttons
         if !options.buttons.is_empty() {
-            let button_box = gtk::ButtonBox::new(gtk::Orientation::Horizontal);
-            button_box.set_layout(gtk::ButtonBoxStyle::End);
-            button_box.set_spacing(6);
+            let button_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 6);
+            button_box.set_halign(gtk4::Align::End);
 
             let last_idx = options.buttons.len() - 1;
             let mut default_button = None;
             for (idx, text) in options.buttons.iter().enumerate() {
-                let button = gtk::Button::with_label(text);
+                let button = gtk4::Button::with_label(text);
                 if idx == last_idx {
-                    button.style_context().add_class("suggested-action");
-                    button.set_can_default(true);
+                    button.add_css_class("suggested-action");
                     default_button = Some(button.clone());
                 }
                 let win = window.clone();
@@ -114,35 +118,35 @@ impl GtkDialog {
                     if let Some(sender) = rs.borrow_mut().take() {
                         let _ = sender.send(XDialogResult::ButtonPressed(idx));
                     }
-                    unsafe { win.destroy(); }
+                    win.destroy();
                 });
-                button_box.pack_start(&button, false, false, 0);
+                button_box.append(&button);
             }
 
-            vbox.pack_start(&button_box, false, false, 0);
+            vbox.append(&button_box);
 
-            window.add(&vbox);
+            window.set_child(Some(&vbox));
 
             // Set default button after widget hierarchy is established
             if let Some(ref btn) = default_button {
-                window.set_default(Some(btn));
+                window.set_default_widget(Some(btn));
                 btn.grab_focus();
             }
         } else {
-            window.add(&vbox);
+            window.set_child(Some(&vbox));
         }
 
         // Handle window close via X button
         let rs = result_sender.clone();
-        window.connect_delete_event(move |win, _| {
+        window.connect_close_request(move |win| {
             if let Some(sender) = rs.borrow_mut().take() {
                 let _ = sender.send(XDialogResult::WindowClosed);
             }
-            unsafe { win.destroy(); }
-            gtk::glib::Propagation::Stop
+            win.destroy();
+            gtk4::glib::Propagation::Stop
         });
 
-        window.show_all();
+        window.present();
 
         let is_indeterminate = Rc::new(Cell::new(false));
 
@@ -182,16 +186,12 @@ impl GtkDialog {
         if let Some(sender) = self.result_sender.borrow_mut().take() {
             let _ = sender.send(XDialogResult::WindowClosed);
         }
-        unsafe { self.window.destroy(); }
-        while gtk::events_pending() {
-            gtk::main_iteration_do(false);
-        }
+        self.window.destroy();
+        while gtk4::glib::MainContext::default().iteration(false) {}
     }
 
     pub fn destroy(self) {
-        unsafe { self.window.destroy(); }
-        while gtk::events_pending() {
-            gtk::main_iteration_do(false);
-        }
+        self.window.destroy();
+        while gtk4::glib::MainContext::default().iteration(false) {}
     }
 }
