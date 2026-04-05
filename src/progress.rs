@@ -6,7 +6,7 @@ use crate::*;
 /// The progress bar can be set to a specific value, or set to indeterminate mode.
 ///
 /// ### Example
-/// ```rust
+/// ```rust,no_run
 /// use xdialog::*;
 ///
 /// fn main() {

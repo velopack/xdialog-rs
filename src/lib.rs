@@ -35,7 +35,7 @@
 //! Since some platforms require UI to be run on the main thread, xdialog expects to own the
 //! main thread, and will launch your core application logic in another thread.
 //!
-//! ```rust
+//! ```rust,no_run
 //! use xdialog::*;
 //!
 //! fn main() {
