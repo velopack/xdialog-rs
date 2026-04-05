@@ -232,7 +232,7 @@ mod capture {
 mod capture {
     use super::*;
 
-    pub fn capture_window_to_file(title: &str, _output_path: &Path) -> bool {
+    pub fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
         #[cfg(target_os = "macos")]
         {
             const MAX_ATTEMPTS: u32 = 20;
