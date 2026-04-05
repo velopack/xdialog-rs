@@ -11,6 +11,7 @@ categories = ["graphics", "gui", "visualization"]
 
 [features]
 default = []
+gtk = ["dep:gtk"]
 win32-direct = []
 
 [dependencies]
@@ -56,10 +57,10 @@ objc2-app-kit = { version = "0.3", features = [
 ] }
 block2 = "0.6"
 
-# GTK3 Backend
+# GTK3 Backend (optional, enable with "gtk" feature)
 [target.'cfg(target_os = "linux")'.dependencies]
-gtk = "0.18"
-# FLTK Backend (fallback when GTK unavailable)
+gtk = { version = "0.18", optional = true }
+# FLTK Backend
 enum-map = "2.7"
 fltk = { version = "1.5", features = ["fltk-bundled"] }
 font-kit = "0.14"
