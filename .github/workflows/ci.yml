@@ -56,6 +56,43 @@ jobs:
       - name: Test
         run: cargo test --lib --tests ${{ matrix.cargo-args }}
 
+  clippy:
+    name: Clippy (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+
+          - os: ubuntu-latest
+            name: Linux
+            apt-deps: libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev
+
+          - os: macos-latest
+            name: macOS
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        if: matrix.apt-deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.apt-deps }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: clippy-${{ matrix.name }}
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
   win32-direct:
     name: Windows (win32-direct)
     runs-on: windows-latest
@@ -69,7 +106,7 @@ jobs:
           key: win32-direct
 
       - name: Build
-        run: cargo build --no-default-features --features win32-direct
+        run: cargo build --features win32-direct
 
   doctest:
     name: Doc Tests
