@@ -10,22 +10,13 @@ keywords = ["dialog", "message-box", "messagebox", "cross-platform"]
 categories = ["graphics", "gui", "visualization"]
 
 [features]
-default = ["fltk-bundled", "gtk3"]
-fltk = ["dep:fltk", "dep:font-kit", "dep:mina", "dep:enum-map"]
-fltk-bundled = ["fltk", "fltk/fltk-bundled"]
-gtk3 = ["dep:gtk", "dep:glib"]
+default = []
 win32-direct = []
 
 [dependencies]
 log = "0.4"
 oneshot = { version = "0.2", features = ["std"] }
 thiserror = "2.0"
-
-# FLTK Backend
-enum-map = { version = "2.7", optional = true }
-fltk = { version = "1.5", optional = true }
-font-kit = { version = "0.14", optional = true }
-mina = { version = "0.1", optional = true }
 
 # AppKit Backend
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -67,8 +58,13 @@ block2 = "0.6"
 
 # GTK3 Backend
 [target.'cfg(target_os = "linux")'.dependencies]
-gtk = { version = "0.18", optional = true }
-glib = { version = "0.18", optional = true }
+gtk = "0.18"
+glib = "0.18"
+# FLTK Backend (fallback when GTK unavailable)
+enum-map = "2.7"
+fltk = { version = "1.5", features = ["fltk-bundled"] }
+font-kit = "0.14"
+mina = "0.1"
 
 # Win32 Backend
 [target.'cfg(windows)'.dependencies]

@@ -1,10 +1,10 @@
 use crate::model::{DialogMessageRequest, XDialogTheme};
 use std::sync::mpsc::Receiver;
 
-#[cfg(feature = "fltk")]
+#[cfg(target_os = "linux")]
 pub mod fltk;
 
-#[cfg(all(target_os = "linux", feature = "gtk3"))]
+#[cfg(target_os = "linux")]
 pub mod gtk3;
 
 #[cfg(windows)]
