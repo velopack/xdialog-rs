@@ -105,9 +105,14 @@ impl XDialogBuilder {
         crate::backends::appkit::AppKitBackend::run_loop(receiver, theme);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "gtk"))]
     fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
         crate::backends::gtk3::GtkBackend::run_loop(receiver, theme);
+    }
+
+    #[cfg(all(target_os = "linux", not(feature = "gtk")))]
+    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
+        crate::backends::fltk::FltkBackend::run_loop(receiver, theme);
     }
 
     fn dispatch_backend(
@@ -126,11 +131,11 @@ impl XDialogBuilder {
                 error!("xdialog: FLTK backend is only available on Linux");
                 Self::dispatch_backend(XDialogBackend::Automatic, receiver, theme);
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "gtk"))]
             XDialogBackend::Gtk => crate::backends::gtk3::GtkBackend::run_loop(receiver, theme),
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(all(target_os = "linux", feature = "gtk")))]
             XDialogBackend::Gtk => {
-                error!("xdialog: GTK backend is only available on Linux");
+                error!("xdialog: GTK backend is not available (enable the 'gtk' feature on Linux)");
                 Self::dispatch_backend(XDialogBackend::Automatic, receiver, theme);
             }
         }

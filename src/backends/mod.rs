@@ -4,7 +4,7 @@ use std::sync::mpsc::Receiver;
 #[cfg(target_os = "linux")]
 pub mod fltk;
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "gtk"))]
 pub mod gtk3;
 
 #[cfg(windows)]
