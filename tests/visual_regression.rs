@@ -157,59 +157,82 @@ mod capture {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
 mod capture {
     use super::*;
+    use xcap::Window;
 
+    /// Attempts to find a window by exact title and capture it.
+    fn try_capture(title: &str) -> Option<RgbaImage> {
+        let windows = Window::all().ok()?;
+        let window = windows
+            .iter()
+            .find(|w| w.title().unwrap_or_default() == title)?;
+
+        let img = window.capture_image().ok()?;
+        if img.width() == 0 || img.height() == 0 {
+            eprintln!("Window found but has zero size: {}x{}", img.width(), img.height());
+            return None;
+        }
+        Some(img)
+    }
+
+    /// Finds a window by exact title and captures it to a PNG file.
+    /// Retries several times to handle timing where the dialog hasn't appeared yet.
     pub fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
-        // Linux: use xdotool + import (ImageMagick)
-        #[cfg(target_os = "linux")]
-        {
-            let wid_output = std::process::Command::new("xdotool")
-                .args(["search", "--name", title])
-                .output();
+        const MAX_ATTEMPTS: u32 = 20;
+        const RETRY_DELAY_MS: u64 = 500;
 
-            let wid_str = match wid_output {
-                Ok(output) => {
-                    String::from_utf8_lossy(&output.stdout)
-                        .lines()
-                        .next()
-                        .unwrap_or("")
-                        .trim()
-                        .to_string()
+        for attempt in 1..=MAX_ATTEMPTS {
+            match try_capture(title) {
+                Some(img) => {
+                    if let Some(parent) = output_path.parent() {
+                        std::fs::create_dir_all(parent).ok();
+                    }
+                    match img.save(output_path) {
+                        Ok(_) => {
+                            eprintln!(
+                                "Captured '{}' ({}x{}) on attempt {}",
+                                title,
+                                img.width(),
+                                img.height(),
+                                attempt
+                            );
+                            return true;
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to save screenshot: {}", e);
+                            return false;
+                        }
+                    }
                 }
-                Err(e) => {
-                    eprintln!("xdotool failed: {}. Install with: sudo apt-get install xdotool", e);
-                    return false;
-                }
-            };
-
-            if wid_str.is_empty() {
-                eprintln!("Window '{}' not found via xdotool", title);
-                return false;
-            }
-
-            if let Some(parent) = output_path.parent() {
-                std::fs::create_dir_all(parent).ok();
-            }
-
-            let status = std::process::Command::new("import")
-                .args(["-window", &wid_str, output_path.to_str().unwrap()])
-                .status();
-
-            match status {
-                Ok(s) if s.success() => true,
-                Ok(s) => {
-                    eprintln!("import exited with: {}", s);
-                    false
-                }
-                Err(e) => {
-                    eprintln!("import failed: {}. Install with: sudo apt-get install imagemagick", e);
-                    false
+                None => {
+                    if attempt < MAX_ATTEMPTS {
+                        if attempt == 1 {
+                            eprintln!("Window '{}' not found yet, retrying...", title);
+                        }
+                        thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+                    } else {
+                        eprintln!(
+                            "Window '{}' not found after {} attempts ({:.1}s)",
+                            title,
+                            MAX_ATTEMPTS,
+                            MAX_ATTEMPTS as f64 * RETRY_DELAY_MS as f64 / 1000.0
+                        );
+                    }
                 }
             }
         }
 
+        false
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+mod capture {
+    use super::*;
+
+    pub fn capture_window_to_file(title: &str, _output_path: &Path) -> bool {
         #[cfg(target_os = "macos")]
         {
             const MAX_ATTEMPTS: u32 = 20;
@@ -278,10 +301,10 @@ mod capture {
             false
         }
 
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(not(target_os = "macos"))]
         {
             eprintln!("Unsupported platform for window capture");
-            false
+            return false;
         }
     }
 }

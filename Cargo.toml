@@ -92,8 +92,6 @@ harness = false
 [dev-dependencies]
 ntest = "0.9"
 image = "0.25"
-
-[target.'cfg(target_os = "macos")'.dev-dependencies]
 xcap = "0.9"
 
 [target.'cfg(windows)'.dev-dependencies]
