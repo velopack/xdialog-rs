@@ -147,8 +147,11 @@ jobs:
       - name: Start virtual display
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y xvfb openbox
           Xvfb :99 -screen 0 1280x1024x24 &
+          sleep 1
+          DISPLAY=:99 openbox &
+          sleep 1
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Run visual regression tests
