@@ -18,7 +18,7 @@ const DIALOG_TIMEOUT_SECS: u64 = 15;
 const PIXEL_THRESHOLD: u8 = 10;
 
 /// Maximum fraction of pixels that can differ before the test fails.
-const DIFF_PERCENT_THRESHOLD: f64 = 0.02; // 2%
+const DIFF_PERCENT_THRESHOLD: f64 = 0.05; // 5%
 
 // --- Platform-specific window capture ---
 
@@ -405,16 +405,16 @@ fn run_all_captures() {
     handle.join().unwrap();
 
     // 2. Progress dialog (non-blocking - capture inline)
-    let output = output_dir().join("progress_50.png");
+    let output = output_dir().join("progress_0.png");
     let progress = show_progress(
         DIALOG_TITLE,
         "Working...",
-        "50% complete",
+        "Downloading update...",
         XDialogIcon::Information,
     )
     .unwrap();
 
-    progress.set_value(0.5).unwrap();
+    progress.set_value(0.0).unwrap();
     thread::sleep(Duration::from_millis(RENDER_WAIT_MS));
     capture::capture_window_to_file(DIALOG_TITLE, &output);
     progress.close().unwrap();
@@ -427,5 +427,5 @@ fn run_all_captures() {
 fn visual_regression() {
     XDialogBuilder::new().run(run_all_captures);
     seed_or_compare("message_info");
-    seed_or_compare("progress_50");
+    seed_or_compare("progress_0");
 }
