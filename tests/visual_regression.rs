@@ -212,7 +212,69 @@ mod capture {
 
         #[cfg(target_os = "macos")]
         {
-            eprintln!("macOS window capture not yet implemented");
+            const MAX_ATTEMPTS: u32 = 20;
+            const RETRY_DELAY_MS: u64 = 500;
+
+            for attempt in 1..=MAX_ATTEMPTS {
+                let windows = match xcap::Window::all() {
+                    Ok(w) => w,
+                    Err(e) => {
+                        eprintln!("Failed to list windows: {}", e);
+                        if attempt < MAX_ATTEMPTS {
+                            thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+                            continue;
+                        }
+                        return false;
+                    }
+                };
+
+                if let Some(window) = windows.iter().find(|w| w.title().ok().as_deref() == Some(title)) {
+                    match window.capture_image() {
+                        Ok(img) => {
+                            if let Some(parent) = output_path.parent() {
+                                std::fs::create_dir_all(parent).ok();
+                            }
+                            match img.save(output_path) {
+                                Ok(_) => {
+                                    eprintln!(
+                                        "Captured '{}' ({}x{}) on attempt {}",
+                                        title,
+                                        img.width(),
+                                        img.height(),
+                                        attempt
+                                    );
+                                    return true;
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to save screenshot: {}", e);
+                                    return false;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to capture window: {}", e);
+                            if attempt < MAX_ATTEMPTS {
+                                thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+                            }
+                        }
+                    }
+                } else {
+                    if attempt == 1 {
+                        eprintln!("Window '{}' not found yet, retrying...", title);
+                    }
+                    if attempt < MAX_ATTEMPTS {
+                        thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+                    } else {
+                        eprintln!(
+                            "Window '{}' not found after {} attempts ({:.1}s)",
+                            title,
+                            MAX_ATTEMPTS,
+                            MAX_ATTEMPTS as f64 * RETRY_DELAY_MS as f64 / 1000.0
+                        );
+                    }
+                }
+            }
+
             false
         }
 
@@ -422,9 +484,12 @@ fn run_all_captures() {
 
 // --- Test ---
 
-#[test]
-#[ignore]
-fn visual_regression() {
+fn main() {
+    if std::env::var("XDIALOG_VISUAL_TEST").is_err() && std::env::var("XDIALOG_VISUAL_SEED").is_err() {
+        eprintln!("Skipping visual regression (set XDIALOG_VISUAL_TEST=1 or XDIALOG_VISUAL_SEED=1 to run)");
+        return;
+    }
+
     XDialogBuilder::new().run(run_all_captures);
     seed_or_compare("message_info");
     seed_or_compare("progress_0");

@@ -115,8 +115,17 @@ jobs:
         run: cargo test --doc
 
   visual-regression:
-    name: Visual Regression (Windows)
-    runs-on: windows-latest
+    name: Visual Regression (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+            cargo-args: --no-default-features
+          - os: macos-latest
+            name: macOS
     steps:
       - uses: actions/checkout@v4
 
@@ -124,14 +133,16 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: visual-regression
+          key: visual-regression-${{ matrix.name }}
 
       - name: Run visual regression tests
-        run: cargo test --no-default-features --test visual_regression -- --ignored --test-threads=1
+        env:
+          XDIALOG_VISUAL_TEST: "1"
+        run: cargo test ${{ matrix.cargo-args }} --test visual_regression
 
       - name: Upload screenshots on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: visual-regression-output
+          name: visual-regression-output-${{ matrix.name }}
           path: tests/visual_output/

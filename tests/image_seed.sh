@@ -31,7 +31,7 @@ if [ "$PLATFORM" = "linux" ] && [ -z "$DISPLAY" ]; then
 fi
 
 # Run visual tests in seed mode (single-threaded to avoid dialog overlap)
-XDIALOG_VISUAL_SEED=1 cargo test $CARGO_ARGS --test visual_regression -- --ignored --test-threads=1
+XDIALOG_VISUAL_SEED=1 cargo test $CARGO_ARGS --test visual_regression
 
 echo ""
 echo "Reference images saved to tests/visual_references/$PLATFORM/"
