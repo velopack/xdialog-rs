@@ -13,9 +13,9 @@ It's main use-case is for the [Velopack](https://velopack.io) application instal
 update framework.
 
 ## Features
-- Cross-platform: works on Windows, MacOS, and Linux
-- Zero dependencies on Windows or MacOS, only requires X11 on Linux.
-- Very small size (as little as 100kb added to your binary with optimal settings)
+- Cross-platform: works on Windows, macOS, and Linux
+- Native backends on Windows (Win32) and macOS (AppKit) with zero additional build dependencies
+- GTK3 primary backend on Linux with FLTK fallback
 - Simple and consistent API across all platforms
 
 ## Installation
@@ -88,14 +88,10 @@ There are more examples in the `examples` directory.
 cargo run --example various_options
 ```
 
-## Build Dependencies
-This library uses [fltk-rs](https://github.com/fltk-rs/fltk-rs) for it's primary backend.
-By default, [fltk-rs](https://github.com/fltk-rs/fltk-rs) provides pre-compiled binaries for
-most platforms (win-x64, linux-x64, linux-arm64, mac-x64, mac-arm64).
+## Backends
+- **Windows**: Native Win32 TaskDialog API
+- **macOS**: Native AppKit dialogs
+- **Linux**: GTK3 (primary), with automatic fallback to [fltk-rs](https://github.com/fltk-rs/fltk-rs) if GTK fails to initialize
 
-If you are compiling for a platform that does not have pre-compiled binaries, you will need
-to disable the `fltk-bundled` feature and ensure that cmake is installed on your system.
-
-```toml
-[dependencies]
-xdialog = { version = "0", default-features = false }
+On Linux, pre-compiled FLTK binaries are bundled for common architectures (x64, arm64).
+GTK3 development libraries are required at build time (`libgtk-3-dev` on Debian/Ubuntu).
