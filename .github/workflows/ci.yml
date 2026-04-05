@@ -32,19 +32,19 @@ jobs:
           - os: ubuntu-latest
             name: Linux (fltk-bundled)
             cargo-args: --no-default-features --features fltk-bundled
-            apt-deps: libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev
+            apt-deps: libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev
 
           # Linux - gtk3 only
           - os: ubuntu-latest
             name: Linux (gtk3)
             cargo-args: --no-default-features --features gtk3
-            apt-deps: libgtk-3-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev
+            apt-deps: libgtk-3-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev
 
           # Linux - fltk + gtk3
           - os: ubuntu-latest
             name: Linux (fltk-bundled + gtk3)
             cargo-args: --no-default-features --features fltk-bundled,gtk3
-            apt-deps: libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev
+            apt-deps: libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev
 
           # macOS - fltk only (no integration tests - FLTK crashes on headless CI)
           - os: macos-latest
@@ -103,7 +103,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev
+          sudo apt-get install -y libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -128,7 +128,7 @@ jobs:
             name: macOS
           - os: ubuntu-latest
             name: Linux
-            apt-deps: libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev
+            apt-deps: libgtk-3-dev libx11-dev libxext-dev libxft-dev libxinerama-dev libxcursor-dev libxrender-dev libxfixes-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev
     steps:
       - uses: actions/checkout@v4
 
