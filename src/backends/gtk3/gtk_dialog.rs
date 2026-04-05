@@ -52,7 +52,7 @@ impl GtkDialog {
             let label = gtk::Label::new(None);
             label.set_markup(&format!(
                 "<span size='large' weight='bold'>{}</span>",
-                glib::markup_escape_text(&options.main_instruction)
+                gtk::glib::markup_escape_text(&options.main_instruction)
             ));
             label.set_xalign(0.0);
             label.set_line_wrap(true);
@@ -139,7 +139,7 @@ impl GtkDialog {
                 let _ = sender.send(XDialogResult::WindowClosed);
             }
             unsafe { win.destroy(); }
-            glib::Propagation::Stop
+            gtk::glib::Propagation::Stop
         });
 
         window.show_all();

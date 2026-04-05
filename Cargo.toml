@@ -59,7 +59,6 @@ block2 = "0.6"
 # GTK3 Backend
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
-glib = "0.22"
 # FLTK Backend (fallback when GTK unavailable)
 enum-map = "2.7"
 fltk = { version = "1.5", features = ["fltk-bundled"] }

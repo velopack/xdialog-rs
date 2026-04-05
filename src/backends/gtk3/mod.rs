@@ -25,7 +25,7 @@ impl XDialogBackendImpl for GtkBackend {
         let dialogs_ref = dialogs.clone();
 
         // Poll the receiver channel from within the GTK main loop
-        glib::timeout_add_local(Duration::from_millis(50), move || {
+        gtk::glib::timeout_add_local(Duration::from_millis(50), move || {
             loop {
                 let message = match receiver.try_recv() {
                     Ok(msg) => msg,
@@ -36,7 +36,7 @@ impl XDialogBackendImpl for GtkBackend {
                             dialog.destroy();
                         }
                         gtk::main_quit();
-                        return glib::ControlFlow::Break;
+                        return gtk::glib::ControlFlow::Break;
                     }
                 };
 
@@ -48,7 +48,7 @@ impl XDialogBackendImpl for GtkBackend {
                             dialog.destroy();
                         }
                         gtk::main_quit();
-                        return glib::ControlFlow::Break;
+                        return gtk::glib::ControlFlow::Break;
                     }
                     DialogMessageRequest::ShowMessageWindow(id, options, creation) => {
                         let (dialog_sender, dialog_receiver) = oneshot::channel();
@@ -91,7 +91,7 @@ impl XDialogBackendImpl for GtkBackend {
                 dialog.pulse_if_indeterminate();
             }
 
-            glib::ControlFlow::Continue
+            gtk::glib::ControlFlow::Continue
         });
 
         gtk::main();
