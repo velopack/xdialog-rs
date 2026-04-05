@@ -73,3 +73,26 @@ jobs:
 
       - name: Build
         run: cargo build ${{ matrix.cargo-args }}
+
+  visual-regression:
+    name: Visual Regression (Windows)
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: visual-regression
+
+      - name: Run visual regression tests
+        run: cargo test --no-default-features --test visual_regression -- --ignored --test-threads=1
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-output
+          path: tests/visual_output/
