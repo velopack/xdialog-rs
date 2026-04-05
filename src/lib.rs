@@ -119,7 +119,6 @@ mod backends;
 mod channel;
 #[cfg(not(feature = "win32-direct"))]
 use channel::*;
-
 #[cfg(not(feature = "win32-direct"))]
 mod builder;
 #[cfg(not(feature = "win32-direct"))]

@@ -95,11 +95,6 @@ impl XDialogBuilder {
 }
 
 impl XDialogBuilder {
-    #[cfg(target_os = "linux")]
-    fn run_fltk(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
-        crate::backends::fltk::FltkBackend::run_loop(receiver, theme);
-    }
-
     #[cfg(windows)]
     fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
         crate::backends::win32::Win32Backend::run_loop(receiver, theme);
@@ -125,7 +120,7 @@ impl XDialogBuilder {
                 Self::run_default_backend(receiver, theme);
             }
             #[cfg(target_os = "linux")]
-            XDialogBackend::Fltk => Self::run_fltk(receiver, theme),
+            XDialogBackend::Fltk => crate::backends::fltk::FltkBackend::run_loop(receiver, theme),
             #[cfg(not(target_os = "linux"))]
             XDialogBackend::Fltk => {
                 error!("xdialog: FLTK backend is only available on Linux");

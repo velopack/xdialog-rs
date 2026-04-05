@@ -94,7 +94,7 @@ pub fn show_message(options: XDialogOptions, timeout: Option<Duration>) -> Resul
     let id = get_next_id();
     let (creation_sender, creation_receiver) = oneshot::channel();
     send_request(DialogMessageRequest::ShowMessageWindow(id, options, creation_sender))?;
-    let dialog_receiver = creation_receiver.recv().map_err(|e| XDialogError::NoResult(e))??;
+    let dialog_receiver = creation_receiver.recv().map_err(XDialogError::NoResult)??;
 
     match timeout {
         Some(timeout) => match dialog_receiver.recv_timeout(timeout) {
