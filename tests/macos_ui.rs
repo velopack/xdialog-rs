@@ -1,6 +1,3 @@
-use std::time::{Duration, Instant};
-use xdialog::*;
-
 fn main() {
     #[cfg(target_os = "macos")]
     {
@@ -16,6 +13,9 @@ fn run() {
 
 #[cfg(target_os = "macos")]
 fn test_message_timeout() {
+    use std::time::{Duration, Instant};
+    use xdialog::*;
+
     let timeout = Duration::from_secs(1);
     let start = Instant::now();
 
@@ -38,6 +38,9 @@ fn test_message_timeout() {
 
 #[cfg(target_os = "macos")]
 fn test_progress_close_twice() {
+    use std::time::Duration;
+    use xdialog::*;
+
     let progress = show_progress(
         "Close Twice Test",
         "Testing double close",
