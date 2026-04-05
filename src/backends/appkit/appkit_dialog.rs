@@ -17,7 +17,7 @@ const ICON_PROGRESS_SIZE: f64 = 48.0;
 const BUTTON_HEIGHT: f64 = 24.0;
 const BUTTON_MIN_WIDTH: f64 = 80.0;
 const BUTTON_SPACING: f64 = 8.0;
-const BUTTON_PANEL_HEIGHT: f64 = 52.0;
+const BUTTON_PANEL_HEIGHT: f64 = 38.0;
 const TEXT_SPACING: f64 = 8.0;
 const PROGRESS_HEIGHT: f64 = 20.0;
 const TITLE_FONT_SIZE: f64 = 13.0;
@@ -159,9 +159,6 @@ impl AppKitDialog {
     }
 
     fn layout(&mut self) {
-        let title_font = NSFont::boldSystemFontOfSize(TITLE_FONT_SIZE);
-        let body_font = NSFont::systemFontOfSize(BODY_FONT_SIZE);
-
         let has_icon = self.icon_view.is_some();
         let icon_size = if self.has_progress { ICON_PROGRESS_SIZE } else { ICON_SIZE };
 
@@ -174,14 +171,14 @@ impl AppKitDialog {
             content_width
         };
 
-        // Measure text
-        let title_height = if !self.options.main_instruction.is_empty() {
-            measure_text_height(&self.options.main_instruction, &title_font, text_area_width)
+        // Measure text using actual field cells (accounts for wrapping/padding)
+        let title_height = if let Some(ref tf) = self.title_field {
+            measure_field_height(tf, text_area_width)
         } else {
             0.0
         };
-        let body_height = if !self.options.message.is_empty() {
-            measure_text_height(&self.options.message, &body_font, text_area_width)
+        let body_height = if let Some(ref bf) = self.body_field {
+            measure_field_height(bf, text_area_width)
         } else {
             0.0
         };
@@ -198,13 +195,13 @@ impl AppKitDialog {
         };
 
         // Re-measure at final width
-        let title_height = if !self.options.main_instruction.is_empty() {
-            measure_text_height(&self.options.main_instruction, &title_font, text_area_width)
+        let title_height = if let Some(ref tf) = self.title_field {
+            measure_field_height(tf, text_area_width)
         } else {
             0.0
         };
-        let body_height = if !self.options.message.is_empty() {
-            measure_text_height(&self.options.message, &body_font, text_area_width)
+        let body_height = if let Some(ref bf) = self.body_field {
+            measure_field_height(bf, text_area_width)
         } else {
             0.0
         };
@@ -418,20 +415,16 @@ fn create_label(text: &str, bold: bool, mtm: MainThreadMarker) -> Retained<NSTex
     field
 }
 
-fn measure_text_height(text: &str, font: &NSFont, width: f64) -> f64 {
+fn measure_field_height(field: &NSTextField, width: f64) -> f64 {
     unsafe {
-        let ns_string = NSString::from_str(text);
-        let font_key = NSFontAttributeName;
-        let font_obj: Retained<AnyObject> = msg_send![font, self];
-        let attrs = NSDictionary::from_slices(&[font_key], &[&*font_obj]);
-        let rect = ns_string.boundingRectWithSize_options_attributes_context(
-            NSSize::new(width, f64::MAX),
-            NSStringDrawingOptions::UsesLineFragmentOrigin
-                | NSStringDrawingOptions::UsesFontLeading,
-            Some(&attrs),
-            None,
-        );
-        rect.size.height.ceil()
+        let cell: Option<Retained<AnyObject>> = msg_send![field, cell];
+        if let Some(cell) = cell {
+            let bounds = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, 1e7));
+            let size: NSSize = msg_send![&*cell, cellSizeForBounds: bounds];
+            size.height.ceil()
+        } else {
+            0.0
+        }
     }
 }
 
