@@ -353,6 +353,13 @@ impl AppKitDialog {
 
     pub fn set_progress_indeterminate(&self) {
         if let Some(ref p) = self.progress {
+            // Reset to 0 first - the indeterminate animation won't start
+            // if the bar was previously at a high value. We need a
+            // display cycle between resetting and switching modes.
+            p.setIndeterminate(false);
+            unsafe { p.stopAnimation(None) };
+            p.setDoubleValue(0.0);
+            p.display();
             p.setIndeterminate(true);
             unsafe { p.startAnimation(None) };
         }
