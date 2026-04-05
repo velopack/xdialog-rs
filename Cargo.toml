@@ -76,6 +76,10 @@ windows = { version = "0.62", features = [
 ] }
 widestring = "1.2"
 
+[[example]]
+name = "win32_direct"
+required-features = ["win32-direct"]
+
 [[test]]
 name = "macos_ui"
 harness = false
