@@ -105,7 +105,7 @@
 #[cfg(all(feature = "win32-direct", not(windows)))]
 compile_error!("The `win32-direct` feature is only available on Windows");
 
-#[cfg_attr(not(feature = "win32-direct"), macro_use)]
+#[macro_use]
 extern crate log;
 
 pub use message::*;
@@ -115,19 +115,15 @@ use state::*;
 
 mod backends;
 
-#[cfg(not(feature = "win32-direct"))]
 mod channel;
-#[cfg(not(feature = "win32-direct"))]
-use channel::*;
-#[cfg(not(feature = "win32-direct"))]
+use channel::send_request;
 mod builder;
-#[cfg(not(feature = "win32-direct"))]
 pub use builder::*;
 
-#[cfg(feature = "win32-direct")]
+#[cfg(all(windows, feature = "win32-direct"))]
 mod win32_direct;
-#[cfg(feature = "win32-direct")]
-use win32_direct::*;
+#[cfg(all(windows, feature = "win32-direct"))]
+pub use win32_direct::init_win32_direct;
 
 mod message;
 mod model;
@@ -148,7 +144,7 @@ pub enum XDialogError {
     #[error("xdialog command returned no result: {0}")]
     NoResult(oneshot::RecvError),
     #[error("xdialog send to backend failed: {0}")]
-    SendFailed(std::sync::mpsc::SendError<DialogMessageRequest>),
+    SendFailed(String),
     #[error("xdialog generic error: {0}")]
     SystemError(String),
 }

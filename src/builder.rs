@@ -1,7 +1,7 @@
 use std::{sync::mpsc::channel, thread};
 
 use crate::backends::XDialogBackendImpl;
-use crate::channel::*;
+use crate::channel::{send_request, ChannelHandler};
 use crate::model::*;
 
 #[derive(Debug)]
@@ -71,7 +71,7 @@ impl XDialogBuilder {
     /// separate thread.
     pub fn run_loop<T: Send + 'static>(self, main: fn() -> T) -> T {
         let (send_message, receive_message) = channel::<DialogMessageRequest>();
-        init_sender(send_message);
+        crate::channel::init_handler(Box::new(ChannelHandler { sender: send_message }));
 
         let result = thread::spawn(move || {
             let result = main();

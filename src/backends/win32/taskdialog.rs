@@ -21,6 +21,8 @@ use windows::Win32::UI::WindowsAndMessaging::{EndDialog, SendMessageW, HICON};
 use crate::{XDialogIcon, XDialogOptions, XDialogResult};
 use crate::model::CreationSender;
 
+type OpenDialogMap = Arc<Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>>>;
+
 #[derive(Debug, PartialEq)]
 enum DialogRequest {
     None,
@@ -32,7 +34,7 @@ enum DialogRequest {
 
 /// Manages Win32 Task Dialogs. Each dialog runs on its own thread and communicates via channels.
 pub struct TaskDialogManager {
-    open_dialogs: Arc<Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>>>,
+    open_dialogs: OpenDialogMap,
 }
 
 impl TaskDialogManager {
@@ -222,11 +224,11 @@ struct TaskDialogConfig {
     pub cx_width: u32,
     pub progress: ProgressState,
     pub x_dialog_id: usize,
-    pub open_dialogs: Arc<Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>>>,
+    pub open_dialogs: OpenDialogMap,
 }
 
 impl TaskDialogConfig {
-    fn new(open_dialogs: Arc<Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>>>) -> Self {
+    fn new(open_dialogs: OpenDialogMap) -> Self {
         TaskDialogConfig {
             parent: HWND(null_mut()),
             instance: HMODULE(null_mut()),
@@ -379,16 +381,11 @@ struct TaskDialogButton {
     pub text: String,
 }
 
+#[derive(Default)]
 struct TaskDialogResult {
     pub button_id: i32,
     pub radio_button_id: i32,
     pub checked: bool,
-}
-
-impl Default for TaskDialogResult {
-    fn default() -> Self {
-        TaskDialogResult { button_id: 0, radio_button_id: 0, checked: false }
-    }
 }
 
 unsafe fn execute_task_dialog(conf: &mut TaskDialogConfig) -> Result<TaskDialogResult, windows::core::Error> {
