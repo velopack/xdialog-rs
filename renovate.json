@@ -1,6 +1,55 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":semanticCommitsDisabled"
+  ],
+  "labels": ["renovate"],
+  "schedule": ["on friday before 11am"],
+  "timezone": "Europe/London",
+  "dependencyDashboard": true,
+  "automergeType": "pr",
+  "automergeStrategy": "rebase",
+  "platformAutomerge": false,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true
+  },
+  "packageRules": [
+    {
+      "automerge": true
+    },
+    {
+      "groupName": "windows crates",
+      "matchPackageNames": [
+        "windows",
+        "widestring"
+      ]
+    },
+    {
+      "groupName": "linux crates",
+      "matchPackageNames": [
+        "gtk",
+        "glib"
+      ]
+    },
+    {
+      "groupName": "fltk crates",
+      "matchPackageNames": [
+        "fltk",
+        "font-kit",
+        "mina",
+        "enum-map"
+      ]
+    },
+    {
+      "groupName": "macos crates",
+      "matchPackageNames": [
+        "objc2",
+        "objc2-foundation",
+        "objc2-app-kit",
+        "block2"
+      ]
+    }
   ]
 }
