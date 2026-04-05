@@ -17,7 +17,8 @@
   },
   "packageRules": [
     {
-      "automerge": true
+      "automerge": true,
+      "matchDatasources": "crate"
     },
     {
       "groupName": "windows crates",
