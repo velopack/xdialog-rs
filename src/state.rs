@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::mpsc::Sender;
-use std::sync::{LazyLock, OnceLock, RwLock};
+use std::sync::{LazyLock, RwLock};
 
 use crate::*;
 
-static REQUEST_SEND: OnceLock<Sender<DialogMessageRequest>> = OnceLock::new();
 static SILENT: AtomicBool = AtomicBool::new(false);
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 static RESULT_MAP: LazyLock<RwLock<HashMap<usize, XDialogResult>>> =
@@ -34,17 +32,4 @@ pub fn get_result(key: usize) -> Option<XDialogResult> {
 
 pub fn get_next_id() -> usize {
     NEXT_ID.fetch_add(1, Ordering::Relaxed)
-}
-
-pub fn init_sender(sender: Sender<DialogMessageRequest>) {
-    if REQUEST_SEND.set(sender).is_err() {
-        warn!("xdialog: init_sender called more than once, ignoring");
-    }
-}
-
-pub fn send_request(message: DialogMessageRequest) -> Result<(), XDialogError> {
-    match REQUEST_SEND.get() {
-        Some(sender) => sender.send(message).map_err(XDialogError::SendFailed),
-        None => Err(XDialogError::NotInitialized),
-    }
 }

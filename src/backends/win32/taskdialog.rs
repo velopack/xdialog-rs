@@ -42,7 +42,7 @@ impl TaskDialogManager {
 }
 
 impl TaskDialogManager {
-    pub fn show(&mut self, id: usize, data: XDialogOptions, has_progress: bool) -> Result<(), XDialogError> {
+    pub fn show(&self, id: usize, data: XDialogOptions, has_progress: bool) -> Result<(), XDialogError> {
         let open_dialogs = self.open_dialogs.clone();
         // Insert a new dialog
         {
@@ -140,32 +140,32 @@ impl TaskDialogManager {
         Ok(())
     }
 
-    pub fn close(&mut self, id: usize) {
+    pub fn close(&self, id: usize) {
         if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::Close);
         }
     }
 
-    pub fn close_all(&mut self) {
+    pub fn close_all(&self) {
         let mut dialogs = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner());
         for (_id, obj) in dialogs.iter_mut() {
             let _ = obj.0.send(DialogRequest::Close);
         }
     }
 
-    pub fn set_progress_value(&mut self, id: usize, progress: f32) {
+    pub fn set_progress_value(&self, id: usize, progress: f32) {
         if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::SetProgress(progress));
         }
     }
 
-    pub fn set_progress_text(&mut self, id: usize, text: &str) {
+    pub fn set_progress_text(&self, id: usize, text: &str) {
         if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::SetText(text.to_string()));
         }
     }
 
-    pub fn set_progress_indeterminate(&mut self, id: usize) {
+    pub fn set_progress_indeterminate(&self, id: usize) {
         if let Some(obj) = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner()).get_mut(&id) {
             let _ = obj.0.send(DialogRequest::SetIndeterminate);
         }

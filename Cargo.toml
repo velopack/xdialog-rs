@@ -14,6 +14,7 @@ default = ["fltk-bundled", "gtk3"]
 fltk = ["dep:fltk", "dep:font-kit", "dep:dark-light", "dep:mina", "dep:enum-map"]
 fltk-bundled = ["fltk", "fltk/fltk-bundled"]
 gtk3 = ["dep:gtk", "dep:glib"]
+win32-direct = []
 
 [dependencies]
 log = "0.4"
