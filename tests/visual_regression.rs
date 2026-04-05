@@ -39,8 +39,11 @@ mod capture {
                 return None;
             }
 
-            // Bring window to foreground so it's not obscured
-            let _ = SetForegroundWindow(hwnd);
+            // Unfocus the dialog by focusing the desktop window, so the
+            // titlebar is always rendered in its inactive state. This makes
+            // captures consistent across focused/unfocused environments (e.g. CI).
+            let desktop = GetDesktopWindow();
+            let _ = SetForegroundWindow(desktop);
             thread::sleep(Duration::from_millis(100));
 
             let mut rect = RECT::default();
