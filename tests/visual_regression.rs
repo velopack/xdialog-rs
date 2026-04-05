@@ -163,18 +163,44 @@ mod capture {
     use xcap::Window;
 
     /// Attempts to find a window by exact title and capture it.
-    fn try_capture(title: &str) -> Option<RgbaImage> {
-        let windows = Window::all().ok()?;
+    fn try_capture(title: &str, log: bool) -> Option<RgbaImage> {
+        let windows = match Window::all() {
+            Ok(w) => w,
+            Err(e) => {
+                if log {
+                    eprintln!("xcap Window::all() failed: {}", e);
+                }
+                return None;
+            }
+        };
+
+        if log {
+            let titles: Vec<_> = windows
+                .iter()
+                .filter_map(|w| w.title().ok())
+                .collect();
+            eprintln!("xcap found {} windows: {:?}", titles.len(), titles);
+        }
+
         let window = windows
             .iter()
             .find(|w| w.title().unwrap_or_default() == title)?;
 
-        let img = window.capture_image().ok()?;
-        if img.width() == 0 || img.height() == 0 {
-            eprintln!("Window found but has zero size: {}x{}", img.width(), img.height());
-            return None;
+        match window.capture_image() {
+            Ok(img) => {
+                if img.width() == 0 || img.height() == 0 {
+                    eprintln!("Window found but has zero size: {}x{}", img.width(), img.height());
+                    return None;
+                }
+                Some(img)
+            }
+            Err(e) => {
+                if log {
+                    eprintln!("xcap capture_image() failed: {}", e);
+                }
+                None
+            }
         }
-        Some(img)
     }
 
     /// Finds a window by exact title and captures it to a PNG file.
@@ -184,7 +210,8 @@ mod capture {
         const RETRY_DELAY_MS: u64 = 500;
 
         for attempt in 1..=MAX_ATTEMPTS {
-            match try_capture(title) {
+            let log = attempt == 1 || attempt == MAX_ATTEMPTS;
+            match try_capture(title, log) {
                 Some(img) => {
                     if let Some(parent) = output_path.parent() {
                         std::fs::create_dir_all(parent).ok();

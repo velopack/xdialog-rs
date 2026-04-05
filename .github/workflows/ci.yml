@@ -151,8 +151,10 @@ jobs:
           Xvfb :99 -screen 0 1280x1024x24 &
           sleep 1
           DISPLAY=:99 openbox &
-          sleep 1
+          sleep 2
           echo "DISPLAY=:99" >> $GITHUB_ENV
+          # Verify window manager is running
+          DISPLAY=:99 xprop -root _NET_CLIENT_LIST_STACKING || echo "Warning: WM may not be ready"
 
       - name: Run visual regression tests
         env:
