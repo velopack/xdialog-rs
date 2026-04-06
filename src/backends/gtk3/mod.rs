@@ -15,8 +15,8 @@ impl XDialogBackendImpl for GtkBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
         // GTK3 uses the system's native theme, so _theme is intentionally unused.
         if gtk::init().is_err() {
-            error!("xdialog: Failed to initialize GTK3, falling back to FLTK backend");
-            super::fltk::FltkBackend::run_loop(receiver, _theme);
+            error!("xdialog: Failed to initialize GTK3, falling back to Skia backend");
+            super::skia::SkiaBackend::run_loop(receiver, _theme);
             return;
         }
 

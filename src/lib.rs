@@ -3,9 +3,10 @@
 //! [![License](https://img.shields.io/crates/l/xdialog?style=flat-square)](https://github.com/velopack/xdialog/blob/master/LICENSE)
 //!
 //! A cross-platform library for displaying native dialogs in Rust. On Windows and macOS, this
-//! library uses native system dialogs (Win32 TaskDialog and AppKit). On Linux, it uses FLTK by
-//! default, with optional GTK3 support via the `gtk` feature. This allows for a simplified API
-//! and consistent behavior across platforms.
+//! library uses native system dialogs (Win32 TaskDialog and AppKit). On Linux, the default backend
+//! is a pure Rust software renderer (winit + tiny-skia) with no C/C++ build dependencies, making it
+//! fully compatible with static musl builds. Optional GTK3 and FLTK backends are available via
+//! feature flags. This allows for a simplified API and consistent behavior across platforms.
 //!
 //! This is not a replacement for a proper GUI framework. It is meant to be used for CLI / background
 //! applications which occasionally need to show dialogs (such as alerts, or progress) to the user.
@@ -16,7 +17,9 @@
 //! ## Features
 //! - Cross-platform: works on Windows, macOS, and Linux
 //! - Native backends on Windows (Win32) and macOS (AppKit) with zero additional build dependencies
-//! - FLTK backend on Linux with optional GTK3 support (enable the `gtk` feature)
+//! - Pure Rust software-rendered backend on Linux (no C/C++ dependencies, static musl compatible)
+//! - Optional GTK3 and FLTK backends on Linux via feature flags
+//! - Embedded font (Liberation Sans) - no system font dependencies on Linux
 //! - Simple and consistent API across all platforms
 //!
 //! ## Installation
@@ -95,11 +98,17 @@
 //! cargo run --example various_options
 //! ```
 //!
-//! ## Build Dependencies
-//! This library uses native backends on Windows (Win32) and macOS (AppKit) with zero additional
-//! build dependencies. On Linux, the library uses [fltk-rs](https://github.com/fltk-rs/fltk-rs)
-//! by default. Enable the `gtk` feature for GTK3 support (requires `libgtk-3-dev` on
-//! Debian/Ubuntu). When enabled, GTK3 becomes the default backend with automatic FLTK fallback.
+//! ## Backends
+//! - **Windows**: Native Win32 TaskDialog API
+//! - **macOS**: Native AppKit dialogs
+//! - **Linux** (default): Pure Rust software renderer using winit + tiny-skia + fontdue. No C/C++
+//!   build dependencies, works with static musl linking, and embeds its own font.
+//! - **Linux** (`gtk` feature): GTK3 backend. Requires `libgtk-3-dev` on Debian/Ubuntu.
+//!   When enabled, GTK3 becomes the default backend with automatic fallback to the software
+//!   renderer if GTK fails to initialize.
+//! - **Linux** (`fltk` feature): FLTK backend. Requires cmake and X11/Wayland development
+//!   libraries. Must be explicitly selected via
+//!   [`XDialogBuilder::with_backend(XDialogBackend::Fltk)`](XDialogBuilder::with_backend).
 //!
 
 #![warn(missing_docs)]

@@ -2,6 +2,9 @@ use crate::model::{DialogMessageRequest, XDialogTheme};
 use std::sync::mpsc::Receiver;
 
 #[cfg(target_os = "linux")]
+pub mod skia;
+
+#[cfg(all(target_os = "linux", feature = "fltk"))]
 pub mod fltk;
 
 #[cfg(all(target_os = "linux", feature = "gtk"))]

@@ -73,9 +73,10 @@ pub enum XDialogResult {
 pub type CreationSender = oneshot::Sender<Result<oneshot::Receiver<XDialogResult>, crate::XDialogError>>;
 
 #[allow(missing_docs)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum DialogMessageRequest {
     // generic
+    #[default]
     None,
     ExitEventLoop,
     CloseWindow(usize),
