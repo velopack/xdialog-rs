@@ -61,19 +61,21 @@ impl SkiaProgressBar {
 
     pub fn tick(&mut self, elapsed_secs: f32) -> bool {
         if self.is_indeterminate {
+            let before = self.state.clone();
             INDETERMINATE_TIMELINE.update(&mut self.state, self.current_time);
             self.current_time += elapsed_secs;
             if self.current_time > 2.6 {
                 self.current_time = 0.0;
             }
-            true
+            self.state != before
         } else if let Some(ref mut animator) = self.value_animator {
+            let before = self.state.clone();
             animator.update(&mut self.state, self.current_time);
             self.current_time += elapsed_secs;
             if self.current_time > 0.3 {
                 self.value_animator = None;
             }
-            true
+            self.state != before
         } else {
             false
         }
