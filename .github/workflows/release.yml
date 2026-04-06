@@ -35,7 +35,7 @@ jobs:
         run: sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' Cargo.toml
 
       - name: Update Cargo.lock
-        run: cargo check
+        run: cargo update --workspace
 
       - name: Verify version was updated
         run: grep -q "^version = \"${{ inputs.version }}\"" Cargo.toml
