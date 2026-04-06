@@ -54,6 +54,9 @@ pub struct SkiaDialog {
     button_panel_rect: PhysRect,
     // Last size passed to surface.resize()
     last_surface_size: (u32, u32),
+    // Cached ARGB buffer matching the softbuffer format, so partial redraws
+    // only need to convert the dirty region and re-presents are a plain memcpy.
+    present_cache: Vec<u32>,
 }
 
 impl SkiaDialog {
@@ -114,6 +117,7 @@ impl SkiaDialog {
             progress_rect: PhysRect::default(),
             button_panel_rect: PhysRect::default(),
             last_surface_size: (0, 0),
+            present_cache: Vec::new(),
         };
 
         dialog.layout_buttons();
@@ -122,6 +126,20 @@ impl SkiaDialog {
 
     pub fn needs_redraw(&self) -> bool {
         self.dirty_full || self.dirty_progress || self.dirty_buttons
+    }
+
+    pub fn is_animating(&self) -> bool {
+        if let Some(ref p) = self.progress {
+            if p.is_animating() {
+                return true;
+            }
+        }
+        for btn in &self.buttons {
+            if btn.is_animating() {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn send_result(&mut self, result: XDialogResult) {
@@ -276,16 +294,18 @@ impl SkiaDialog {
             self.dirty_full = true;
         }
 
-        // Take pixmap out to avoid borrow conflicts with self
-        let mut pixmap = self.pixmap.take().unwrap();
-
         if !self.needs_redraw() {
             // No new rendering needed, but the OS requested a
-            // redraw (e.g. window expose) – re-present existing buffer.
-            self.present_pixmap(&pixmap, pw, ph);
-            self.pixmap = Some(pixmap);
+            // redraw (e.g. window expose) – re-present the cached buffer.
+            self.present_surface(pw, ph);
             return;
         }
+
+        // Compute dirty bounding box before clearing flags
+        let dirty = self.dirty_rect(pw, ph);
+
+        // Take pixmap out to avoid borrow conflicts with self
+        let mut pixmap = self.pixmap.take().unwrap();
 
         if self.dirty_full {
             self.render_full(&mut pixmap);
@@ -302,14 +322,83 @@ impl SkiaDialog {
         self.dirty_progress = false;
         self.dirty_buttons = false;
 
-        self.present_pixmap(&pixmap, pw, ph);
+        // Convert only the dirty region from RGBA pixmap → ARGB cache
+        self.update_cache(&pixmap, pw, dirty);
 
         // Put pixmap back
         self.pixmap = Some(pixmap);
+
+        // Copy cache to surface and present
+        self.present_surface(pw, ph);
     }
 
-    fn present_pixmap(&mut self, pixmap: &Pixmap, pw: u32, ph: u32) {
-        // Only resize if dimensions changed
+    /// Bounding box of the current dirty region in physical pixels.
+    fn dirty_rect(&self, pw: u32, ph: u32) -> (u32, u32, u32, u32) {
+        if self.dirty_full {
+            return (0, 0, pw, ph);
+        }
+        let mut x1 = pw as f32;
+        let mut y1 = ph as f32;
+        let mut x2 = 0.0f32;
+        let mut y2 = 0.0f32;
+
+        if self.dirty_progress && self.progress_rect.w > 0.0 {
+            let r = &self.progress_rect;
+            x1 = x1.min(r.x);
+            y1 = y1.min(r.y);
+            x2 = x2.max(r.x + r.w);
+            y2 = y2.max(r.y + r.h);
+        }
+        if self.dirty_buttons && self.button_panel_rect.w > 0.0 {
+            let r = &self.button_panel_rect;
+            x1 = x1.min(r.x);
+            y1 = y1.min(r.y);
+            x2 = x2.max(r.x + r.w);
+            y2 = y2.max(r.y + r.h);
+        }
+
+        let ix = (x1.floor() as u32).min(pw);
+        let iy = (y1.floor() as u32).min(ph);
+        let ix2 = (x2.ceil() as u32).min(pw);
+        let iy2 = (y2.ceil() as u32).min(ph);
+        if ix >= ix2 || iy >= iy2 {
+            return (0, 0, pw, ph); // fallback to full
+        }
+        (ix, iy, ix2 - ix, iy2 - iy)
+    }
+
+    /// Convert a rectangular region of the RGBA pixmap into the ARGB cache.
+    fn update_cache(&mut self, pixmap: &Pixmap, pw: u32, dirty: (u32, u32, u32, u32)) {
+        let total = (pw * self.window.inner_size().height) as usize;
+        if self.present_cache.len() != total {
+            // Size changed – convert everything
+            self.present_cache.resize(total, 0);
+            let src = pixmap.data();
+            for (dst, chunk) in self.present_cache.iter_mut().zip(src.chunks_exact(4)) {
+                *dst = pack_argb(chunk);
+            }
+            return;
+        }
+
+        let (dx, dy, dw, dh) = dirty;
+        let src = pixmap.data();
+        let pw = pw as usize;
+        for row in dy as usize..(dy + dh) as usize {
+            let row_off = row * pw;
+            for col in dx as usize..(dx + dw) as usize {
+                let i = row_off + col;
+                let si = i * 4;
+                self.present_cache[i] = pack_argb(&src[si..si + 4]);
+            }
+        }
+    }
+
+    /// Copy the cached ARGB buffer to the software surface and present.
+    fn present_surface(&mut self, pw: u32, ph: u32) {
+        if self.present_cache.is_empty() {
+            return;
+        }
+
         if self.last_surface_size != (pw, ph) {
             self.surface
                 .resize(NonZeroU32::new(pw).unwrap(), NonZeroU32::new(ph).unwrap())
@@ -318,14 +407,7 @@ impl SkiaDialog {
         }
 
         let mut buffer = self.surface.buffer_mut().unwrap();
-        let src = pixmap.data();
-        for (dst, chunk) in buffer.iter_mut().zip(src.chunks_exact(4)) {
-            let r = chunk[0] as u32;
-            let g = chunk[1] as u32;
-            let b = chunk[2] as u32;
-            let a = chunk[3] as u32;
-            *dst = (a << 24) | (r << 16) | (g << 8) | b;
-        }
+        buffer.copy_from_slice(&self.present_cache);
         buffer.present().unwrap();
     }
 
@@ -518,4 +600,10 @@ fn compute_window_size(
     }
 
     (final_width, h)
+}
+
+/// Pack RGBA bytes into a single ARGB u32 for the software surface.
+#[inline(always)]
+fn pack_argb(rgba: &[u8]) -> u32 {
+    (rgba[3] as u32) << 24 | (rgba[0] as u32) << 16 | (rgba[1] as u32) << 8 | rgba[2] as u32
 }
