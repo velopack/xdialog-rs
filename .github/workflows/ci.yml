@@ -218,18 +218,11 @@ jobs:
       - name: Start virtual display (Wayland)
         if: matrix.wayland
         run: |
-          sudo apt-get install -y weston xvfb openbox
-          # Start Xvfb for xcap window capture (xcap uses XCB)
-          Xvfb :99 -screen 0 1280x1024x24 &
-          sleep 1
-          DISPLAY=:99 openbox &
-          sleep 1
-          # Start weston with headless backend and XWayland
-          export DISPLAY=:99
-          weston --backend=headless --width=1280 --height=1024 --xwayland &
+          sudo apt-get install -y weston
+          # Start weston with headless backend (no X11 needed — we capture the full monitor)
+          weston --backend=headless --width=500 --height=500 &
           sleep 3
           echo "WAYLAND_DISPLAY=wayland-1" >> $GITHUB_ENV
-          echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Run visual regression tests
         env:

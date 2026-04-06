@@ -160,10 +160,15 @@ mod capture {
 #[cfg(target_os = "linux")]
 mod capture {
     use super::*;
-    use xcap::Window;
 
-    /// Attempts to find a window by exact title and capture it.
-    fn try_capture(title: &str, log: bool) -> Option<RgbaImage> {
+    fn is_wayland() -> bool {
+        std::env::var("WAYLAND_DISPLAY").is_ok()
+    }
+
+    /// Attempts to find a window by exact title and capture it (X11 path).
+    fn try_capture_x11(title: &str, log: bool) -> Option<RgbaImage> {
+        use xcap::Window;
+
         let windows = match Window::all() {
             Ok(w) => w,
             Err(e) => {
@@ -203,15 +208,69 @@ mod capture {
         }
     }
 
+    /// Captures the entire monitor output (Wayland path).
+    /// On a headless compositor with a fixed size, the dialog renders at
+    /// deterministic coordinates so the full-screen capture is stable.
+    fn try_capture_wayland(log: bool) -> Option<RgbaImage> {
+        use xcap::Monitor;
+
+        let monitors = match Monitor::all() {
+            Ok(m) => m,
+            Err(e) => {
+                if log {
+                    eprintln!("xcap Monitor::all() failed: {}", e);
+                }
+                return None;
+            }
+        };
+
+        let monitor = monitors.first()?;
+        if log {
+            eprintln!(
+                "xcap Wayland monitor: {:?}x{:?}",
+                monitor.width(),
+                monitor.height()
+            );
+        }
+
+        match monitor.capture_image() {
+            Ok(img) => {
+                if img.width() == 0 || img.height() == 0 {
+                    if log {
+                        eprintln!("Monitor capture returned zero size");
+                    }
+                    return None;
+                }
+                Some(img)
+            }
+            Err(e) => {
+                if log {
+                    eprintln!("xcap monitor capture_image() failed: {}", e);
+                }
+                None
+            }
+        }
+    }
+
     /// Finds a window by exact title and captures it to a PNG file.
     /// Retries several times to handle timing where the dialog hasn't appeared yet.
+    /// On Wayland, captures the full monitor output instead of individual windows.
     pub fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
         const MAX_ATTEMPTS: u32 = 20;
         const RETRY_DELAY_MS: u64 = 500;
 
+        let wayland = is_wayland();
+
         for attempt in 1..=MAX_ATTEMPTS {
             let log = attempt == 1 || attempt == MAX_ATTEMPTS;
-            match try_capture(title, log) {
+
+            let img = if wayland {
+                try_capture_wayland(log)
+            } else {
+                try_capture_x11(title, log)
+            };
+
+            match img {
                 Some(img) => {
                     if let Some(parent) = output_path.parent() {
                         std::fs::create_dir_all(parent).ok();
@@ -219,11 +278,12 @@ mod capture {
                     match img.save(output_path) {
                         Ok(_) => {
                             eprintln!(
-                                "Captured '{}' ({}x{}) on attempt {}",
+                                "Captured '{}' ({}x{}) on attempt {}{}",
                                 title,
                                 img.width(),
                                 img.height(),
-                                attempt
+                                attempt,
+                                if wayland { " [wayland monitor]" } else { "" }
                             );
                             return true;
                         }
