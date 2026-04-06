@@ -1,22 +1,23 @@
 //! Tests that xdialog gracefully returns NoBackendAvailable on headless Linux.
 //!
-//! Run with: XDIALOG_HEADLESS_TEST=1 cargo test --test headless_linux
+//! This is a standalone binary (not part of the main crate's test suite) so it
+//! avoids pulling in dev-dependencies like xcap/pipewire. Build and run with:
+//!
+//!   cargo run --manifest-path tests/headless/Cargo.toml
+//!
+//! Or via cross-rs for multi-target testing:
+//!
+//!   cross run --manifest-path tests/headless/Cargo.toml --target aarch64-unknown-linux-gnu
 
 fn main() {
     #[cfg(target_os = "linux")]
     {
-        if std::env::var("XDIALOG_HEADLESS_TEST").is_err() {
-            eprintln!(
-                "Skipping headless test (set XDIALOG_HEADLESS_TEST=1 to run)"
-            );
-            return;
-        }
-
         // Clear display variables to ensure headless environment
         std::env::remove_var("DISPLAY");
         std::env::remove_var("WAYLAND_DISPLAY");
 
         xdialog::XDialogBuilder::new().run(run_headless_tests);
+        eprintln!("All headless tests passed");
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -29,7 +30,6 @@ fn main() {
 fn run_headless_tests() {
     test_message_no_backend();
     test_progress_no_backend();
-    eprintln!("All headless tests passed");
 }
 
 #[cfg(target_os = "linux")]
