@@ -174,8 +174,10 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
+            
           - os: macos-latest
             name: macOS
+
           - os: ubuntu-latest
             name: Linux
 
