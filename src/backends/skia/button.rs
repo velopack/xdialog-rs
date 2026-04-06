@@ -42,6 +42,8 @@ pub struct SkiaButton {
     pub hovered: bool,
     pub pressed: bool,
     pub focused: bool,
+    animating: bool,
+    current_state: ButtonState,
     animator: Rc<RefCell<Box<dyn StateAnimator<State = ButtonState, Values = ButtonColorState>>>>,
 }
 
@@ -113,6 +115,8 @@ impl SkiaButton {
             hovered: false,
             pressed: false,
             focused: false,
+            animating: false,
+            current_state: ButtonState::Idle,
             animator: Rc::new(RefCell::new(Box::new(animator))),
         }
     }
@@ -148,6 +152,10 @@ impl SkiaButton {
         } else {
             ButtonState::Idle
         };
+        if state != self.current_state {
+            self.current_state = state.clone();
+            self.animating = true;
+        }
         self.animator.borrow_mut().set_state(&state);
     }
 
@@ -155,11 +163,19 @@ impl SkiaButton {
         self.animator.borrow().current_values().clone()
     }
 
+    pub fn is_animating(&self) -> bool {
+        self.animating
+    }
+
     /// Advance animation. Returns true if the visual state changed.
     pub fn tick(&mut self, elapsed: f32) -> bool {
         let before = self.animator.borrow().current_values().clone();
         self.animator.borrow_mut().advance(elapsed);
         let after = self.animator.borrow().current_values().clone();
-        before != after
+        let changed = before != after;
+        if !changed {
+            self.animating = false;
+        }
+        changed
     }
 }

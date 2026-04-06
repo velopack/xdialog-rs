@@ -91,11 +91,17 @@ impl AppState {
 
     fn tick(&mut self) {
         let now = Instant::now();
-        let elapsed = now.duration_since(self.current_time).as_secs_f32();
+        let elapsed = now.duration_since(self.current_time);
+        // Skip near-zero ticks to prevent double-render per frame:
+        // about_to_wait is called again right after RedrawRequested,
+        // and a sub-ms tick would just set dirty flags again wastefully.
+        if elapsed < Duration::from_millis(4) {
+            return;
+        }
         self.current_time = now;
-
+        let elapsed_secs = elapsed.as_secs_f32();
         for dialog in self.dialogs.values_mut() {
-            dialog.tick(elapsed);
+            dialog.tick(elapsed_secs);
         }
     }
 }
@@ -110,15 +116,17 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.tick();
 
-        let mut any_animating = false;
+        let mut any_needs_frame = false;
         for dialog in self.dialogs.values() {
             if dialog.needs_redraw() {
                 dialog.window.request_redraw();
-                any_animating = true;
+            }
+            if dialog.needs_redraw() || dialog.is_animating() {
+                any_needs_frame = true;
             }
         }
 
-        if any_animating {
+        if any_needs_frame {
             // Cap animation rendering at ~60fps
             const FRAME_TIME: Duration = Duration::from_millis(16);
             event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME_TIME));

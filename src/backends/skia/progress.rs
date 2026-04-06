@@ -59,6 +59,10 @@ impl SkiaProgressBar {
         self.current_time = 0.0;
     }
 
+    pub fn is_animating(&self) -> bool {
+        self.is_indeterminate || self.value_animator.is_some()
+    }
+
     pub fn tick(&mut self, elapsed_secs: f32) -> bool {
         if self.is_indeterminate {
             let before = self.state.clone();
