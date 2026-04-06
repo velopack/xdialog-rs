@@ -1,5 +1,0 @@
-[build]
-pre-build = [
-    "dpkg --add-architecture $CROSS_DEB_ARCH",
-    "apt-get update && apt-get install -y libx11-dev:$CROSS_DEB_ARCH libxext-dev:$CROSS_DEB_ARCH libxcursor-dev:$CROSS_DEB_ARCH libxrender-dev:$CROSS_DEB_ARCH libxfixes-dev:$CROSS_DEB_ARCH libpipewire-0.3-dev:$CROSS_DEB_ARCH libgbm-dev:$CROSS_DEB_ARCH libegl-dev:$CROSS_DEB_ARCH libwayland-dev:$CROSS_DEB_ARCH libxkbcommon-dev:$CROSS_DEB_ARCH libxkbcommon-x11-dev:$CROSS_DEB_ARCH libdbus-1-dev:$CROSS_DEB_ARCH libclang-dev"
-]

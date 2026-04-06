@@ -148,29 +148,67 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc --features gtk,fltk
 
+  headless-build:
+    name: Headless Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.LINUX_APT_DEPS }} musl-tools
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: headless-build
+
+      - name: Build headless test
+        run: cargo build --manifest-path tests/headless/Cargo.toml --target x86_64-unknown-linux-musl --release
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: headless-binary
+          path: tests/headless/target/x86_64-unknown-linux-musl/release/xdialog-headless-test
+
   headless:
-    name: Headless (${{ matrix.target }})
+    name: Headless (${{ matrix.distro }})
+    needs: headless-build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - x86_64-unknown-linux-musl
-          - aarch64-unknown-linux-gnu
-          - aarch64-unknown-linux-musl
+        distro:
+          - ubuntu:12.04
+          - ubuntu:18.04
+          - ubuntu:24.04
+          - debian:7
+          - debian:bookworm-slim
+          - alpine:3.3
+          - alpine:3.20
+          - centos:6
+          - centos:7
+          - fedora:21
+          - fedora:41
+          - gcr.io/distroless/static-debian12
     steps:
-      - uses: actions/checkout@v6
+      - name: Download binary
+        uses: actions/download-artifact@v7
+        with:
+          name: headless-binary
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cross-rs
+      - name: Run in container
         run: |
-          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-          cargo binstall cross
-
-      - name: Run headless test
-        run: cross run --manifest-path tests/headless/Cargo.toml --target ${{ matrix.target }}
+          chmod +x xdialog-headless-test
+          docker run --rm \
+            -v $PWD/xdialog-headless-test:/xdialog-headless-test \
+            ${{ matrix.distro }} \
+            /xdialog-headless-test
 
   visual-regression:
     name: Visual Regression (${{ matrix.name }})
