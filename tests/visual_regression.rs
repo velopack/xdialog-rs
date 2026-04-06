@@ -208,48 +208,36 @@ mod capture {
         }
     }
 
-    /// Captures the entire monitor output (Wayland path).
-    /// On a headless compositor with a fixed size, the dialog renders at
-    /// deterministic coordinates so the full-screen capture is stable.
+    /// Captures the entire compositor output via `grim` (Wayland path).
+    /// Requires a wlroots-based compositor that supports wlr-screencopy.
     fn try_capture_wayland(log: bool) -> Option<RgbaImage> {
-        use xcap::Monitor;
+        let tmp = std::env::temp_dir().join("xdialog_wayland_capture.png");
+        let output = std::process::Command::new("grim")
+            .arg(&tmp)
+            .output()
+            .ok()?;
 
-        let monitors = match Monitor::all() {
-            Ok(m) => m,
-            Err(e) => {
-                if log {
-                    eprintln!("xcap Monitor::all() failed: {}", e);
-                }
-                return None;
+        if !output.status.success() {
+            if log {
+                eprintln!(
+                    "grim failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
-        };
-
-        let monitor = monitors.first()?;
-        if log {
-            eprintln!(
-                "xcap Wayland monitor: {:?}x{:?}",
-                monitor.width(),
-                monitor.height()
-            );
+            return None;
         }
 
-        match monitor.capture_image() {
-            Ok(img) => {
-                if img.width() == 0 || img.height() == 0 {
-                    if log {
-                        eprintln!("Monitor capture returned zero size");
-                    }
-                    return None;
-                }
-                Some(img)
+        let img = image::open(&tmp).ok()?.to_rgba8();
+        std::fs::remove_file(&tmp).ok();
+
+        if img.width() == 0 || img.height() == 0 {
+            if log {
+                eprintln!("grim capture returned zero size");
             }
-            Err(e) => {
-                if log {
-                    eprintln!("xcap monitor capture_image() failed: {}", e);
-                }
-                None
-            }
+            return None;
         }
+
+        Some(img)
     }
 
     /// Finds a window by exact title and captures it to a PNG file.
