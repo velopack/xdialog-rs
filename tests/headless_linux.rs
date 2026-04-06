@@ -60,8 +60,7 @@ fn test_progress_no_backend() {
     let result = show_progress("Test", "Heading", "Body", XDialogIcon::Information);
     assert!(
         matches!(result, Err(XDialogError::NoBackendAvailable)),
-        "Expected NoBackendAvailable, got: {:?}",
-        result
+        "Expected NoBackendAvailable from show_progress"
     );
     eprintln!("PASS: show_progress returned NoBackendAvailable");
 }
