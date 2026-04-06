@@ -154,11 +154,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ${{ env.LINUX_APT_DEPS }}
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
