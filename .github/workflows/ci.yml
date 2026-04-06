@@ -9,7 +9,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  LINUX_APT_DEPS: libx11-dev libxext-dev libxcursor-dev libxrender-dev libxfixes-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev libxkbcommon-dev libdbus-1-dev
+  LINUX_APT_DEPS: libx11-dev libxext-dev libxcursor-dev libxrender-dev libxfixes-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libdbus-1-dev
   LINUX_FLTK_APT_DEPS: libxft-dev libxinerama-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev cmake
 
 jobs:
