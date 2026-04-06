@@ -112,7 +112,7 @@ impl XDialogBuilder {
 
     #[cfg(all(target_os = "linux", not(feature = "gtk")))]
     fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
-        crate::backends::fltk::FltkBackend::run_loop(receiver, theme);
+        crate::backends::skia::SkiaBackend::run_loop(receiver, theme);
     }
 
     fn dispatch_backend(
@@ -124,11 +124,11 @@ impl XDialogBuilder {
             XDialogBackend::Automatic | XDialogBackend::NativePreferred => {
                 Self::run_default_backend(receiver, theme);
             }
-            #[cfg(target_os = "linux")]
+            #[cfg(all(target_os = "linux", feature = "fltk"))]
             XDialogBackend::Fltk => crate::backends::fltk::FltkBackend::run_loop(receiver, theme),
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(all(target_os = "linux", feature = "fltk")))]
             XDialogBackend::Fltk => {
-                error!("xdialog: FLTK backend is only available on Linux");
+                error!("xdialog: FLTK backend is not available (enable the 'fltk' feature on Linux)");
                 Self::dispatch_backend(XDialogBackend::Automatic, receiver, theme);
             }
             #[cfg(all(target_os = "linux", feature = "gtk"))]

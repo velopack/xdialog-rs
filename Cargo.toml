@@ -10,10 +10,11 @@ keywords = ["dialog", "message-box", "messagebox", "cross-platform"]
 categories = ["graphics", "gui", "visualization"]
 
 [features]
-default = ["wayland"]
+default = []
 gtk = ["dep:gtk"]
-fltk-bundled = ["fltk/fltk-bundled"]
-wayland = ["fltk/use-wayland"]
+fltk = ["dep:fltk"]
+fltk-bundled = ["fltk", "fltk/fltk-bundled"]
+fltk-wayland = ["fltk", "fltk/use-wayland"]
 win32-direct = []
 
 [dependencies]
@@ -62,10 +63,16 @@ block2 = "0.6"
 # GTK3 Backend (optional, enable with "gtk" feature)
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18", optional = true }
-# FLTK Backend
+# Skia backend (always available on Linux)
+winit = "0.30"
+softbuffer = "0.4"
+tiny-skia = "0.11"
+fontdue = "0.9"
+# Animation (used by both skia and fltk backends)
 enum-map = "2.7"
-fltk = "1.5"
 mina = "0.1"
+# FLTK backend (optional)
+fltk = { version = "1.5", optional = true }
 
 # Win32 Backend
 [target.'cfg(windows)'.dependencies]
