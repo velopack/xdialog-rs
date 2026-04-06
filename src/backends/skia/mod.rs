@@ -9,11 +9,11 @@ mod theme;
 
 use std::collections::HashMap;
 use std::sync::mpsc::Receiver;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoopBuilder};
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopBuilder};
 use winit::platform::x11::EventLoopBuilderExtX11;
 use winit::platform::wayland::EventLoopBuilderExtWayland;
 use winit::window::WindowId;
@@ -107,13 +107,24 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
         self.handle_message(event_loop, event);
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.tick();
-        // Only request redraws for dialogs that have pending changes
+
+        let mut any_animating = false;
         for dialog in self.dialogs.values() {
             if dialog.needs_redraw() {
                 dialog.window.request_redraw();
+                any_animating = true;
             }
+        }
+
+        if any_animating {
+            // Cap animation rendering at ~60fps
+            const FRAME_TIME: Duration = Duration::from_millis(16);
+            event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME_TIME));
+        } else {
+            // Nothing animating – sleep until next event
+            event_loop.set_control_flow(ControlFlow::Wait);
         }
     }
 

@@ -52,6 +52,8 @@ pub struct SkiaDialog {
     // Cached rects (physical pixels) from last full render
     progress_rect: PhysRect,
     button_panel_rect: PhysRect,
+    // Last size passed to surface.resize()
+    last_surface_size: (u32, u32),
 }
 
 impl SkiaDialog {
@@ -111,6 +113,7 @@ impl SkiaDialog {
             dirty_buttons: false,
             progress_rect: PhysRect::default(),
             button_panel_rect: PhysRect::default(),
+            last_surface_size: (0, 0),
         };
 
         dialog.layout_buttons();
@@ -256,10 +259,6 @@ impl SkiaDialog {
     // ── Rendering ──────────────────────────────────────────────────────
 
     pub fn render_and_present(&mut self) {
-        if !self.needs_redraw() {
-            return;
-        }
-
         let phys_size = self.window.inner_size();
         let pw = phys_size.width;
         let ph = phys_size.height;
@@ -280,6 +279,14 @@ impl SkiaDialog {
         // Take pixmap out to avoid borrow conflicts with self
         let mut pixmap = self.pixmap.take().unwrap();
 
+        if !self.needs_redraw() {
+            // No new rendering needed, but the OS requested a
+            // redraw (e.g. window expose) – re-present existing buffer.
+            self.present_pixmap(&pixmap, pw, ph);
+            self.pixmap = Some(pixmap);
+            return;
+        }
+
         if self.dirty_full {
             self.render_full(&mut pixmap);
         } else {
@@ -295,25 +302,31 @@ impl SkiaDialog {
         self.dirty_progress = false;
         self.dirty_buttons = false;
 
-        // Present to surface
-        self.surface
-            .resize(NonZeroU32::new(pw).unwrap(), NonZeroU32::new(ph).unwrap())
-            .unwrap();
-
-        let mut buffer = self.surface.buffer_mut().unwrap();
-        let src = pixmap.data();
-        for i in 0..(pw * ph) as usize {
-            let si = i * 4;
-            let r = src[si] as u32;
-            let g = src[si + 1] as u32;
-            let b = src[si + 2] as u32;
-            let a = src[si + 3] as u32;
-            buffer[i] = (a << 24) | (r << 16) | (g << 8) | b;
-        }
-        buffer.present().unwrap();
+        self.present_pixmap(&pixmap, pw, ph);
 
         // Put pixmap back
         self.pixmap = Some(pixmap);
+    }
+
+    fn present_pixmap(&mut self, pixmap: &Pixmap, pw: u32, ph: u32) {
+        // Only resize if dimensions changed
+        if self.last_surface_size != (pw, ph) {
+            self.surface
+                .resize(NonZeroU32::new(pw).unwrap(), NonZeroU32::new(ph).unwrap())
+                .unwrap();
+            self.last_surface_size = (pw, ph);
+        }
+
+        let mut buffer = self.surface.buffer_mut().unwrap();
+        let src = pixmap.data();
+        for (dst, chunk) in buffer.iter_mut().zip(src.chunks_exact(4)) {
+            let r = chunk[0] as u32;
+            let g = chunk[1] as u32;
+            let b = chunk[2] as u32;
+            let a = chunk[3] as u32;
+            *dst = (a << 24) | (r << 16) | (g << 8) | b;
+        }
+        buffer.present().unwrap();
     }
 
     /// Full redraw of the entire dialog.
