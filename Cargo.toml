@@ -63,7 +63,6 @@ gtk = { version = "0.18", optional = true }
 # FLTK Backend
 enum-map = "2.7"
 fltk = { version = "1.5", features = ["fltk-bundled"] }
-font-kit = { version = "0.14", default-features = false, features = ["source", "source-fontconfig", "source-fontconfig-dlopen", "loader-freetype"] }
 mina = "0.1"
 
 # Win32 Backend
