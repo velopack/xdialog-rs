@@ -7,6 +7,9 @@ use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowAttributes};
 
+use winit::event::Modifiers;
+use winit::keyboard::{Key, NamedKey};
+
 use crate::model::*;
 
 use super::button::SkiaButton;
@@ -16,6 +19,12 @@ use super::progress::SkiaProgressBar;
 use super::renderer::{fill_rect, fill_rounded_rect, stroke_rounded_rect};
 use super::text::{layout_text, measure_text_width, render_text};
 use super::theme::SkiaTheme;
+
+pub enum KeyAction {
+    None,
+    ActivateButton(usize),
+    Close,
+}
 
 const BODY_SIZE: f32 = 14.0;
 const TITLE_SIZE: f32 = 18.0;
@@ -38,6 +47,8 @@ pub struct SkiaDialog {
     theme: SkiaTheme,
     options: XDialogOptions,
     buttons: Vec<SkiaButton>,
+    focused_index: Option<usize>,
+    shift_held: bool,
     progress: Option<SkiaProgressBar>,
     result_sender: Option<oneshot::Sender<XDialogResult>>,
     scale_factor: f64,
@@ -120,6 +131,8 @@ impl SkiaDialog {
             theme: theme.clone(),
             options,
             buttons,
+            focused_index: None,
+            shift_held: false,
             progress,
             result_sender: Some(result_sender),
             scale_factor,
@@ -137,6 +150,14 @@ impl SkiaDialog {
         };
 
         dialog.layout_buttons();
+
+        // Focus the last button by default
+        if !dialog.buttons.is_empty() {
+            let last = dialog.buttons.len() - 1;
+            dialog.focused_index = Some(last);
+            dialog.buttons[last].set_focused(true);
+        }
+
         // Pre-render the first frame synchronously so the window has
         // content before the compositor/WM ever displays it.
         dialog.render_and_present();
@@ -222,20 +243,47 @@ impl SkiaDialog {
         let lx = (position.x / self.scale_factor) as f32;
         let ly = (position.y / self.scale_factor) as f32;
 
+        let mut any_hovered = false;
         for btn in &mut self.buttons {
             let was_hovered = btn.hovered;
             btn.set_hovered(btn.hit_test(lx, ly));
+            if btn.hovered {
+                any_hovered = true;
+            }
             if btn.hovered != was_hovered {
+                self.dirty_buttons = true;
+            }
+        }
+
+        // Suppress focus ring while hovering so only one button is highlighted
+        if let Some(fi) = self.focused_index {
+            if any_hovered && self.buttons[fi].focused {
+                self.buttons[fi].set_focused(false);
+                self.dirty_buttons = true;
+            } else if !any_hovered && !self.buttons[fi].focused {
+                self.buttons[fi].set_focused(true);
                 self.dirty_buttons = true;
             }
         }
     }
 
     pub fn handle_mouse_pressed(&mut self) {
-        for btn in &mut self.buttons {
+        let mut pressed_vec_idx = None;
+        for (vec_idx, btn) in self.buttons.iter_mut().enumerate() {
             if btn.hovered {
                 btn.set_pressed(true);
+                pressed_vec_idx = Some(vec_idx);
                 self.dirty_buttons = true;
+            }
+        }
+        // Transfer focus to the pressed button
+        if let Some(new_fi) = pressed_vec_idx {
+            if self.focused_index != Some(new_fi) {
+                if let Some(old_fi) = self.focused_index {
+                    self.buttons[old_fi].set_focused(false);
+                }
+                self.buttons[new_fi].set_focused(true);
+                self.focused_index = Some(new_fi);
             }
         }
     }
@@ -254,6 +302,62 @@ impl SkiaDialog {
 
     pub fn handle_close_requested(&mut self) {
         self.send_result(XDialogResult::WindowClosed);
+    }
+
+    pub fn handle_modifiers_changed(&mut self, modifiers: &Modifiers) {
+        self.shift_held = modifiers.state().shift_key();
+    }
+
+    pub fn handle_key_pressed(&mut self, key: &Key) -> KeyAction {
+        if self.buttons.is_empty() {
+            if matches!(key, Key::Named(NamedKey::Escape)) {
+                return KeyAction::Close;
+            }
+            return KeyAction::None;
+        }
+
+        match key {
+            Key::Named(NamedKey::Enter | NamedKey::Space) => {
+                if let Some(idx) = self.focused_index {
+                    KeyAction::ActivateButton(self.buttons[idx].index)
+                } else {
+                    KeyAction::None
+                }
+            }
+            Key::Named(NamedKey::Tab) => {
+                if self.shift_held {
+                    self.move_focus(-1);
+                } else {
+                    self.move_focus(1);
+                }
+                KeyAction::None
+            }
+            Key::Named(NamedKey::ArrowRight) => {
+                self.move_focus(1);
+                KeyAction::None
+            }
+            Key::Named(NamedKey::ArrowLeft) => {
+                self.move_focus(-1);
+                KeyAction::None
+            }
+            Key::Named(NamedKey::Escape) => KeyAction::Close,
+            _ => KeyAction::None,
+        }
+    }
+
+    fn move_focus(&mut self, delta: isize) {
+        let count = self.buttons.len();
+        if count == 0 {
+            return;
+        }
+
+        let old_idx = self.focused_index.unwrap_or(0);
+        self.buttons[old_idx].set_focused(false);
+
+        let new_idx = ((old_idx as isize + delta).rem_euclid(count as isize)) as usize;
+        self.buttons[new_idx].set_focused(true);
+        self.focused_index = Some(new_idx);
+        self.dirty_buttons = true;
     }
 
     pub fn tick(&mut self, elapsed: f32) -> bool {
