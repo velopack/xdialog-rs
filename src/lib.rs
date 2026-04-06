@@ -109,6 +109,8 @@
 //! - **Linux** (`fltk` feature): FLTK backend. Requires cmake and X11/Wayland development
 //!   libraries. Must be explicitly selected via
 //!   [`XDialogBuilder::with_backend(XDialogBackend::Fltk)`](XDialogBuilder::with_backend).
+//! - **Headless Linux**: When no X11 or Wayland display server is available, all dialog functions
+//!   return [`XDialogError::NoBackendAvailable`]. The application continues running without panicking.
 //!
 
 #![warn(missing_docs)]
@@ -158,4 +160,6 @@ pub enum XDialogError {
     SendFailed(String),
     #[error("xdialog generic error: {0}")]
     SystemError(String),
+    #[error("no display server available (X11 or Wayland required)")]
+    NoBackendAvailable,
 }

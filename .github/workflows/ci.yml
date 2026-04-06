@@ -148,6 +148,28 @@ jobs:
       - name: Run doc tests
         run: cargo test --doc --features gtk,fltk
 
+  headless:
+    name: Linux Headless
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.LINUX_APT_DEPS }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: headless
+
+      - name: Run headless test
+        env:
+          XDIALOG_HEADLESS_TEST: "1"
+        run: cargo test --test headless_linux
+
   visual-regression:
     name: Visual Regression (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -161,6 +183,10 @@ jobs:
             name: macOS
           - os: ubuntu-latest
             name: Linux
+
+          - os: ubuntu-latest
+            name: Linux (Wayland)
+            wayland: true
 
     steps:
       - uses: actions/checkout@v6
@@ -177,8 +203,8 @@ jobs:
         with:
           key: visual-regression-${{ matrix.name }}
 
-      - name: Start virtual display
-        if: runner.os == 'Linux'
+      - name: Start virtual display (X11)
+        if: runner.os == 'Linux' && !matrix.wayland
         run: |
           sudo apt-get install -y xvfb openbox
           Xvfb :99 -screen 0 1280x1024x24 &
@@ -188,6 +214,22 @@ jobs:
           echo "DISPLAY=:99" >> $GITHUB_ENV
           # Verify window manager is running
           DISPLAY=:99 xprop -root _NET_CLIENT_LIST_STACKING || echo "Warning: WM may not be ready"
+
+      - name: Start virtual display (Wayland)
+        if: matrix.wayland
+        run: |
+          sudo apt-get install -y weston xvfb openbox
+          # Start Xvfb for xcap window capture (xcap uses XCB)
+          Xvfb :99 -screen 0 1280x1024x24 &
+          sleep 1
+          DISPLAY=:99 openbox &
+          sleep 1
+          # Start weston with headless backend and XWayland
+          export DISPLAY=:99
+          weston --backend=headless --width=1280 --height=1024 --xwayland &
+          sleep 3
+          echo "WAYLAND_DISPLAY=wayland-1" >> $GITHUB_ENV
+          echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Run visual regression tests
         env:

@@ -191,12 +191,39 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
     }
 }
 
+impl SkiaBackend {
+    /// When no display server is available, drain the receiver channel and
+    /// respond to every dialog-creation request with `NoBackendAvailable`.
+    fn drain_with_error(receiver: Receiver<DialogMessageRequest>) {
+        while let Ok(msg) = receiver.recv() {
+            match msg {
+                DialogMessageRequest::ExitEventLoop => break,
+                DialogMessageRequest::ShowMessageWindow(_id, _options, creation) => {
+                    let _ = creation.send(Err(crate::XDialogError::NoBackendAvailable));
+                }
+                DialogMessageRequest::ShowProgressWindow(_id, _options, creation) => {
+                    let _ = creation.send(Err(crate::XDialogError::NoBackendAvailable));
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 impl XDialogBackendImpl for SkiaBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
         let mut builder = EventLoopBuilder::<DialogMessageRequest>::default();
         EventLoopBuilderExtX11::with_any_thread(&mut builder, true);
         EventLoopBuilderExtWayland::with_any_thread(&mut builder, true);
-        let event_loop = builder.build().unwrap();
+
+        let event_loop = match builder.build() {
+            Ok(el) => el,
+            Err(e) => {
+                error!("xdialog: failed to create event loop (no display server?): {}", e);
+                Self::drain_with_error(receiver);
+                return;
+            }
+        };
 
         let proxy = event_loop.create_proxy();
 
