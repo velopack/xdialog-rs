@@ -2,7 +2,6 @@ use fltk::app::App;
 use fltk::enums::{Color, FrameType};
 use fltk::{app, draw};
 
-use super::fltk_fonts::*;
 use crate::model::{XDialogIcon, XDialogTheme};
 
 #[derive(Debug, Clone)]
@@ -68,8 +67,7 @@ pub fn apply_theme(app_instance: &App, theme: XDialogTheme) -> DialogTheme {
     theme
 }
 
-pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
-    load_windows_fonts(app_instance);
+pub fn apply_windows_theme(_app_instance: &App) -> DialogTheme {
     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_windows_cb, 0, 0, 0, 0);
     DialogTheme {
         button_panel_height: 41,
@@ -124,8 +122,7 @@ pub fn apply_windows_theme(app_instance: &App) -> DialogTheme {
     }
 }
 
-pub fn apply_ubuntu_theme(app_instance: &App) -> DialogTheme {
-    load_ubuntu_fonts(app_instance);
+pub fn apply_ubuntu_theme(_app_instance: &App) -> DialogTheme {
     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_noop_cb, 0, 0, 0, 0);
     DialogTheme {
         button_panel_height: 48,
@@ -180,8 +177,7 @@ pub fn apply_ubuntu_theme(app_instance: &App) -> DialogTheme {
     }
 }
 
-pub fn apply_macos_theme(app_instance: &App, dark: bool) -> DialogTheme {
-    load_macos_fonts(app_instance);
+pub fn apply_macos_theme(_app_instance: &App, dark: bool) -> DialogTheme {
     app::set_frame_type_cb(FrameType::ThinUpBox, thin_up_box_noop_cb, 0, 0, 0, 0);
     let mut light_theme = DialogTheme {
         button_panel_height: 54,
