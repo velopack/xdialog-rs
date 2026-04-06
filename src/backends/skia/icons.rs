@@ -1,116 +1,71 @@
-use tiny_skia::Pixmap;
+use tiny_skia::PixmapMut;
 
 use super::renderer::{fill_circle, fill_rounded_rect, stroke_line};
 
 use crate::model::XDialogIcon;
 
-/// Render an icon to a pixmap at the given size.
-pub fn render_icon(icon: XDialogIcon, size: u32) -> Option<Pixmap> {
+/// Draw an icon directly onto the target pixmap at the given position and size.
+pub fn draw_icon(pixmap: &mut PixmapMut, icon: &XDialogIcon, x: f32, y: f32, size: f32) {
     match icon {
-        XDialogIcon::None => None,
-        XDialogIcon::Information => Some(render_info_icon(size)),
-        XDialogIcon::Error => Some(render_error_icon(size)),
-        XDialogIcon::Warning => Some(render_warning_icon(size)),
+        XDialogIcon::None => {}
+        XDialogIcon::Information => draw_info_icon(pixmap, x, y, size),
+        XDialogIcon::Error => draw_error_icon(pixmap, x, y, size),
+        XDialogIcon::Warning => draw_warning_icon(pixmap, x, y, size),
     }
 }
 
 /// Blue circle with white "i"
-fn render_info_icon(size: u32) -> Pixmap {
-    let mut pixmap = Pixmap::new(size, size).unwrap();
-    let s = size as f32;
-    let center = s / 2.0;
+fn draw_info_icon(pixmap: &mut PixmapMut, x: f32, y: f32, s: f32) {
+    let cx = x + s / 2.0;
+    let cy = y + s / 2.0;
     let radius = s / 2.0 - 1.0;
 
-    // Blue circle background
-    fill_circle(&mut pixmap.as_mut(), center, center, radius, (0x21, 0x96, 0xF3));
+    fill_circle(pixmap, cx, cy, radius, (0x21, 0x96, 0xF3));
 
-    // White "i" - dot
+    // Dot
     let dot_radius = s * 0.07;
-    let dot_y = center - s * 0.2;
-    fill_circle(&mut pixmap.as_mut(), center, dot_y, dot_radius, (0xFF, 0xFF, 0xFF));
+    let dot_y = cy - s * 0.2;
+    fill_circle(pixmap, cx, dot_y, dot_radius, (0xFF, 0xFF, 0xFF));
 
-    // White "i" - body (rounded rect)
+    // Body
     let body_w = s * 0.1;
     let body_h = s * 0.3;
-    let body_x = center - body_w / 2.0;
-    let body_y = center - s * 0.05;
-    fill_rounded_rect(
-        &mut pixmap.as_mut(),
-        body_x,
-        body_y,
-        body_w,
-        body_h,
-        body_w / 2.0,
-        (0xFF, 0xFF, 0xFF),
-    );
-
-    pixmap
+    let body_x = cx - body_w / 2.0;
+    let body_y = cy - s * 0.05;
+    fill_rounded_rect(pixmap, body_x, body_y, body_w, body_h, body_w / 2.0, (0xFF, 0xFF, 0xFF));
 }
 
 /// Red circle with white "X"
-fn render_error_icon(size: u32) -> Pixmap {
-    let mut pixmap = Pixmap::new(size, size).unwrap();
-    let s = size as f32;
-    let center = s / 2.0;
+fn draw_error_icon(pixmap: &mut PixmapMut, x: f32, y: f32, s: f32) {
+    let cx = x + s / 2.0;
+    let cy = y + s / 2.0;
     let radius = s / 2.0 - 1.0;
 
-    // Red circle background
-    fill_circle(&mut pixmap.as_mut(), center, center, radius, (0xD7, 0x5A, 0x4A));
+    fill_circle(pixmap, cx, cy, radius, (0xD7, 0x5A, 0x4A));
 
-    // White X
     let arm = s * 0.18;
     let stroke_w = s * 0.08;
-    stroke_line(
-        &mut pixmap.as_mut(),
-        center - arm,
-        center - arm,
-        center + arm,
-        center + arm,
-        (0xFF, 0xFF, 0xFF),
-        stroke_w,
-    );
-    stroke_line(
-        &mut pixmap.as_mut(),
-        center + arm,
-        center - arm,
-        center - arm,
-        center + arm,
-        (0xFF, 0xFF, 0xFF),
-        stroke_w,
-    );
-
-    pixmap
+    stroke_line(pixmap, cx - arm, cy - arm, cx + arm, cy + arm, (0xFF, 0xFF, 0xFF), stroke_w);
+    stroke_line(pixmap, cx + arm, cy - arm, cx - arm, cy + arm, (0xFF, 0xFF, 0xFF), stroke_w);
 }
 
 /// Yellow/orange circle with dark "!"
-fn render_warning_icon(size: u32) -> Pixmap {
-    let mut pixmap = Pixmap::new(size, size).unwrap();
-    let s = size as f32;
-    let center = s / 2.0;
+fn draw_warning_icon(pixmap: &mut PixmapMut, x: f32, y: f32, s: f32) {
+    let cx = x + s / 2.0;
+    let cy = y + s / 2.0;
     let radius = s / 2.0 - 1.0;
 
-    // Yellow circle background
-    fill_circle(&mut pixmap.as_mut(), center, center, radius, (0xFF, 0xC1, 0x07));
+    fill_circle(pixmap, cx, cy, radius, (0xFF, 0xC1, 0x07));
 
-    // Dark "!" - body (rounded rect)
+    // Body
     let body_w = s * 0.1;
     let body_h = s * 0.28;
-    let body_x = center - body_w / 2.0;
-    let body_y = center - s * 0.25;
-    fill_rounded_rect(
-        &mut pixmap.as_mut(),
-        body_x,
-        body_y,
-        body_w,
-        body_h,
-        body_w / 2.0,
-        (0x3D, 0x3D, 0x3D),
-    );
+    let body_x = cx - body_w / 2.0;
+    let body_y = cy - s * 0.25;
+    fill_rounded_rect(pixmap, body_x, body_y, body_w, body_h, body_w / 2.0, (0x3D, 0x3D, 0x3D));
 
-    // Dark "!" - dot
+    // Dot
     let dot_radius = s * 0.065;
-    let dot_y = center + s * 0.18;
-    fill_circle(&mut pixmap.as_mut(), center, dot_y, dot_radius, (0x3D, 0x3D, 0x3D));
-
-    pixmap
+    let dot_y = cy + s * 0.18;
+    fill_circle(pixmap, cx, dot_y, dot_radius, (0x3D, 0x3D, 0x3D));
 }

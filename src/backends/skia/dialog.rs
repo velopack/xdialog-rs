@@ -13,7 +13,7 @@ use super::button::SkiaButton;
 use super::font::{FONT_BOLD, FONT_REGULAR};
 use super::icons;
 use super::progress::SkiaProgressBar;
-use super::renderer::{composite_pixmap, fill_rect, fill_rounded_rect, stroke_rounded_rect};
+use super::renderer::{fill_rect, fill_rounded_rect, stroke_rounded_rect};
 use super::text::{layout_text, measure_text_width, render_text};
 use super::theme::SkiaTheme;
 
@@ -29,7 +29,6 @@ pub struct SkiaDialog {
     options: XDialogOptions,
     buttons: Vec<SkiaButton>,
     progress: Option<SkiaProgressBar>,
-    icon_pixmap: Option<Pixmap>,
     result_sender: Option<oneshot::Sender<XDialogResult>>,
     needs_redraw: bool,
     scale_factor: f64,
@@ -48,8 +47,7 @@ impl SkiaDialog {
         has_progress: bool,
         result_sender: oneshot::Sender<XDialogResult>,
     ) -> Self {
-        let icon_pixmap = icons::render_icon(options.icon.clone(), theme.main_icon_size as u32);
-        let has_icon = icon_pixmap.is_some();
+        let has_icon = options.icon != XDialogIcon::None;
 
         // Compute window size
         let (win_w, win_h) = compute_window_size(&options, theme, has_progress, has_icon);
@@ -89,7 +87,6 @@ impl SkiaDialog {
             options,
             buttons,
             progress,
-            icon_pixmap,
             result_sender: Some(result_sender),
             needs_redraw: true,
             scale_factor,
@@ -294,16 +291,9 @@ impl SkiaDialog {
         // Vertical cursor starts after top margin
         let mut y = gap;
 
-        // 2. Draw icon (top-aligned with text)
-        if let Some(ref icon_pm) = self.icon_pixmap {
-            let target_size = (icon_size as u32).max(1);
-            if icon_pm.width() != target_size || icon_pm.height() != target_size {
-                if let Some(scaled) = icons::render_icon(self.options.icon.clone(), target_size) {
-                    composite_pixmap(&mut pixmap.as_mut(), &scaled, gap as i32, y as i32);
-                }
-            } else {
-                composite_pixmap(&mut pixmap.as_mut(), icon_pm, gap as i32, y as i32);
-            }
+        // 2. Draw icon directly onto dialog pixmap (no intermediate pixmap = clean AA)
+        if self.has_icon {
+            icons::draw_icon(&mut pixmap.as_mut(), &self.options.icon, gap, y, icon_size);
         }
 
         // 3. Draw title text
