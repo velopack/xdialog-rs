@@ -12,6 +12,7 @@ categories = ["graphics", "gui", "visualization"]
 [features]
 default = []
 gtk = ["dep:gtk"]
+fltk-bundled = ["fltk/fltk-bundled"]
 win32-direct = []
 
 [dependencies]
@@ -62,7 +63,7 @@ block2 = "0.6"
 gtk = { version = "0.18", optional = true }
 # FLTK Backend
 enum-map = "2.7"
-fltk = { version = "1.5", features = ["fltk-bundled"] }
+fltk = "1.5"
 mina = "0.1"
 
 # Win32 Backend
