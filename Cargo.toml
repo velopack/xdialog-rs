@@ -10,9 +10,10 @@ keywords = ["dialog", "message-box", "messagebox", "cross-platform"]
 categories = ["graphics", "gui", "visualization"]
 
 [features]
-default = []
+default = ["wayland"]
 gtk = ["dep:gtk"]
 fltk-bundled = ["fltk/fltk-bundled"]
+wayland = ["fltk/use-wayland"]
 win32-direct = []
 
 [dependencies]
