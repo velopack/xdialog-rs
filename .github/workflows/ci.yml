@@ -185,7 +185,7 @@ jobs:
             name: Linux
 
           - os: ubuntu-latest
-            name: Linux (Wayland)
+            name: Linux Wayland
             wayland: true
 
     steps:
