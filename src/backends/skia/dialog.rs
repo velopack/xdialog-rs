@@ -70,10 +70,26 @@ impl SkiaDialog {
         let has_icon = options.icon != XDialogIcon::None;
         let (win_w, win_h) = compute_window_size(&options, theme, has_progress, has_icon);
 
-        let attrs = WindowAttributes::default()
+        let mut attrs = WindowAttributes::default()
             .with_title(options.title.clone())
             .with_inner_size(LogicalSize::new(win_w as f64, win_h as f64))
             .with_resizable(false);
+
+        // Pre-compute the centered position so the WM doesn't need to
+        // reposition after mapping, which causes a visible jitter.
+        if let Some(monitor) = event_loop
+            .primary_monitor()
+            .or_else(|| event_loop.available_monitors().next())
+        {
+            let mon_size = monitor.size();
+            let mon_pos = monitor.position();
+            let scale = monitor.scale_factor();
+            let phys_w = (win_w as f64 * scale) as i32;
+            let phys_h = (win_h as f64 * scale) as i32;
+            let x = mon_pos.x + (mon_size.width as i32 - phys_w) / 2;
+            let y = mon_pos.y + (mon_size.height as i32 - phys_h) / 2;
+            attrs = attrs.with_position(PhysicalPosition::<i32>::new(x, y));
+        }
 
         let window = Arc::new(event_loop.create_window(attrs).unwrap());
         let scale_factor = window.scale_factor();
@@ -121,6 +137,9 @@ impl SkiaDialog {
         };
 
         dialog.layout_buttons();
+        // Pre-render the first frame synchronously so the window has
+        // content before the compositor/WM ever displays it.
+        dialog.render_and_present();
         dialog
     }
 
@@ -180,7 +199,14 @@ impl SkiaDialog {
         }
     }
 
-    pub fn handle_resized(&mut self, _size: PhysicalSize<u32>) {
+    pub fn handle_resized(&mut self, size: PhysicalSize<u32>) {
+        // Skip if the size hasn't actually changed – the WM often sends a
+        // confirmatory Resized right after mapping with the same dimensions.
+        if let Some(ref pixmap) = self.pixmap {
+            if pixmap.width() == size.width && pixmap.height() == size.height {
+                return;
+            }
+        }
         self.pixmap = None; // force re-allocation
         self.dirty_full = true;
     }
