@@ -97,10 +97,6 @@ harness = false
 name = "visual_regression"
 harness = false
 
-[[test]]
-name = "headless_linux"
-harness = false
-
 [dev-dependencies]
 ntest = "0.9"
 image = "0.25"

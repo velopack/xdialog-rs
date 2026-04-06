@@ -149,21 +149,28 @@ jobs:
         run: cargo test --doc --features gtk,fltk
 
   headless:
-    name: Linux Headless
+    name: Headless (${{ matrix.target }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-gnu
+          - aarch64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: headless
+      - name: Install cross-rs
+        run: |
+          curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall cross
 
       - name: Run headless test
-        env:
-          XDIALOG_HEADLESS_TEST: "1"
-        run: cargo test --test headless_linux
+        run: cross run --manifest-path tests/headless/Cargo.toml --target ${{ matrix.target }}
 
   visual-regression:
     name: Visual Regression (${{ matrix.name }})
@@ -174,7 +181,7 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
-            
+
           - os: macos-latest
             name: macOS
 
