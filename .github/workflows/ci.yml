@@ -219,10 +219,16 @@ jobs:
         if: matrix.wayland
         run: |
           sudo apt-get install -y weston
+          export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/wayland-runtime}"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> $GITHUB_ENV
           # Start weston with headless backend (no X11 needed — we capture the full monitor)
           weston --backend=headless --width=500 --height=500 &
           sleep 3
-          echo "WAYLAND_DISPLAY=wayland-1" >> $GITHUB_ENV
+          # Find the socket weston created
+          SOCKET=$(ls "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null | head -1 | xargs basename)
+          echo "Found Wayland socket: $SOCKET"
+          echo "WAYLAND_DISPLAY=$SOCKET" >> $GITHUB_ENV
 
       - name: Run visual regression tests
         env:
