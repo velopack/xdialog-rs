@@ -17,8 +17,6 @@ pub struct SkiaTheme {
 
     pub main_icon_size: i32,
     pub default_content_margin: i32,
-    pub content_margin_top: i32,
-    pub content_margin_bottom: i32,
 
     pub color_background: (u8, u8, u8),
     pub color_background_alt: (u8, u8, u8),
@@ -43,9 +41,7 @@ pub fn get_theme() -> SkiaTheme {
         button_order_reversed: false,
 
         main_icon_size: 48,
-        default_content_margin: 12,
-        content_margin_top: 5,
-        content_margin_bottom: 16,
+        default_content_margin: 16,
 
         color_background: (0xFA, 0xFA, 0xFA),
         color_background_alt: (0xFA, 0xFA, 0xFA),

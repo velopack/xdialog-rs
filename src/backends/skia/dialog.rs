@@ -14,11 +14,11 @@ use super::font::{FONT_BOLD, FONT_REGULAR};
 use super::icons;
 use super::progress::SkiaProgressBar;
 use super::renderer::{composite_pixmap, fill_rect, fill_rounded_rect, stroke_rounded_rect};
-use super::text::{layout_text, measure_line_height, measure_text_width, render_text};
+use super::text::{layout_text, measure_text_width, render_text};
 use super::theme::SkiaTheme;
 
-const BODY_SIZE: f32 = 12.0;
-const TITLE_SIZE: f32 = 16.0;
+const BODY_SIZE: f32 = 14.0;
+const TITLE_SIZE: f32 = 18.0;
 const MIN_WIDTH: i32 = 350;
 const MAX_WIDTH: i32 = 600;
 
@@ -33,12 +33,11 @@ pub struct SkiaDialog {
     result_sender: Option<oneshot::Sender<XDialogResult>>,
     needs_redraw: bool,
     scale_factor: f64,
+    has_progress: bool,
     // Layout metrics (logical pixels)
     content_width: i32,
     content_height: i32,
     has_icon: bool,
-    pad_x: i32,
-    pad_y: i32,
 }
 
 impl SkiaDialog {
@@ -52,21 +51,8 @@ impl SkiaDialog {
         let icon_pixmap = icons::render_icon(options.icon.clone(), theme.main_icon_size as u32);
         let has_icon = icon_pixmap.is_some();
 
-        let mut pad_y = theme.content_margin_top + theme.content_margin_bottom;
-        if !options.buttons.is_empty() {
-            pad_y += theme.button_panel_height;
-        }
-        if has_progress {
-            pad_y += 12; // progress bar height + margin
-        }
-
-        let mut pad_x = theme.default_content_margin * 2;
-        if has_icon {
-            pad_x += theme.main_icon_size + theme.default_content_margin;
-        }
-
         // Compute window size
-        let (win_w, win_h) = compute_window_size(&options, theme, pad_x, pad_y, has_icon);
+        let (win_w, win_h) = compute_window_size(&options, theme, has_progress, has_icon);
 
         let attrs = WindowAttributes::default()
             .with_title(options.title.clone())
@@ -107,11 +93,10 @@ impl SkiaDialog {
             result_sender: Some(result_sender),
             needs_redraw: true,
             scale_factor,
+            has_progress,
             content_width: win_w,
             content_height: win_h,
             has_icon,
-            pad_x,
-            pad_y,
         };
 
         dialog.layout_buttons();
@@ -132,7 +117,7 @@ impl SkiaDialog {
     pub fn set_body_text(&mut self, text: &str) {
         self.options.message = text.to_string();
         let (win_w, win_h) =
-            compute_window_size(&self.options, &self.theme, self.pad_x, self.pad_y, self.has_icon);
+            compute_window_size(&self.options, &self.theme, self.has_progress, self.has_icon);
         self.content_width = win_w;
         self.content_height = win_h;
         let _ = self
@@ -283,76 +268,69 @@ impl SkiaDialog {
 
         let theme = &self.theme;
 
-        // Content area layout (logical coords, scaled when drawing)
-        let margin = theme.default_content_margin as f32 * scale;
-        let margin_top = theme.content_margin_top as f32 * scale;
+        // Layout: two columns (icon | text), uniform gap between all vertical elements.
+        // gap = default_content_margin used as the single consistent spacing value.
+        //
+        //  [gap]                          <- top margin
+        //  [icon]  [main instruction]     <- icon top == text top
+        //          [gap]
+        //          [progress bar]
+        //          [gap]
+        //          [body text]
+        //  [gap]                          <- bottom margin (before button panel)
+        //  [button panel]
+
+        let gap = theme.default_content_margin as f32 * scale;
         let icon_size = theme.main_icon_size as f32 * scale;
+        let prog_h = 6.0 * scale;
 
-        let mut content_x = margin;
-        let content_y = margin_top;
+        // Text column X position
+        let mut text_x = gap;
+        if self.has_icon {
+            text_x = gap + icon_size + gap;
+        }
+        let text_w = pw as f32 - text_x - gap;
 
-        // 2. Draw icon
+        // Vertical cursor starts after top margin
+        let mut y = gap;
+
+        // 2. Draw icon (top-aligned with text)
         if let Some(ref icon_pm) = self.icon_pixmap {
-            // Scale icon if needed
             let target_size = (icon_size as u32).max(1);
             if icon_pm.width() != target_size || icon_pm.height() != target_size {
-                // Re-render at correct size
-                if let Some(scaled) =
-                    icons::render_icon(self.options.icon.clone(), target_size)
-                {
-                    composite_pixmap(
-                        &mut pixmap.as_mut(),
-                        &scaled,
-                        margin as i32,
-                        content_y as i32,
-                    );
+                if let Some(scaled) = icons::render_icon(self.options.icon.clone(), target_size) {
+                    composite_pixmap(&mut pixmap.as_mut(), &scaled, gap as i32, y as i32);
                 }
             } else {
-                composite_pixmap(
-                    &mut pixmap.as_mut(),
-                    icon_pm,
-                    margin as i32,
-                    content_y as i32,
-                );
+                composite_pixmap(&mut pixmap.as_mut(), icon_pm, gap as i32, y as i32);
             }
-            content_x = margin + icon_size + margin;
         }
 
-        // Available text width
-        let text_area_width = pw as f32 - content_x - margin;
-
         // 3. Draw title text
-        let mut text_y = content_y;
         if !self.options.main_instruction.is_empty() {
             let title_layout =
-                layout_text(&self.options.main_instruction, &FONT_BOLD, TITLE_SIZE * scale, text_area_width);
+                layout_text(&self.options.main_instruction, &FONT_BOLD, TITLE_SIZE * scale, text_w);
             render_text(
                 &mut pixmap.as_mut(),
                 &title_layout,
                 &FONT_BOLD,
                 TITLE_SIZE * scale,
                 theme.color_title_text,
-                content_x,
-                text_y,
+                text_x,
+                y,
             );
-            text_y += title_layout.total_height
-                + measure_line_height(&FONT_BOLD, TITLE_SIZE * scale);
+            y += title_layout.total_height;
+            y += gap;
         }
 
         // 4. Draw progress bar
         if let Some(ref progress) = self.progress {
-            let prog_margin = 3.0 * scale;
-            let prog_h = 6.0 * scale;
-            let prog_x = content_x + prog_margin;
-            let prog_w = text_area_width - prog_margin * 2.0;
-            let prog_y = text_y + prog_margin;
+            let prog_x = text_x;
+            let prog_w = text_w;
 
             fill_rounded_rect(
                 &mut pixmap.as_mut(),
-                prog_x,
-                prog_y,
-                prog_w,
-                prog_h,
+                prog_x, y, prog_w, prog_h,
                 2.0 * scale,
                 theme.color_progress_background,
             );
@@ -363,30 +341,28 @@ impl SkiaDialog {
             if bar_w > 0.0 {
                 fill_rounded_rect(
                     &mut pixmap.as_mut(),
-                    prog_x + bar_start,
-                    prog_y,
-                    bar_w,
-                    prog_h,
+                    prog_x + bar_start, y, bar_w, prog_h,
                     2.0 * scale,
                     theme.color_progress_foreground,
                 );
             }
 
-            text_y += prog_h + prog_margin * 2.0;
+            y += prog_h;
+            y += gap;
         }
 
         // 5. Draw body text
         if !self.options.message.is_empty() {
             let body_layout =
-                layout_text(&self.options.message, &FONT_REGULAR, BODY_SIZE * scale, text_area_width);
+                layout_text(&self.options.message, &FONT_REGULAR, BODY_SIZE * scale, text_w);
             render_text(
                 &mut pixmap.as_mut(),
                 &body_layout,
                 &FONT_REGULAR,
                 BODY_SIZE * scale,
                 theme.color_body_text,
-                content_x,
-                text_y,
+                text_x,
+                y,
             );
         }
 
@@ -481,15 +457,24 @@ impl SkiaDialog {
 fn compute_window_size(
     options: &XDialogOptions,
     theme: &SkiaTheme,
-    pad_x: i32,
-    pad_y: i32,
+    has_progress: bool,
     has_icon: bool,
 ) -> (i32, i32) {
-    // Measure unwrapped text widths
+    let gap = theme.default_content_margin;
+    let prog_h = 6;
+
+    // Horizontal: gap + [icon + gap] + text + gap
+    let pad_x = if has_icon {
+        gap + theme.main_icon_size + gap + gap
+    } else {
+        gap + gap
+    };
+
+    // Measure unwrapped text widths for width calculation
     let title_width = measure_text_width(&options.main_instruction, &FONT_BOLD, TITLE_SIZE) as i32;
     let body_width = measure_text_width(&options.message, &FONT_REGULAR, BODY_SIZE) as i32;
-
     let initial_width = body_width.max(title_width);
+
     let window_width = if initial_width <= 600 {
         300
     } else if initial_width >= 4000 {
@@ -498,45 +483,34 @@ fn compute_window_size(
         300 + (((initial_width - 600) as f32 / 3400.0) * 300.0) as i32
     };
 
-    // Adjust for very long text
-    let title_line_height = measure_line_height(&FONT_BOLD, TITLE_SIZE) as i32;
-    let body_line_height = measure_line_height(&FONT_REGULAR, BODY_SIZE) as i32;
-    let title_height =
-        measure_text_width(&options.main_instruction, &FONT_BOLD, TITLE_SIZE) as i32; // rough
-    let body_height = measure_text_width(&options.message, &FONT_REGULAR, BODY_SIZE) as i32; // rough
-    let initial_height = title_height + body_height + title_line_height;
-    let height_threshold = 5 * body_line_height.max(1);
-    let extra_width = if initial_height > height_threshold {
-        (initial_height as f32 / height_threshold as f32 * 50.0).min(300.0) as i32
-    } else {
-        0
-    };
+    let final_width = window_width.clamp(MIN_WIDTH, MAX_WIDTH);
 
-    let final_width = (window_width + extra_width)
-        .min(MAX_WIDTH)
-        .min(initial_width + pad_y)
-        .max(MIN_WIDTH);
+    // Compute wrapped text heights at final width
+    let text_w = (final_width - pad_x) as f32;
+    let wrapped_title = layout_text(&options.main_instruction, &FONT_BOLD, TITLE_SIZE, text_w);
+    let wrapped_body = layout_text(&options.message, &FONT_REGULAR, BODY_SIZE, text_w);
 
-    // Compute wrapped text heights
-    let text_area_width = (final_width - pad_x) as f32;
-    let wrapped_title = layout_text(&options.main_instruction, &FONT_BOLD, TITLE_SIZE, text_area_width);
-    let wrapped_body = layout_text(&options.message, &FONT_REGULAR, BODY_SIZE, text_area_width);
-
-    let mut final_height = pad_y;
+    // Vertical: gap + [title + gap] + [progress + gap] + [body + gap] + [button_panel]
+    let mut h = gap; // top margin
     if !options.main_instruction.is_empty() {
-        final_height +=
-            wrapped_title.total_height as i32 + title_line_height;
-        // Ensure title area is at least icon height
-        if has_icon {
-            let title_area = wrapped_title.total_height as i32 + title_line_height;
-            if title_area < theme.main_icon_size {
-                final_height += theme.main_icon_size - title_area;
-            }
-        }
+        h += wrapped_title.total_height as i32;
+        h += gap;
+    }
+    if has_progress {
+        h += prog_h;
+        h += gap;
     }
     if !options.message.is_empty() {
-        final_height += wrapped_body.total_height as i32 + body_line_height;
+        h += wrapped_body.total_height as i32;
+        h += gap;
+    }
+    // Icon needs gap + icon_size + gap vertically
+    if has_icon {
+        h = h.max(gap + theme.main_icon_size + gap);
+    }
+    if !options.buttons.is_empty() {
+        h += theme.button_panel_height;
     }
 
-    (final_width, final_height)
+    (final_width, h)
 }
