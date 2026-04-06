@@ -342,7 +342,11 @@ fn platform_name() -> &'static str {
     if cfg!(target_os = "windows") {
         "windows"
     } else if cfg!(target_os = "linux") {
-        "linux"
+        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+            "linux_wayland"
+        } else {
+            "linux"
+        }
     } else if cfg!(target_os = "macos") {
         "macos"
     } else {
@@ -466,13 +470,11 @@ fn seed_or_compare(name: &str) {
         eprintln!("Seeded reference: {}", ref_path.display());
     } else {
         let ref_path = reference_dir().join(format!("{}.png", name));
-        if !ref_path.exists() {
-            eprintln!(
-                "No reference image at {}, skipping comparison. Run image_seed.sh to generate references.",
-                ref_path.display()
-            );
-            return;
-        }
+        assert!(
+            ref_path.exists(),
+            "No reference image at {}. Run with XDIALOG_VISUAL_SEED=1 to generate references.",
+            ref_path.display()
+        );
 
         let (passed, diff_percent) = compare_images(&output_path, &ref_path);
         assert!(
