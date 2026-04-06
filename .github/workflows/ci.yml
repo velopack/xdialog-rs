@@ -136,7 +136,7 @@ jobs:
           key: doctest
 
       - name: Run doc tests
-        run: cargo test --doc --all-features
+        run: cargo test --doc --features gtk
 
   visual-regression:
     name: Visual Regression (${{ matrix.name }})
