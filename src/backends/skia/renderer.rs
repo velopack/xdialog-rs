@@ -1,4 +1,4 @@
-use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, PixmapMut, Stroke, Transform};
+use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
 /// Fill a rectangle with a solid color.
 pub fn fill_rect(pixmap: &mut PixmapMut, x: f32, y: f32, w: f32, h: f32, color: (u8, u8, u8)) {
@@ -75,50 +75,6 @@ pub fn stroke_rounded_rect(
 
     if let Some(path) = rounded_rect_path(x, y, w, h, radius) {
         pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
-    }
-}
-
-/// Composite a source pixmap onto a destination pixmap at the given position.
-pub fn composite_pixmap(dst: &mut PixmapMut, src: &Pixmap, x: i32, y: i32) {
-    let src_w = src.width() as i32;
-    let src_h = src.height() as i32;
-    let dst_w = dst.width() as i32;
-    let dst_h = dst.height() as i32;
-    let src_data = src.data();
-    let dst_data = dst.data_mut();
-
-    for sy in 0..src_h {
-        let dy = y + sy;
-        if dy < 0 || dy >= dst_h {
-            continue;
-        }
-        for sx in 0..src_w {
-            let dx = x + sx;
-            if dx < 0 || dx >= dst_w {
-                continue;
-            }
-            let si = (sy as usize * src_w as usize + sx as usize) * 4;
-            let di = (dy as usize * dst_w as usize + dx as usize) * 4;
-            let sa = src_data[si + 3] as f32 / 255.0;
-            if sa <= 0.0 {
-                continue;
-            }
-            if sa >= 1.0 {
-                dst_data[di] = src_data[si];
-                dst_data[di + 1] = src_data[si + 1];
-                dst_data[di + 2] = src_data[si + 2];
-                dst_data[di + 3] = 255;
-            } else {
-                let inv_a = 1.0 - sa;
-                dst_data[di] = (src_data[si] as f32 * sa + dst_data[di] as f32 * inv_a) as u8;
-                dst_data[di + 1] =
-                    (src_data[si + 1] as f32 * sa + dst_data[di + 1] as f32 * inv_a) as u8;
-                dst_data[di + 2] =
-                    (src_data[si + 2] as f32 * sa + dst_data[di + 2] as f32 * inv_a) as u8;
-                dst_data[di + 3] =
-                    (255.0f32.min(dst_data[di + 3] as f32 + src_data[si + 3] as f32)) as u8;
-            }
-        }
     }
 }
 
