@@ -100,6 +100,10 @@ impl SkiaDialog {
         dialog
     }
 
+    pub fn needs_redraw(&self) -> bool {
+        self.needs_redraw
+    }
+
     pub fn send_result(&mut self, result: XDialogResult) {
         if let Some(sender) = self.result_sender.take() {
             let _ = sender.send(result);
@@ -187,17 +191,19 @@ impl SkiaDialog {
         self.send_result(XDialogResult::WindowClosed);
     }
 
-    pub fn tick(&mut self, elapsed: f32) {
+    /// Advance animations. Returns true if a redraw is needed.
+    pub fn tick(&mut self, elapsed: f32) -> bool {
         for btn in &mut self.buttons {
-            btn.tick(elapsed);
+            if btn.tick(elapsed) {
+                self.needs_redraw = true;
+            }
         }
         if let Some(p) = &mut self.progress {
             if p.tick(elapsed) {
                 self.needs_redraw = true;
             }
         }
-        // Buttons always need redraw during animation
-        self.needs_redraw = true;
+        self.needs_redraw
     }
 
     fn layout_buttons(&mut self) {

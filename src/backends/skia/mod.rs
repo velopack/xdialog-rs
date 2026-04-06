@@ -96,7 +96,6 @@ impl AppState {
 
         for dialog in self.dialogs.values_mut() {
             dialog.tick(elapsed);
-            dialog.render_and_present();
         }
     }
 }
@@ -110,9 +109,11 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
 
     fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
         self.tick();
-        // Request redraws for all visible windows to keep animations going
+        // Only request redraws for dialogs that have pending changes
         for dialog in self.dialogs.values() {
-            dialog.window.request_redraw();
+            if dialog.needs_redraw() {
+                dialog.window.request_redraw();
+            }
         }
     }
 
