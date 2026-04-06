@@ -155,7 +155,11 @@ impl SkiaButton {
         self.animator.borrow().current_values().clone()
     }
 
-    pub fn tick(&mut self, elapsed: f32) {
+    /// Advance animation. Returns true if the visual state changed.
+    pub fn tick(&mut self, elapsed: f32) -> bool {
+        let before = self.animator.borrow().current_values().clone();
         self.animator.borrow_mut().advance(elapsed);
+        let after = self.animator.borrow().current_values().clone();
+        before != after
     }
 }
