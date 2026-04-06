@@ -142,6 +142,11 @@ impl SkiaButton {
         self.update_state();
     }
 
+    pub fn set_focused(&mut self, focused: bool) {
+        self.focused = focused;
+        self.update_state();
+    }
+
     fn update_state(&mut self) {
         let state = if self.pressed {
             ButtonState::Pressed

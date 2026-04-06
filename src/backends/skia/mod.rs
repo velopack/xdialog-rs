@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
+use dialog::KeyAction;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopBuilder};
 use winit::platform::x11::EventLoopBuilderExtX11;
 use winit::platform::wayland::EventLoopBuilderExtWayland;
@@ -183,6 +184,33 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
                                 self.window_to_id.remove(&wid);
                             }
                         }
+                    }
+                }
+            }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                dialog.handle_modifiers_changed(&modifiers);
+            }
+            WindowEvent::KeyboardInput { event, is_synthetic, .. } => {
+                if event.state == ElementState::Pressed && !is_synthetic {
+                    match dialog.handle_key_pressed(&event.logical_key) {
+                        KeyAction::ActivateButton(index) => {
+                            if !event.repeat {
+                                dialog.send_result(XDialogResult::ButtonPressed(index));
+                                dialog.window.set_visible(false);
+                                let wid = window_id;
+                                self.dialogs.remove(&dialog_id);
+                                self.window_to_id.remove(&wid);
+                            }
+                        }
+                        KeyAction::Close => {
+                            if !event.repeat {
+                                dialog.handle_close_requested();
+                                let wid = dialog.window.id();
+                                self.dialogs.remove(&dialog_id);
+                                self.window_to_id.remove(&wid);
+                            }
+                        }
+                        KeyAction::None => {}
                     }
                 }
             }
