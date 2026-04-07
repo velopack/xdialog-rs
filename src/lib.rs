@@ -115,9 +115,6 @@
 
 #![warn(missing_docs)]
 
-#[cfg(all(feature = "win32-direct", not(windows)))]
-compile_error!("The `win32-direct` feature is only available on Windows");
-
 #[macro_use]
 extern crate log;
 
