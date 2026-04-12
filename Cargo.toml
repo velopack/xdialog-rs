@@ -16,6 +16,7 @@ fltk = ["dep:fltk"]
 fltk-bundled = ["fltk", "fltk/fltk-bundled"]
 fltk-wayland = ["fltk", "fltk/use-wayland"]
 win32-direct = []
+maccf-direct = ["dep:core-foundation", "dep:core-foundation-sys"]
 
 [dependencies]
 log = "0.4"
@@ -59,6 +60,8 @@ objc2-app-kit = { version = "0.3", features = [
     "NSPanel",
 ] }
 block2 = "0.6"
+core-foundation = { version = "0.10", optional = true }
+core-foundation-sys = { version = "0.8", optional = true }
 
 # GTK3 Backend (optional, enable with "gtk" feature)
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -88,6 +91,10 @@ widestring = "1.2"
 [[example]]
 name = "win32_direct"
 required-features = ["win32-direct"]
+
+[[example]]
+name = "maccf_direct"
+required-features = ["maccf-direct"]
 
 [[test]]
 name = "macos_ui"

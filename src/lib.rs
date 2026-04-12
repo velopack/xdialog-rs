@@ -135,6 +135,11 @@ mod win32_direct;
 #[cfg(all(windows, feature = "win32-direct"))]
 pub use win32_direct::init_win32_direct;
 
+#[cfg(all(target_os = "macos", feature = "maccf-direct"))]
+mod maccf_direct;
+#[cfg(all(target_os = "macos", feature = "maccf-direct"))]
+pub use maccf_direct::init_maccf_direct;
+
 mod message;
 mod model;
 mod progress;
