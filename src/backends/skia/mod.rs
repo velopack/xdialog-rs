@@ -169,20 +169,18 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
             WindowEvent::CursorMoved { position, .. } => {
                 dialog.handle_cursor_moved(position);
             }
-            WindowEvent::MouseInput { state, button, .. } => {
-                if button == MouseButton::Left {
-                    match state {
-                        ElementState::Pressed => {
-                            dialog.handle_mouse_pressed();
-                        }
-                        ElementState::Released => {
-                            if let Some(index) = dialog.handle_mouse_released() {
-                                dialog.send_result(XDialogResult::ButtonPressed(index));
-                                dialog.window.set_visible(false);
-                                let wid = window_id;
-                                self.dialogs.remove(&dialog_id);
-                                self.window_to_id.remove(&wid);
-                            }
+            WindowEvent::MouseInput { state, button: MouseButton::Left, .. } => {
+                match state {
+                    ElementState::Pressed => {
+                        dialog.handle_mouse_pressed();
+                    }
+                    ElementState::Released => {
+                        if let Some(index) = dialog.handle_mouse_released() {
+                            dialog.send_result(XDialogResult::ButtonPressed(index));
+                            dialog.window.set_visible(false);
+                            let wid = window_id;
+                            self.dialogs.remove(&dialog_id);
+                            self.window_to_id.remove(&wid);
                         }
                     }
                 }
@@ -190,28 +188,28 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
             WindowEvent::ModifiersChanged(modifiers) => {
                 dialog.handle_modifiers_changed(&modifiers);
             }
-            WindowEvent::KeyboardInput { event, is_synthetic, .. } => {
-                if event.state == ElementState::Pressed && !is_synthetic {
-                    match dialog.handle_key_pressed(&event.logical_key) {
-                        KeyAction::ActivateButton(index) => {
-                            if !event.repeat {
-                                dialog.send_result(XDialogResult::ButtonPressed(index));
-                                dialog.window.set_visible(false);
-                                let wid = window_id;
-                                self.dialogs.remove(&dialog_id);
-                                self.window_to_id.remove(&wid);
-                            }
+            WindowEvent::KeyboardInput { event, is_synthetic, .. }
+                if event.state == ElementState::Pressed && !is_synthetic =>
+            {
+                match dialog.handle_key_pressed(&event.logical_key) {
+                    KeyAction::ActivateButton(index) => {
+                        if !event.repeat {
+                            dialog.send_result(XDialogResult::ButtonPressed(index));
+                            dialog.window.set_visible(false);
+                            let wid = window_id;
+                            self.dialogs.remove(&dialog_id);
+                            self.window_to_id.remove(&wid);
                         }
-                        KeyAction::Close => {
-                            if !event.repeat {
-                                dialog.handle_close_requested();
-                                let wid = dialog.window.id();
-                                self.dialogs.remove(&dialog_id);
-                                self.window_to_id.remove(&wid);
-                            }
-                        }
-                        KeyAction::None => {}
                     }
+                    KeyAction::Close => {
+                        if !event.repeat {
+                            dialog.handle_close_requested();
+                            let wid = dialog.window.id();
+                            self.dialogs.remove(&dialog_id);
+                            self.window_to_id.remove(&wid);
+                        }
+                    }
+                    KeyAction::None => {}
                 }
             }
             _ => {}

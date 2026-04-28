@@ -226,13 +226,9 @@ impl CustomButton {
                 i.do_callback();
                 true
             }
-            Event::KeyDown => {
-                if app::event_key() == Key::Enter {
-                    i.do_callback();
-                    true
-                } else {
-                    false
-                }
+            Event::KeyDown if app::event_key() == Key::Enter => {
+                i.do_callback();
+                true
             }
             Event::Enter => {
                 let mut animator = animator_cell1.borrow_mut();
