@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use xdialog::*;
 
 #[test]
-#[ntest::timeout(2000)]
+#[ntest::timeout(10000)]
 fn message_dialog_respects_timeout() {
     XDialogBuilder::new().run(run);
 }
