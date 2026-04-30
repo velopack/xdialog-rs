@@ -92,6 +92,58 @@ There are more examples in the `examples` directory.
 cargo run --example various_options
 ```
 
+## Dialog Types
+
+xdialog renders the same dialog API as native-feeling windows on each platform.
+The screenshots below were captured by the visual regression tests in `tests/`.
+
+### Message Box
+
+![Message box dialog rendered on Windows, macOS, and Linux](docs/images/dialog-types-messagebox.png)
+
+A message box shows a single piece of information with an icon and one or
+more buttons (e.g. OK, Yes/No). It blocks until the user dismisses it and
+returns the user's choice. Use it for alerts, confirmations, and errors.
+
+```rust
+use xdialog::*;
+
+let should_update = show_message_yes_no(
+    "My App Incorporated",
+    "New version available",
+    "Would you like to update to the new version now?",
+    XDialogIcon::Warning,
+).unwrap();
+```
+
+### Progress Dialog
+
+![Progress dialog rendered on Windows, macOS, and Linux](docs/images/dialog-types-progress.png)
+
+A progress dialog reports the status of a long-running operation. It is
+non-blocking: `show_progress` returns a handle that the caller updates from
+its worker thread to change the message and progress bar value, switch to
+indeterminate mode, or close the dialog when the work is finished.
+
+```rust
+use xdialog::*;
+
+let progress = show_progress(
+    "My App Incorporated",
+    "Working...",
+    "Downloading update...",
+    XDialogIcon::Information,
+).unwrap();
+
+progress.set_value(0.5).unwrap();
+progress.set_text("Extracting...").unwrap();
+
+progress.set_indeterminate().unwrap();
+progress.set_text("Wrapping up...").unwrap();
+
+progress.close().unwrap();
+```
+
 ## Backends
 - **Windows**: Native Win32 TaskDialog API
 - **macOS**: Native AppKit dialogs
