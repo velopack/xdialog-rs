@@ -1,12 +1,13 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
+    "config:best-practices",
     ":semanticCommitsDisabled"
   ],
   "labels": ["renovate"],
   "schedule": ["on saturday before 11am"],
   "timezone": "Europe/London",
+  "minimumReleaseAge": "14 days",
   "dependencyDashboard": true,
   "automergeType": "pr",
   "automergeStrategy": "rebase",
@@ -14,6 +15,11 @@
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true
+  },
+  "vulnerabilityAlerts": {
+    "schedule": ["at any time"],
+    "labels": ["security"],
+    "prCreation": "immediate"
   },
   "packageRules": [
     {

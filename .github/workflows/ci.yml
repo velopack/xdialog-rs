@@ -7,6 +7,9 @@ on:
     branches: [master, develop]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   LINUX_APT_DEPS: libx11-dev libxext-dev libxcursor-dev libxrender-dev libxfixes-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libdbus-1-dev
@@ -62,10 +65,10 @@ jobs:
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Build
-        run: cargo build ${{ matrix.cargo-args }}
+        run: cargo build --locked ${{ matrix.cargo-args }}
 
       - name: Test
-        run: cargo test --lib --tests ${{ matrix.cargo-args }}
+        run: cargo test --locked --lib --tests ${{ matrix.cargo-args }}
 
   clippy:
     name: Clippy (${{ matrix.name }})
@@ -111,7 +114,7 @@ jobs:
           key: clippy-${{ matrix.name }}
 
       - name: Clippy
-        run: cargo clippy --all-targets ${{ matrix.cargo-args }} -- -D warnings
+        run: cargo clippy --locked --all-targets ${{ matrix.cargo-args }} -- -D warnings
 
   win32-direct:
     name: Windows (win32-direct)
@@ -126,7 +129,7 @@ jobs:
           key: win32-direct
 
       - name: Build
-        run: cargo build --features win32-direct
+        run: cargo build --locked --features win32-direct
 
   doctest:
     name: Doc Tests
@@ -146,7 +149,7 @@ jobs:
           key: doctest
 
       - name: Run doc tests
-        run: cargo test --doc --features gtk,fltk
+        run: cargo test --locked --doc --features gtk,fltk
 
   headless-build:
     name: Headless Build
@@ -168,7 +171,7 @@ jobs:
           key: headless-build
 
       - name: Build headless test
-        run: cargo build --manifest-path tests/headless/Cargo.toml --target x86_64-unknown-linux-musl --release
+        run: cargo build --locked --manifest-path tests/headless/Cargo.toml --target x86_64-unknown-linux-musl --release
 
       - name: Upload binary
         uses: actions/upload-artifact@v7
@@ -280,7 +283,7 @@ jobs:
       - name: Run visual regression tests
         env:
           XDIALOG_VISUAL_TEST: "1"
-        run: cargo test ${{ matrix.cargo-args }} --test visual_regression
+        run: cargo test --locked ${{ matrix.cargo-args }} --test visual_regression
 
       - name: Upload screenshots on failure
         if: failure()
@@ -288,3 +291,26 @@ jobs:
         with:
           name: visual-regression-output-${{ matrix.name }}
           path: tests/visual_output/
+
+  supply-chain:
+    name: Supply Chain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+
+      - name: Check advisories
+        run: cargo deny --all-features check advisories
+
+      - name: Check licenses
+        run: cargo deny --all-features check licenses
+
+      - name: Check bans
+        run: cargo deny --all-features check bans
+
+      - name: Check sources
+        run: cargo deny --all-features check sources
