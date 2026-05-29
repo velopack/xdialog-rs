@@ -1,11 +1,9 @@
 //! Wrapped text — both the dialog title and the body message, distinguished by a [`LabelKind`]
 //! flag rather than two near-identical types.
 
-use fontdue::Font;
 use tiny_skia::PixmapMut;
 
 use super::component::{Component, ControllerUpdate, LayoutCtx, PaintCtx, Rect, Role, Size, BODY_SIZE, TITLE_SIZE};
-use super::font::{FONT_BOLD, FONT_REGULAR};
 use super::renderer::fill_rect;
 use super::text::{layout_text, render_text};
 use super::theme::SkiaTheme;
@@ -35,11 +33,8 @@ impl Label {
         }
     }
 
-    fn font(&self) -> &'static Font {
-        match self.kind {
-            LabelKind::Title => &FONT_BOLD,
-            LabelKind::Body => &FONT_REGULAR,
-        }
+    fn bold(&self) -> bool {
+        matches!(self.kind, LabelKind::Title)
     }
 
     fn logical_size(&self) -> f32 {
@@ -64,7 +59,7 @@ impl Component for Label {
 
     fn measure(&mut self, ctx: &LayoutCtx) -> Size {
         // Measure in logical pixels (resolution-independent); paint re-lays-out at physical size.
-        let layout = layout_text(&self.text, self.font(), self.logical_size(), ctx.available_width);
+        let layout = layout_text(&self.text, self.bold(), self.logical_size(), ctx.available_width);
         Size {
             w: layout.total_width,
             h: layout.total_height,
@@ -94,8 +89,8 @@ impl Component for Label {
         );
         // Clear our own bounds to the background, then render the text wrapped at physical width.
         fill_rect(pm, x, y, w, h, ctx.theme.color_background);
-        let layout = layout_text(&self.text, self.font(), phys_size, w);
-        render_text(pm, &layout, self.font(), phys_size, self.color(ctx.theme), x, y);
+        let layout = layout_text(&self.text, self.bold(), phys_size, w);
+        render_text(pm, &layout, self.color(ctx.theme), x, y);
         self.dirty = false;
     }
 

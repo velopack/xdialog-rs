@@ -101,8 +101,9 @@
 //! ## Backends
 //! - **Windows**: Native Win32 TaskDialog API
 //! - **macOS**: Native AppKit dialogs
-//! - **Linux** (default): Pure Rust software renderer using winit + tiny-skia + fontdue. No C/C++
-//!   build dependencies, works with static musl linking, and embeds its own font.
+//! - **Linux** (default): Pure Rust software renderer using winit + tiny-skia + cosmic-text. No
+//!   C/C++ build dependencies, works with static musl linking, and embeds its own font (Ubuntu),
+//!   falling back to system fonts for glyphs it doesn't cover (CJK, emoji, …).
 //! - **Linux** (`gtk` feature): GTK3 backend. Requires `libgtk-3-dev` on Debian/Ubuntu.
 //!   When enabled, GTK3 becomes the default backend with automatic fallback to the software
 //!   renderer if GTK fails to initialize.

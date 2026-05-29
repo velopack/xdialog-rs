@@ -5,7 +5,6 @@ use mina::prelude::*;
 use tiny_skia::PixmapMut;
 
 use super::component::{Component, LayoutCtx, PaintCtx, Rect, Role, Size, BODY_SIZE};
-use super::font::FONT_REGULAR;
 use super::renderer::{fill_rect, fill_rounded_rect, stroke_rounded_rect};
 use super::text::{layout_text, measure_text_width, render_text};
 use super::theme::SkiaTheme;
@@ -150,7 +149,7 @@ impl Component for SkiaButton {
     }
 
     fn measure(&mut self, ctx: &LayoutCtx) -> Size {
-        let text_w = measure_text_width(&self.label, &FONT_REGULAR, BODY_SIZE);
+        let text_w = measure_text_width(&self.label, false, BODY_SIZE);
         Size {
             w: text_w + (ctx.theme.button_text_padding * 2) as f32,
             h: (ctx.theme.button_panel_height - ctx.theme.button_panel_margin * 2) as f32,
@@ -206,14 +205,12 @@ impl Component for SkiaButton {
             );
         }
 
-        let label_layout = layout_text(&self.label, &FONT_REGULAR, BODY_SIZE * s, bw);
+        let label_layout = layout_text(&self.label, false, BODY_SIZE * s, bw);
         let text_x = bx + (bw - label_layout.total_width) / 2.0;
         let text_y = by + (bh - label_layout.total_height) / 2.0;
         render_text(
             pm,
             &label_layout,
-            &FONT_REGULAR,
-            BODY_SIZE * s,
             (colors.text_r, colors.text_g, colors.text_b),
             text_x,
             text_y,
