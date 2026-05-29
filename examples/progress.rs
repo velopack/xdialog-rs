@@ -1,5 +1,5 @@
 fn main() {
-    xdialog::XDialogBuilder::new().with_backend(xdialog::XDialogBackend::Skia).run(run);
+    xdialog::XDialogBuilder::new().run(run);
 }
 
 fn run() {

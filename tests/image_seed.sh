@@ -4,7 +4,6 @@
 #
 # Usage:
 #   ./image_seed.sh                    # Use default features
-#   ./image_seed.sh --no-default-features  # Win32-only (no fltk/gtk)
 #
 set -e
 

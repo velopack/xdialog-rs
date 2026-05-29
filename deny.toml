@@ -4,17 +4,8 @@ all-features = true
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-# gtk3 bindings are unmaintained but we still support them as an optional backend
 ignore = [
-    "RUSTSEC-2024-0370", # proc-macro-error unmaintained (gtk3 dep)
-    "RUSTSEC-2024-0412", # gtk3 bindings unmaintained
-    "RUSTSEC-2024-0413", # gtk3 bindings unmaintained
-    "RUSTSEC-2024-0415", # gtk3 bindings unmaintained
-    "RUSTSEC-2024-0416", # gtk3 bindings unmaintained
-    "RUSTSEC-2024-0418", # gtk3 bindings unmaintained
-    "RUSTSEC-2024-0419", # gtk3 bindings unmaintained
-    "RUSTSEC-2024-0420", # gtk3 bindings unmaintained
-    "RUSTSEC-2024-0436", # paste unmaintained (gtk3 dep)
+    "RUSTSEC-2024-0436", # paste unmaintained (dev-only: xcap -> image -> rav1e)
 ]
 
 [licenses]
