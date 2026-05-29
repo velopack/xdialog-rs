@@ -125,6 +125,9 @@ use state::*;
 
 mod backends;
 
+#[doc(hidden)]
+pub mod pixels;
+
 mod channel;
 use channel::send_request;
 mod builder;

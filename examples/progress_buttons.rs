@@ -15,7 +15,7 @@ use std::time::Duration;
 use xdialog::*;
 
 fn main() {
-    XDialogBuilder::new().run(run);
+    XDialogBuilder::new().with_backend(XDialogBackend::Skia).run(run);
 }
 
 fn run() {

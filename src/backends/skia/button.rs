@@ -2,7 +2,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use mina::prelude::*;
+use tiny_skia::PixmapMut;
 
+use super::component::{Component, LayoutCtx, PaintCtx, Rect, Role, Size, BODY_SIZE};
+use super::font::FONT_REGULAR;
+use super::renderer::{fill_rect, fill_rounded_rect, stroke_rounded_rect};
+use super::text::{layout_text, measure_text_width, render_text};
 use super::theme::SkiaTheme;
 
 #[derive(Animate, Clone, Debug, Default, PartialEq)]
@@ -35,13 +40,11 @@ pub enum ButtonState {
 pub struct SkiaButton {
     pub label: String,
     pub index: usize,
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    pub height: f32,
-    pub hovered: bool,
-    pub pressed: bool,
-    pub focused: bool,
+    bounds: Rect,
+    hovered: bool,
+    pressed: bool,
+    focused: bool,
+    dirty: bool,
     animating: bool,
     current_state: ButtonState,
     animator: Rc<RefCell<Box<dyn StateAnimator<State = ButtonState, Values = ButtonColorState>>>>,
@@ -108,43 +111,15 @@ impl SkiaButton {
         Self {
             label: label.to_string(),
             index,
-            x: 0.0,
-            y: 0.0,
-            width: 0.0,
-            height: 0.0,
+            bounds: Rect::default(),
             hovered: false,
             pressed: false,
             focused: false,
+            dirty: true,
             animating: false,
             current_state: ButtonState::Idle,
             animator: Rc::new(RefCell::new(Box::new(animator))),
         }
-    }
-
-    pub fn set_bounds(&mut self, x: f32, y: f32, width: f32, height: f32) {
-        self.x = x;
-        self.y = y;
-        self.width = width;
-        self.height = height;
-    }
-
-    pub fn hit_test(&self, mx: f32, my: f32) -> bool {
-        mx >= self.x && mx <= self.x + self.width && my >= self.y && my <= self.y + self.height
-    }
-
-    pub fn set_hovered(&mut self, hovered: bool) {
-        self.hovered = hovered;
-        self.update_state();
-    }
-
-    pub fn set_pressed(&mut self, pressed: bool) {
-        self.pressed = pressed;
-        self.update_state();
-    }
-
-    pub fn set_focused(&mut self, focused: bool) {
-        self.focused = focused;
-        self.update_state();
     }
 
     fn update_state(&mut self) {
@@ -164,23 +139,143 @@ impl SkiaButton {
         self.animator.borrow_mut().set_state(&state);
     }
 
-    pub fn current_colors(&self) -> ButtonColorState {
+    fn current_colors(&self) -> ButtonColorState {
         self.animator.borrow().current_values().clone()
     }
+}
 
-    pub fn is_animating(&self) -> bool {
-        self.animating
+impl Component for SkiaButton {
+    fn role(&self) -> Role {
+        Role::Button
     }
 
-    /// Advance animation. Returns true if the visual state changed.
-    pub fn tick(&mut self, elapsed: f32) -> bool {
+    fn measure(&mut self, ctx: &LayoutCtx) -> Size {
+        let text_w = measure_text_width(&self.label, &FONT_REGULAR, BODY_SIZE);
+        Size {
+            w: text_w + (ctx.theme.button_text_padding * 2) as f32,
+            h: (ctx.theme.button_panel_height - ctx.theme.button_panel_margin * 2) as f32,
+        }
+    }
+
+    fn set_bounds(&mut self, b: Rect) {
+        self.bounds = b;
+    }
+
+    fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) {
+        let s = ctx.scale;
+        let colors = self.current_colors();
+        let (bx, by, bw, bh) = (
+            self.bounds.x * s,
+            self.bounds.y * s,
+            self.bounds.w * s,
+            self.bounds.h * s,
+        );
+        let radius = colors.border_radius as f32 * s;
+
+        // Clear to the footer colour the button sits on, then draw fill + border + label.
+        fill_rect(pm, bx, by, bw, bh, ctx.theme.color_background_alt);
+
+        fill_rounded_rect(
+            pm,
+            bx,
+            by,
+            bw,
+            bh,
+            radius,
+            (colors.fill_r, colors.fill_g, colors.fill_b),
+        );
+
+        if colors.border_width > 0 {
+            stroke_rounded_rect(
+                pm,
+                bx,
+                by,
+                bw,
+                bh,
+                radius,
+                (colors.border_r, colors.border_g, colors.border_b),
+                colors.border_width as f32 * s,
+            );
+        }
+
+        let label_layout = layout_text(&self.label, &FONT_REGULAR, BODY_SIZE * s, bw);
+        let text_x = bx + (bw - label_layout.total_width) / 2.0;
+        let text_y = by + (bh - label_layout.total_height) / 2.0;
+        render_text(
+            pm,
+            &label_layout,
+            &FONT_REGULAR,
+            BODY_SIZE * s,
+            (colors.text_r, colors.text_g, colors.text_b),
+            text_x,
+            text_y,
+        );
+
+        self.dirty = false;
+    }
+
+    fn tick(&mut self, dt: f32) -> bool {
         let before = self.animator.borrow().current_values().clone();
-        self.animator.borrow_mut().advance(elapsed);
+        self.animator.borrow_mut().advance(dt);
         let after = self.animator.borrow().current_values().clone();
         let changed = before != after;
-        if !changed {
+        if changed {
+            self.dirty = true;
+        } else {
             self.animating = false;
         }
         changed
+    }
+
+    fn is_animating(&self) -> bool {
+        self.animating
+    }
+
+    fn focusable(&self) -> bool {
+        true
+    }
+
+    fn set_hovered(&mut self, v: bool) {
+        if self.hovered != v {
+            self.hovered = v;
+            self.update_state();
+            self.dirty = true;
+        }
+    }
+
+    fn set_pressed(&mut self, v: bool) {
+        if self.pressed != v {
+            self.pressed = v;
+            self.update_state();
+            self.dirty = true;
+        }
+    }
+
+    fn set_focused(&mut self, v: bool) {
+        if self.focused != v {
+            self.focused = v;
+            self.update_state();
+            self.dirty = true;
+        }
+    }
+
+    fn is_hovered(&self) -> bool {
+        self.hovered
+    }
+
+    fn is_pressed(&self) -> bool {
+        self.pressed
+    }
+
+    fn activation_index(&self) -> Option<usize> {
+        Some(self.index)
     }
 }

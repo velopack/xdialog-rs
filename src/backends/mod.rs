@@ -1,7 +1,8 @@
 use crate::model::{DialogMessageRequest, XDialogTheme};
 use std::sync::mpsc::Receiver;
 
-#[cfg(target_os = "linux")]
+// Cross-platform pure-Rust software renderer (winit + softbuffer + tiny-skia).
+// Default backend on Linux; selectable elsewhere via XDialogBackend::Skia.
 pub mod skia;
 
 #[cfg(all(target_os = "linux", feature = "fltk"))]

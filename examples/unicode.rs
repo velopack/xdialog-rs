@@ -1,7 +1,7 @@
 use xdialog::{show_progress, XDialogIcon};
 
 fn main() {
-    xdialog::XDialogBuilder::new().run(run);
+    xdialog::XDialogBuilder::new().with_backend(xdialog::XDialogBackend::Skia).run(run);
 }
 
 fn run() {
@@ -112,9 +112,9 @@ fn run() {
     .unwrap();
     d.set_indeterminate().unwrap();
     std::thread::sleep(std::time::Duration::from_secs(3));
-    d.set_value(50.0).unwrap();
+    d.set_value(0.5).unwrap();
     std::thread::sleep(std::time::Duration::from_secs(2));
-    d.set_value(100.0).unwrap();
+    d.set_value(1.0).unwrap();
     std::thread::sleep(std::time::Duration::from_secs(1));
     d.close().unwrap();
 }

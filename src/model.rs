@@ -9,6 +9,9 @@ pub enum XDialogBackend {
     NativePreferred,
     /// Use the GTK3 backend (Linux only)
     Gtk,
+    /// Use the pure-Rust software renderer (winit + tiny-skia). Available on all platforms; the
+    /// default on Linux. Selectable elsewhere for testing or to avoid native dialogs.
+    Skia,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

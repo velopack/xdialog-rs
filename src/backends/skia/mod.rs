@@ -1,7 +1,11 @@
+mod background;
 mod button;
+mod component;
 mod dialog;
 mod font;
+mod icon;
 mod icons;
+mod label;
 mod progress;
 mod renderer;
 mod text;
@@ -15,8 +19,6 @@ use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use dialog::KeyAction;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoopBuilder};
-use winit::platform::x11::EventLoopBuilderExtX11;
-use winit::platform::wayland::EventLoopBuilderExtWayland;
 use winit::window::WindowId;
 
 use crate::model::*;
@@ -243,8 +245,15 @@ impl SkiaBackend {
 impl XDialogBackendImpl for SkiaBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
         let mut builder = EventLoopBuilder::<DialogMessageRequest>::default();
-        EventLoopBuilderExtX11::with_any_thread(&mut builder, true);
-        EventLoopBuilderExtWayland::with_any_thread(&mut builder, true);
+        // On Linux the event loop may be built off the main thread (X11/Wayland);
+        // macOS and Windows require it on the main thread, which the builder guarantees.
+        #[cfg(target_os = "linux")]
+        {
+            use winit::platform::wayland::EventLoopBuilderExtWayland;
+            use winit::platform::x11::EventLoopBuilderExtX11;
+            EventLoopBuilderExtX11::with_any_thread(&mut builder, true);
+            EventLoopBuilderExtWayland::with_any_thread(&mut builder, true);
+        }
 
         let event_loop = match builder.build() {
             Ok(el) => el,

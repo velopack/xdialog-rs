@@ -23,6 +23,16 @@ log = "0.4"
 oneshot = { version = "0.2", features = ["std"] }
 thiserror = "2.0"
 
+# Skia software-rendering backend (cross-platform: winit + softbuffer + tiny-skia + fontdue)
+winit = "0.30"
+softbuffer = "0.4"
+tiny-skia = "0.12"
+fontdue = "0.9"
+# Animation (used by the skia and fltk backends)
+enum-map = "2.7"
+mina = "0.1"
+multiversion = "0.8.0"
+
 # AppKit Backend
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
@@ -63,17 +73,10 @@ block2 = "0.6"
 core-foundation = { version = "0.10", optional = true }
 core-foundation-sys = { version = "0.8", optional = true }
 
-# GTK3 Backend (optional, enable with "gtk" feature)
+# Optional Linux-only backends
 [target.'cfg(target_os = "linux")'.dependencies]
+# GTK3 Backend (optional, enable with "gtk" feature)
 gtk = { version = "0.18", optional = true }
-# Skia backend (always available on Linux)
-winit = "0.30"
-softbuffer = "0.4"
-tiny-skia = "0.12"
-fontdue = "0.9"
-# Animation (used by both skia and fltk backends)
-enum-map = "2.7"
-mina = "0.1"
 # FLTK backend (optional)
 fltk = { version = "1.5", optional = true }
 
@@ -104,10 +107,15 @@ harness = false
 name = "visual_regression"
 harness = false
 
+[[bench]]
+name = "convert"
+harness = false
+
 [dev-dependencies]
 ntest = "0.9"
 image = "0.25"
 xcap = "0.9"
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows = { version = "=0.62.2", features = [
