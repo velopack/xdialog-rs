@@ -7,18 +7,18 @@ use std::sync::{Arc, Mutex};
 
 use widestring::U16CString;
 use windows::core::{BOOL, HRESULT, PCWSTR};
-use windows::Win32::Foundation::{FALSE, HMODULE, HWND, LPARAM, S_OK, TRUE, WPARAM};
+use windows::Win32::Foundation::{FALSE, HMODULE, HWND, LPARAM, S_FALSE, S_OK, TRUE, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::{
     TaskDialogIndirect, TASKDIALOGCONFIG, TASKDIALOGCONFIG_0, TASKDIALOGCONFIG_1, TASKDIALOG_BUTTON, TASKDIALOG_COMMON_BUTTON_FLAGS,
     TASKDIALOG_FLAGS, TASKDIALOG_NOTIFICATIONS, TDE_CONTENT, TDE_EXPANDED_INFORMATION, TDE_FOOTER, TDE_MAIN_INSTRUCTION,
     TDF_CALLBACK_TIMER, TDF_SHOW_PROGRESS_BAR, TDF_SIZE_TO_CONTENT, TDM_SET_BUTTON_ELEVATION_REQUIRED_STATE, TDM_SET_ELEMENT_TEXT,
-    TDM_SET_MARQUEE_PROGRESS_BAR, TDM_SET_PROGRESS_BAR_MARQUEE, TDM_SET_PROGRESS_BAR_POS, TDN_CREATED, TDN_DESTROYED,
-    TDN_HYPERLINK_CLICKED, TDN_TIMER, TD_ERROR_ICON, TD_INFORMATION_ICON, TD_WARNING_ICON,
+    TDM_SET_MARQUEE_PROGRESS_BAR, TDM_SET_PROGRESS_BAR_MARQUEE, TDM_SET_PROGRESS_BAR_POS, TDN_BUTTON_CLICKED, TDN_CREATED,
+    TDN_DESTROYED, TDN_HYPERLINK_CLICKED, TDN_TIMER, TD_ERROR_ICON, TD_INFORMATION_ICON, TD_WARNING_ICON,
 };
 use windows::Win32::UI::WindowsAndMessaging::{EndDialog, SendMessageW, HICON};
 
-use crate::{XDialogIcon, XDialogOptions, XDialogResult};
+use crate::{ProgressButtonCallback, ProgressDialogProxy, XDialogIcon, XDialogOptions, XDialogResult};
 use crate::model::CreationSender;
 
 type OpenDialogMap = Arc<Mutex<HashMap<usize, (Sender<DialogRequest>, Receiver<DialogRequest>)>>>;
@@ -45,7 +45,7 @@ impl TaskDialogManager {
 }
 
 impl TaskDialogManager {
-    pub fn show(&self, id: usize, data: XDialogOptions, has_progress: bool, creation: CreationSender) {
+    pub fn show(&self, id: usize, data: XDialogOptions, has_progress: bool, creation: CreationSender, button_callback: Option<ProgressButtonCallback>) {
         let open_dialogs = self.open_dialogs.clone();
         // Insert a new dialog
         {
@@ -62,6 +62,7 @@ impl TaskDialogManager {
             config.main_instruction = data.main_instruction;
             config.content = data.message;
             config.x_dialog_id = id;
+            config.button_callback = button_callback;
             let mut default_button: Option<i32> = None;
             for (idx, text) in data.buttons.iter().enumerate().rev() {
                 if default_button.is_none() {
@@ -78,7 +79,16 @@ impl TaskDialogManager {
             if has_progress {
                 config.flags |= TDF_SHOW_PROGRESS_BAR;
             }
-            config.callback = Some(|hwnd, msg, _w_param, _l_param, ref_data| {
+            config.callback = Some(|hwnd, msg, w_param, _l_param, ref_data| {
+                if msg == TDN_BUTTON_CLICKED {
+                    let config = unsafe { &mut *ref_data };
+                    if let Some(cb) = config.button_callback.as_mut() {
+                        let proxy = ProgressDialogProxy::non_owning(config.x_dialog_id);
+                        let keep_open = (cb.0)(w_param.0, &proxy);
+                        return if keep_open { S_FALSE } else { S_OK };
+                    }
+                    return S_OK;
+                }
                 if msg == TDN_TIMER {
                     let config = unsafe { &mut *ref_data };
                     let open_dialogs = config.open_dialogs.clone();
@@ -225,6 +235,9 @@ struct TaskDialogConfig {
     pub progress: ProgressState,
     pub x_dialog_id: usize,
     pub open_dialogs: OpenDialogMap,
+    /// Optional callback invoked when a button is clicked. Returns `true` to keep the dialog open
+    /// (returns `S_FALSE` to the task dialog) or `false` to allow it to close.
+    pub button_callback: Option<ProgressButtonCallback>,
 }
 
 impl TaskDialogConfig {
@@ -256,6 +269,7 @@ impl TaskDialogConfig {
             progress: ProgressState::None,
             x_dialog_id: 0,
             open_dialogs,
+            button_callback: None,
         }
     }
 }

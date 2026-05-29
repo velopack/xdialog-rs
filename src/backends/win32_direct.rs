@@ -12,11 +12,11 @@ impl DialogRequestHandler for Win32DirectHandler {
     fn send(&self, message: DialogMessageRequest) -> Result<(), XDialogError> {
         match message {
             DialogMessageRequest::ShowMessageWindow(id, options, result) => {
-                MANAGER.show(id, options, false, result);
+                MANAGER.show(id, options, false, result, None);
                 Ok(())
             }
-            DialogMessageRequest::ShowProgressWindow(id, options, result) => {
-                MANAGER.show(id, options, true, result);
+            DialogMessageRequest::ShowProgressWindow(id, options, result, on_button) => {
+                MANAGER.show(id, options, true, result, on_button);
                 Ok(())
             }
             DialogMessageRequest::SetProgressValue(id, value) => {

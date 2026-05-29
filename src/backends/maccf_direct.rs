@@ -134,7 +134,7 @@ impl DialogRequestHandler for MacCfDirectHandler {
                 }
                 Ok(())
             }
-            DialogMessageRequest::ShowProgressWindow(_id, _options, creation_sender) => {
+            DialogMessageRequest::ShowProgressWindow(_id, _options, creation_sender, _on_button) => {
                 let _ = creation_sender.send(Err(XDialogError::SystemError(
                     "Progress dialogs are not supported by the maccf-direct backend".to_string(),
                 )));

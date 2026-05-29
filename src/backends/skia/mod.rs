@@ -60,14 +60,14 @@ impl AppState {
             }
             DialogMessageRequest::ShowMessageWindow(id, data, creation) => {
                 let (sender, receiver) = oneshot::channel();
-                let d = dialog::SkiaDialog::new(event_loop, data, &self.theme, false, sender);
+                let d = dialog::SkiaDialog::new(event_loop, data, &self.theme, false, sender, None);
                 self.window_to_id.insert(d.window.id(), id);
                 self.dialogs.insert(id, d);
                 let _ = creation.send(Ok(receiver));
             }
-            DialogMessageRequest::ShowProgressWindow(id, data, creation) => {
+            DialogMessageRequest::ShowProgressWindow(id, data, creation, on_button) => {
                 let (sender, receiver) = oneshot::channel();
-                let d = dialog::SkiaDialog::new(event_loop, data, &self.theme, true, sender);
+                let d = dialog::SkiaDialog::new(event_loop, data, &self.theme, true, sender, on_button);
                 self.window_to_id.insert(d.window.id(), id);
                 self.dialogs.insert(id, d);
                 let _ = creation.send(Ok(receiver));
@@ -176,11 +176,13 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
                     }
                     ElementState::Released => {
                         if let Some(index) = dialog.handle_mouse_released() {
-                            dialog.send_result(XDialogResult::ButtonPressed(index));
-                            dialog.window.set_visible(false);
-                            let wid = window_id;
-                            self.dialogs.remove(&dialog_id);
-                            self.window_to_id.remove(&wid);
+                            let keep_open = dialog.on_button_clicked(dialog_id, index);
+                            if !keep_open {
+                                dialog.window.set_visible(false);
+                                let wid = window_id;
+                                self.dialogs.remove(&dialog_id);
+                                self.window_to_id.remove(&wid);
+                            }
                         }
                     }
                 }
@@ -194,11 +196,13 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
                 match dialog.handle_key_pressed(&event.logical_key) {
                     KeyAction::ActivateButton(index) => {
                         if !event.repeat {
-                            dialog.send_result(XDialogResult::ButtonPressed(index));
-                            dialog.window.set_visible(false);
-                            let wid = window_id;
-                            self.dialogs.remove(&dialog_id);
-                            self.window_to_id.remove(&wid);
+                            let keep_open = dialog.on_button_clicked(dialog_id, index);
+                            if !keep_open {
+                                dialog.window.set_visible(false);
+                                let wid = window_id;
+                                self.dialogs.remove(&dialog_id);
+                                self.window_to_id.remove(&wid);
+                            }
                         }
                     }
                     KeyAction::Close => {
@@ -227,7 +231,7 @@ impl SkiaBackend {
                 DialogMessageRequest::ShowMessageWindow(_id, _options, creation) => {
                     let _ = creation.send(Err(crate::XDialogError::NoBackendAvailable));
                 }
-                DialogMessageRequest::ShowProgressWindow(_id, _options, creation) => {
+                DialogMessageRequest::ShowProgressWindow(_id, _options, creation, _on_button) => {
                     let _ = creation.send(Err(crate::XDialogError::NoBackendAvailable));
                 }
                 _ => {}

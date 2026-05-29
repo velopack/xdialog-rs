@@ -4,6 +4,7 @@ use std::rc::Rc;
 use gtk::prelude::*;
 
 use crate::model::{XDialogIcon, XDialogOptions, XDialogResult};
+use crate::{ProgressButtonCallback, ProgressDialogProxy};
 
 pub struct GtkDialog {
     window: gtk::Window,
@@ -14,8 +15,15 @@ pub struct GtkDialog {
 }
 
 impl GtkDialog {
-    pub fn new(options: XDialogOptions, has_progress: bool, result_sender: oneshot::Sender<XDialogResult>) -> Self {
+    pub fn new(
+        id: usize,
+        options: XDialogOptions,
+        has_progress: bool,
+        result_sender: oneshot::Sender<XDialogResult>,
+        on_button: Option<ProgressButtonCallback>,
+    ) -> Self {
         let result_sender = Rc::new(RefCell::new(Some(result_sender)));
+        let button_callback = Rc::new(RefCell::new(on_button));
         let window = gtk::Window::new(gtk::WindowType::Toplevel);
         window.set_title(&options.title);
         window.set_default_size(420, -1);
@@ -110,11 +118,20 @@ impl GtkDialog {
                 }
                 let win = window.clone();
                 let rs = result_sender.clone();
+                let cb = button_callback.clone();
                 button.connect_clicked(move |_| {
-                    if let Some(sender) = rs.borrow_mut().take() {
-                        let _ = sender.send(XDialogResult::ButtonPressed(idx));
+                    let keep_open = if let Some(callback) = cb.borrow_mut().as_mut() {
+                        let proxy = ProgressDialogProxy::non_owning(id);
+                        (callback.0)(idx, &proxy)
+                    } else {
+                        if let Some(sender) = rs.borrow_mut().take() {
+                            let _ = sender.send(XDialogResult::ButtonPressed(idx));
+                        }
+                        false
+                    };
+                    if !keep_open {
+                        unsafe { win.destroy(); }
                     }
-                    unsafe { win.destroy(); }
                 });
                 button_box.pack_start(&button, false, false, 0);
             }

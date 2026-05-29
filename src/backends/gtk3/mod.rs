@@ -52,13 +52,13 @@ impl XDialogBackendImpl for GtkBackend {
                     }
                     DialogMessageRequest::ShowMessageWindow(id, options, creation) => {
                         let (dialog_sender, dialog_receiver) = oneshot::channel();
-                        let dialog = gtk_dialog::GtkDialog::new(options, false, dialog_sender);
+                        let dialog = gtk_dialog::GtkDialog::new(id, options, false, dialog_sender, None);
                         dialogs_ref.borrow_mut().insert(id, dialog);
                         let _ = creation.send(Ok(dialog_receiver));
                     }
-                    DialogMessageRequest::ShowProgressWindow(id, options, creation) => {
+                    DialogMessageRequest::ShowProgressWindow(id, options, creation, on_button) => {
                         let (dialog_sender, dialog_receiver) = oneshot::channel();
-                        let dialog = gtk_dialog::GtkDialog::new(options, true, dialog_sender);
+                        let dialog = gtk_dialog::GtkDialog::new(id, options, true, dialog_sender, on_button);
                         dialogs_ref.borrow_mut().insert(id, dialog);
                         let _ = creation.send(Ok(dialog_receiver));
                     }

@@ -14,7 +14,7 @@ impl XDialogBackendImpl for Win32Backend {
             match message {
                 DialogMessageRequest::None => {}
                 DialogMessageRequest::ShowMessageWindow(id, options, result) => {
-                    dialogs.show(id, options, false, result);
+                    dialogs.show(id, options, false, result, None);
                 }
                 DialogMessageRequest::ExitEventLoop => {
                     dialogs.close_all();
@@ -23,8 +23,8 @@ impl XDialogBackendImpl for Win32Backend {
                 DialogMessageRequest::CloseWindow(id) => {
                     dialogs.close(id);
                 }
-                DialogMessageRequest::ShowProgressWindow(id, options, result) => {
-                    dialogs.show(id, options, true, result);
+                DialogMessageRequest::ShowProgressWindow(id, options, result, on_button) => {
+                    dialogs.show(id, options, true, result, on_button);
                 }
                 DialogMessageRequest::SetProgressIndeterminate(id) => {
                     dialogs.set_progress_indeterminate(id);
