@@ -77,6 +77,9 @@ core-foundation-sys = { version = "0.8", optional = true }
 
 # Optional Linux-only backends
 [target.'cfg(target_os = "linux")'.dependencies]
+# Read the user's desktop theme (light/dark + accent) via the XDG desktop portal Settings
+# interface. Used by the skia backend; blocking API so no async runtime is required.
+zbus = "5"
 # GTK3 Backend (optional, enable with "gtk" feature)
 gtk = { version = "0.18", optional = true }
 # FLTK backend (optional)

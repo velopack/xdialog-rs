@@ -1,6 +1,7 @@
 mod background;
 mod button;
 mod component;
+mod desktop;
 mod dialog;
 mod font;
 mod icon;
@@ -35,9 +36,9 @@ struct AppState {
 }
 
 impl AppState {
-    fn new() -> Self {
+    fn new(theme: theme::SkiaTheme) -> Self {
         Self {
-            theme: theme::get_theme(),
+            theme,
             dialogs: HashMap::new(),
             window_to_id: HashMap::new(),
             current_time: Instant::now(),
@@ -243,7 +244,7 @@ impl SkiaBackend {
 }
 
 impl XDialogBackendImpl for SkiaBackend {
-    fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
+    fn run_loop(receiver: Receiver<DialogMessageRequest>, xdialog_theme: XDialogTheme) {
         let mut builder = EventLoopBuilder::<DialogMessageRequest>::default();
         // On Linux the event loop may be built off the main thread (X11/Wayland);
         // macOS and Windows require it on the main thread, which the builder guarantees.
@@ -275,7 +276,10 @@ impl XDialogBackendImpl for SkiaBackend {
             }
         });
 
-        let mut state = AppState::new();
+        // Resolve the desktop appearance (light/dark + accent) once at startup; any failure
+        // falls back to the hard-coded Ubuntu light theme.
+        let appearance = desktop::resolve_appearance(xdialog_theme);
+        let mut state = AppState::new(theme::get_theme(&appearance));
         if let Err(e) = event_loop.run_app(&mut state) {
             error!("xdialog: skia event loop error: {:?}", e);
         }

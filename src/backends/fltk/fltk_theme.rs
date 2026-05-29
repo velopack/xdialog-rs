@@ -40,21 +40,20 @@ pub struct DialogTheme {
 }
 
 pub fn apply_theme(app_instance: &App, theme: XDialogTheme) -> DialogTheme {
+    // The fltk backend is deprecated and only ships per-platform light themes plus a macOS dark.
+    // `Dark` maps to that macOS dark theme; `SystemDefault`/`Light` resolve to the platform's
+    // light theme. (Richer light/dark + accent handling lives in the skia backend.)
     let theme = match theme {
-        XDialogTheme::SystemDefault => {
-            let is_dark = false;
+        XDialogTheme::Dark => apply_macos_theme(app_instance, true),
+        XDialogTheme::SystemDefault | XDialogTheme::Light => {
             if cfg!(target_os = "windows") {
                 apply_windows_theme(app_instance)
             } else if cfg!(target_os = "macos") {
-                apply_macos_theme(app_instance, is_dark)
+                apply_macos_theme(app_instance, false)
             } else {
                 apply_ubuntu_theme(app_instance)
             }
         }
-        XDialogTheme::Windows => apply_windows_theme(app_instance),
-        XDialogTheme::Ubuntu => apply_ubuntu_theme(app_instance),
-        XDialogTheme::MacOSLight => apply_macos_theme(app_instance, false),
-        XDialogTheme::MacOSDark => apply_macos_theme(app_instance, true),
     };
 
     let bg = theme.color_background.to_rgb();
