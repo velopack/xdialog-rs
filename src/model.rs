@@ -15,18 +15,16 @@ pub enum XDialogBackend {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-/// The theme to use for the dialog. SystemDefault will use the most relevant theme for the current platform.
+/// The theme to use for the dialog. The concrete colors and fonts are chosen by each backend;
+/// this only selects light vs dark. `SystemDefault` follows the OS/desktop preference where the
+/// backend can detect it, otherwise falls back to a light theme.
 pub enum XDialogTheme {
-    /// Automatically choose the best theme for the current platform
+    /// Follow the OS/desktop light-or-dark preference (falls back to light if unknown)
     SystemDefault = 0,
-    /// Windows theme
-    Windows,
-    /// Ubuntu theme
-    Ubuntu,
-    /// MacOS light theme
-    MacOSLight,
-    /// MacOS dark theme
-    MacOSDark,
+    /// Force the backend's light theme
+    Light,
+    /// Force the backend's dark theme
+    Dark,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]

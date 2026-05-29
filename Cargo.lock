@@ -5153,6 +5153,7 @@ dependencies = [
  "windows",
  "winit",
  "xcap",
+ "zbus",
 ]
 
 [[package]]
