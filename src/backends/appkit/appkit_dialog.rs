@@ -11,13 +11,13 @@ use crate::model::*;
 // Layout constants
 const WINDOW_MIN_WIDTH: f64 = 350.0;
 const WINDOW_MAX_WIDTH: f64 = 500.0;
-const WINDOW_PADDING: f64 = 20.0;
+const WINDOW_PADDING: f64 = 16.0;
 const ICON_SIZE: f64 = 64.0;
 const ICON_PROGRESS_SIZE: f64 = 48.0;
 const BUTTON_HEIGHT: f64 = 24.0;
-const BUTTON_MIN_WIDTH: f64 = 80.0;
-const BUTTON_SPACING: f64 = 8.0;
-const BUTTON_PANEL_HEIGHT: f64 = 38.0;
+const BUTTON_MIN_WIDTH: f64 = 90.0;
+const BUTTON_SPACING: f64 = 6.0;
+const BUTTON_PANEL_HEIGHT: f64 = 32.0;
 const TEXT_SPACING: f64 = 8.0;
 const PROGRESS_HEIGHT: f64 = 20.0;
 const TITLE_FONT_SIZE: f64 = 13.0;
