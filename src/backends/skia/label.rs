@@ -78,7 +78,7 @@ impl Component for Label {
         self.dirty
     }
 
-    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) {
+    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) -> Rect {
         let s = ctx.scale;
         let phys_size = self.logical_size() * s;
         let (x, y, w, h) = (
@@ -92,6 +92,7 @@ impl Component for Label {
         let layout = layout_text(&self.text, self.bold(), phys_size, w);
         render_text(pm, &layout, self.color(ctx.theme), x, y);
         self.dirty = false;
+        Rect::new(x, y, w, h)
     }
 
     fn apply(&mut self, u: &ControllerUpdate) -> bool {

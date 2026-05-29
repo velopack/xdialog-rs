@@ -48,7 +48,7 @@ impl Component for Icon {
         self.dirty
     }
 
-    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) {
+    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) -> Rect {
         let s = ctx.scale;
         let (x, y, w, h) = (
             self.bounds.x * s,
@@ -60,5 +60,6 @@ impl Component for Icon {
         fill_rect(pm, x, y, w, h, ctx.theme.color_background);
         icons::draw_icon(pm, &self.icon, x, y, w);
         self.dirty = false;
+        Rect::new(x, y, w, h)
     }
 }

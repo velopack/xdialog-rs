@@ -1,7 +1,7 @@
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use softbuffer::Surface;
+use softbuffer::{Rect as DamageRect, Surface};
 use tiny_skia::Pixmap;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
 use winit::event::Modifiers;
@@ -396,13 +396,16 @@ impl SkiaDialog {
 
         if !self.needs_redraw() {
             // Nothing changed, but the OS requested a redraw (e.g. window expose) – re-present the
-            // existing pixmap.
-            self.present(pw, ph);
+            // existing pixmap. `None` damage forces a full reconvert since the surface buffer may
+            // be a fresh one with no relation to what's on screen.
+            self.present(pw, ph, None);
             return;
         }
 
         // Take the pixmap out so the paint loop can borrow `&mut components` and `&theme` disjointly.
         let mut pixmap = self.pixmap.take().unwrap();
+        // Union of every painted component's physical dirty rect; drives the partial present below.
+        let mut damage: Option<Rect> = None;
         {
             let ctx = PaintCtx {
                 theme: &self.theme,
@@ -412,23 +415,30 @@ impl SkiaDialog {
             let mut pm = pixmap.as_mut();
             for c in self.components.iter_mut() {
                 if repaint_all || c.is_dirty() {
-                    c.paint(&mut pm, &ctx);
+                    let rect = c.paint(&mut pm, &ctx);
+                    damage = Some(damage.map_or(rect, |d| d.union(rect)));
                 }
             }
         }
         self.repaint_all = false;
         self.pixmap = Some(pixmap);
 
-        self.present(pw, ph);
+        self.present(pw, ph, damage);
     }
 
     /// Convert the internal RGBA pixmap to the softbuffer ARGB surface and present it.
-    fn present(&mut self, pw: u32, ph: u32) {
+    ///
+    /// `damage` is the union of the physical rectangles painted this frame (`None` means "paint
+    /// region unknown — assume everything"). When the surface buffer still holds exactly the
+    /// previous frame (`age() == 1`) and we know the damage, only that rectangle is reconverted
+    /// and presented; otherwise the whole window is reconverted.
+    fn present(&mut self, pw: u32, ph: u32, damage: Option<Rect>) {
         let Some(ref pixmap) = self.pixmap else {
             return;
         };
 
-        if self.last_surface_size != (pw, ph) {
+        let resized = self.last_surface_size != (pw, ph);
+        if resized {
             self.surface
                 .resize(NonZeroU32::new(pw).unwrap(), NonZeroU32::new(ph).unwrap())
                 .unwrap();
@@ -436,8 +446,57 @@ impl SkiaDialog {
         }
 
         let mut buffer = self.surface.buffer_mut().unwrap();
-        crate::pixels::rgba_to_argb(pixmap.data(), &mut buffer);
-        buffer.present().unwrap();
+
+        // A partial update is only sound when the buffer holds exactly the previous frame
+        // (age == 1) and we know which rect changed. A new/resized/older buffer (age 0 or > 1) has
+        // unspecified or stale pixels outside the damage rect, so it must be fully reconverted.
+        // Anti-aliased strokes (button borders) can bleed a fraction past the reported bounds, so
+        // pad the rect outward before clamping it to the window.
+        let partial = damage.filter(|_| !resized && buffer.age() == 1).and_then(|d| {
+            let pad = (4.0 * self.scale_factor as f32).ceil();
+            clamp_damage(d, pad, pw, ph)
+        });
+
+        let (x, y, w, h) = partial.unwrap_or((0, 0, pw, ph));
+        if (x, y, w, h) == (0, 0, pw, ph) {
+            crate::pixels::rgba_to_argb(pixmap.data(), &mut buffer);
+        } else {
+            crate::pixels::rgba_to_argb_rect(
+                pixmap.data(),
+                &mut buffer,
+                pw as usize,
+                x as usize,
+                y as usize,
+                w as usize,
+                h as usize,
+            );
+        }
+
+        // `w`/`h` are non-zero: the full path uses `pw`/`ph` (checked by the caller) and
+        // `clamp_damage` only returns rects with positive extent.
+        let rect = DamageRect {
+            x,
+            y,
+            width: NonZeroU32::new(w).unwrap(),
+            height: NonZeroU32::new(h).unwrap(),
+        };
+        buffer.present_with_damage(&[rect]).unwrap();
+    }
+}
+
+/// Round a physical-pixel damage rect outward, pad it by `pad` pixels (to cover anti-aliased
+/// stroke bleed), and clamp it to the `pw`×`ph` window. Returns `None` if the result is empty.
+fn clamp_damage(r: Rect, pad: f32, pw: u32, ph: u32) -> Option<(u32, u32, u32, u32)> {
+    let x0 = (r.x - pad).floor().clamp(0.0, pw as f32);
+    let y0 = (r.y - pad).floor().clamp(0.0, ph as f32);
+    let x1 = (r.x + r.w + pad).ceil().clamp(0.0, pw as f32);
+    let y1 = (r.y + r.h + pad).ceil().clamp(0.0, ph as f32);
+    let w = (x1 - x0) as u32;
+    let h = (y1 - y0) as u32;
+    if w == 0 || h == 0 {
+        None
+    } else {
+        Some((x0 as u32, y0 as u32, w, h))
     }
 }
 

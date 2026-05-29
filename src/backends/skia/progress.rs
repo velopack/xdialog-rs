@@ -121,7 +121,7 @@ impl Component for SkiaProgressBar {
         self.dirty
     }
 
-    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) {
+    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) -> Rect {
         let s = ctx.scale;
         let (x, y, w, h) = (
             self.bounds.x * s,
@@ -155,6 +155,7 @@ impl Component for SkiaProgressBar {
         }
 
         self.dirty = false;
+        Rect::new(x, y, w, h)
     }
 
     fn tick(&mut self, dt: f32) -> bool {

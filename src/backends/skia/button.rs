@@ -168,7 +168,7 @@ impl Component for SkiaButton {
         self.dirty
     }
 
-    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) {
+    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) -> Rect {
         let s = ctx.scale;
         let colors = self.current_colors();
         let (bx, by, bw, bh) = (
@@ -217,6 +217,7 @@ impl Component for SkiaButton {
         );
 
         self.dirty = false;
+        Rect::new(bx, by, bw, bh)
     }
 
     fn tick(&mut self, dt: f32) -> bool {
