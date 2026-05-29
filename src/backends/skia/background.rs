@@ -42,12 +42,13 @@ impl Component for Background {
         self.dirty
     }
 
-    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) {
+    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) -> Rect {
         // Fill the entire physical pixmap (not the logical-derived bounds) so sub-pixel rounding of
         // the window size never leaves an uninitialised edge sliver.
         let (w, h) = (pm.width() as f32, pm.height() as f32);
         fill_rect(pm, 0.0, 0.0, w, h, ctx.theme.color_background);
         self.dirty = false;
+        Rect::new(0.0, 0.0, w, h)
     }
 }
 
@@ -89,11 +90,13 @@ impl Component for Footer {
         self.dirty
     }
 
-    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) {
+    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) -> Rect {
         // Span the full physical width; height/position come from the (logical) bounds.
         let s = ctx.scale;
         let w = pm.width() as f32;
-        fill_rect(pm, 0.0, self.bounds.y * s, w, self.bounds.h * s, ctx.theme.color_background_alt);
+        let (y, h) = (self.bounds.y * s, self.bounds.h * s);
+        fill_rect(pm, 0.0, y, w, h, ctx.theme.color_background_alt);
         self.dirty = false;
+        Rect::new(0.0, y, w, h)
     }
 }

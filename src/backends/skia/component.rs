@@ -38,6 +38,16 @@ impl Rect {
     pub fn contains(&self, x: f32, y: f32) -> bool {
         x >= self.x && x <= self.x + self.w && y >= self.y && y <= self.y + self.h
     }
+
+    /// The smallest rectangle containing both `self` and `other`. Used to accumulate the
+    /// per-frame damage region from the components painted that frame.
+    pub fn union(&self, other: Rect) -> Rect {
+        let x = self.x.min(other.x);
+        let y = self.y.min(other.y);
+        let right = (self.x + self.w).max(other.x + other.w);
+        let bottom = (self.y + self.h).max(other.y + other.h);
+        Rect::new(x, y, right - x, bottom - y)
+    }
 }
 
 /// A measured size in logical pixels.
@@ -114,7 +124,12 @@ pub trait Component {
 
     /// Paint onto the shared pixmap. The component clears its own bounds first and clears its
     /// dirty flag. `pm` is the whole-window physical pixmap; bounds are scaled by `ctx.scale`.
-    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx);
+    ///
+    /// Returns the rectangle actually touched, in **physical** pixels. The dialog unions these
+    /// across all components painted in a frame to drive partial pixmap→buffer conversion and
+    /// `present_with_damage`. Most components return their scaled bounds; full-bleed components
+    /// (background, footer) return the wider region they fill.
+    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) -> Rect;
 
     // ── animation (default: static) ─────────────────────────────────────
     /// Advance any animation by `dt` seconds; returns `true` (and self-marks dirty) if it changed.

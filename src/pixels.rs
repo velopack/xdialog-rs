@@ -30,6 +30,36 @@ pub fn rgba_to_argb(src: &[u8], dst: &mut [u32]) {
     }
 }
 
+/// Convert only the axis-aligned rectangle `(x, y, w, h)` of an RGBA buffer into the matching
+/// region of the packed-`u32` destination, leaving every pixel outside the rect untouched.
+///
+/// Both buffers are row-major with `buf_width` pixels per row (the physical window width). Used
+/// for partial-damage presents: when softbuffer hands back the previous frame's buffer, only the
+/// pixels under the frame's damage region need reconverting, not the whole window.
+///
+/// The caller guarantees the rect lies within the buffers (`x + w <= buf_width` and the rows
+/// exist), so indexing stays in bounds. The per-row inner loop vectorizes exactly like
+/// [`rgba_to_argb`].
+#[multiversion(targets = "simd")]
+pub fn rgba_to_argb_rect(
+    src: &[u8],
+    dst: &mut [u32],
+    buf_width: usize,
+    x: usize,
+    y: usize,
+    w: usize,
+    h: usize,
+) {
+    for row in y..y + h {
+        let start = row * buf_width + x;
+        let src_row = &src[start * 4..(start + w) * 4];
+        let dst_row = &mut dst[start..start + w];
+        for (px, out) in src_row.chunks_exact(4).zip(dst_row.iter_mut()) {
+            *out = (px[0] as u32) << 16 | (px[1] as u32) << 8 | px[2] as u32;
+        }
+    }
+}
+
 /// Plain scalar reference implementation, identical in output to [`rgba_to_argb`]. Kept for the
 /// `convert` benchmark (to measure the SIMD speedup) and as a behavioural oracle in tests.
 pub fn rgba_to_argb_scalar(src: &[u8], dst: &mut [u32]) {
@@ -60,5 +90,34 @@ mod tests {
         assert_eq!(a[1], 0x0000_0000);
         assert_eq!(a[2], 0x00FF_FFFF);
         assert_eq!(a[3], 0x00DE_ADBE);
+    }
+
+    #[test]
+    fn rect_converts_only_the_region() {
+        // 4x3 buffer; convert the 2x2 rect at (1, 1) and check the rest is untouched.
+        let w = 4usize;
+        let h = 3usize;
+        let mut src = vec![0u8; w * h * 4];
+        for (i, px) in src.chunks_exact_mut(4).enumerate() {
+            px.copy_from_slice(&[i as u8, (i + 1) as u8, (i + 2) as u8, 0xFF]);
+        }
+        let sentinel = 0xDEAD_BEEFu32;
+        let mut dst = vec![sentinel; w * h];
+
+        rgba_to_argb_rect(&src, &mut dst, w, 1, 1, 2, 2);
+
+        for row in 0..h {
+            for col in 0..w {
+                let idx = row * w + col;
+                let inside = (1..3).contains(&col) && (1..3).contains(&row);
+                if inside {
+                    let px = &src[idx * 4..idx * 4 + 4];
+                    let expected = (px[0] as u32) << 16 | (px[1] as u32) << 8 | px[2] as u32;
+                    assert_eq!(dst[idx], expected, "pixel ({col},{row}) should be converted");
+                } else {
+                    assert_eq!(dst[idx], sentinel, "pixel ({col},{row}) must be untouched");
+                }
+            }
+        }
     }
 }
