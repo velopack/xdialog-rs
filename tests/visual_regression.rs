@@ -307,11 +307,28 @@ mod capture {
 mod capture {
     use super::*;
 
+    /// Resign our app's active status (by activating Finder) so the dialog is captured in its
+    /// inactive/unfocused state. This mirrors the Windows capture path, which focuses the desktop
+    /// window. Without it, whether the dialog is "key" is nondeterministic on a CI session, so the
+    /// default-button highlight (blue vs grey) and titlebar shade flip between runs and the diff
+    /// drifts across the threshold. References are seeded in the unfocused state.
+    #[cfg(target_os = "macos")]
+    fn defocus_dialog() {
+        let _ = std::process::Command::new("osascript")
+            .args(["-e", "tell application \"Finder\" to activate"])
+            .status();
+        thread::sleep(Duration::from_millis(250));
+    }
+
     pub fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
         #[cfg(target_os = "macos")]
         {
             const MAX_ATTEMPTS: u32 = 20;
             const RETRY_DELAY_MS: u64 = 500;
+
+            // Force the dialog into its unfocused state before capturing, for consistency
+            // across environments (see defocus_dialog).
+            defocus_dialog();
 
             for attempt in 1..=MAX_ATTEMPTS {
                 let windows = match xcap::Window::all() {
