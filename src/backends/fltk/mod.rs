@@ -70,7 +70,7 @@ impl XDialogBackendImpl for FltkBackend {
                     DialogMessageRequest::None => {}
                     DialogMessageRequest::ShowMessageWindow(id, data, creation) => {
                         let (dialog_sender, dialog_receiver) = oneshot::channel();
-                        let mut d = CustomFltkDialog::new(data, &spacing, false, dialog_sender);
+                        let mut d = CustomFltkDialog::new(id, data, &spacing, false, dialog_sender, None);
                         d.show();
                         dialogs2.borrow_mut().insert(id, d);
                         let _ = creation.send(Ok(dialog_receiver));
@@ -84,9 +84,9 @@ impl XDialogBackendImpl for FltkBackend {
                             dialog.close();
                         }
                     }
-                    DialogMessageRequest::ShowProgressWindow(id, data, creation) => {
+                    DialogMessageRequest::ShowProgressWindow(id, data, creation, on_button) => {
                         let (dialog_sender, dialog_receiver) = oneshot::channel();
-                        let mut d = CustomFltkDialog::new(data, &spacing, true, dialog_sender);
+                        let mut d = CustomFltkDialog::new(id, data, &spacing, true, dialog_sender, on_button);
                         d.show();
                         dialogs2.borrow_mut().insert(id, d);
                         let _ = creation.send(Ok(dialog_receiver));

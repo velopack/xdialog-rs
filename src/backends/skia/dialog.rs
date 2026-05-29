@@ -11,6 +11,7 @@ use winit::event::Modifiers;
 use winit::keyboard::{Key, NamedKey};
 
 use crate::model::*;
+use crate::{ProgressButtonCallback, ProgressDialogProxy};
 
 use super::button::SkiaButton;
 use super::font::{FONT_BOLD, FONT_REGULAR};
@@ -51,6 +52,7 @@ pub struct SkiaDialog {
     shift_held: bool,
     progress: Option<SkiaProgressBar>,
     result_sender: Option<oneshot::Sender<XDialogResult>>,
+    button_callback: Option<ProgressButtonCallback>,
     scale_factor: f64,
     has_progress: bool,
     content_width: i32,
@@ -77,6 +79,7 @@ impl SkiaDialog {
         theme: &SkiaTheme,
         has_progress: bool,
         result_sender: oneshot::Sender<XDialogResult>,
+        button_callback: Option<ProgressButtonCallback>,
     ) -> Self {
         let has_icon = options.icon != XDialogIcon::None;
         let (win_w, win_h) = compute_window_size(&options, theme, has_progress, has_icon);
@@ -135,6 +138,7 @@ impl SkiaDialog {
             shift_held: false,
             progress,
             result_sender: Some(result_sender),
+            button_callback,
             scale_factor,
             has_progress,
             content_width: win_w,
@@ -185,6 +189,19 @@ impl SkiaDialog {
     pub fn send_result(&mut self, result: XDialogResult) {
         if let Some(sender) = self.result_sender.take() {
             let _ = sender.send(result);
+        }
+    }
+
+    /// Handle a button click on this dialog. If a progress button callback is registered, invoke
+    /// it with a non-owning proxy and return whether the dialog should stay open. Otherwise deliver
+    /// the click as a `ButtonPressed` result and return `false` (the dialog should close).
+    pub fn on_button_clicked(&mut self, id: usize, index: usize) -> bool {
+        if let Some(cb) = self.button_callback.as_mut() {
+            let proxy = ProgressDialogProxy::non_owning(id);
+            (cb.0)(index, &proxy)
+        } else {
+            self.send_result(XDialogResult::ButtonPressed(index));
+            false
         }
     }
 

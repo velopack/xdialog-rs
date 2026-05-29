@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::model::*;
+use crate::{ProgressButtonCallback, ProgressDialogProxy};
 use fltk::{
     enums::*, frame::Frame, group::Flex, image::SvgImage, prelude::*, window::DoubleWindow, *,
 };
@@ -32,12 +33,15 @@ pub struct CustomFltkDialog {
 
 impl CustomFltkDialog {
     pub fn new(
+        id: usize,
         data: XDialogOptions,
         theme: &DialogTheme,
         has_progress: bool,
         result_sender: oneshot::Sender<XDialogResult>,
+        on_button: Option<ProgressButtonCallback>,
     ) -> CustomFltkDialog {
         let result_sender = Rc::new(RefCell::new(Some(result_sender)));
+        let button_callback = Rc::new(RefCell::new(on_button));
         let mut wind = DoubleWindow::new(0, 0, 50, 50, data.title.as_str()).center_screen();
         let data2 = data.clone();
 
@@ -146,10 +150,19 @@ impl CustomFltkDialog {
                 button.set_label_size(get_body_size());
                 button.set_label_font(get_body_font());
                 let rs = result_sender.clone();
+                let cb = button_callback.clone();
                 button.set_callback(move |_| {
-                    wnd_btn_click.hide();
-                    if let Some(sender) = rs.borrow_mut().take() {
-                        let _ = sender.send(XDialogResult::ButtonPressed(index));
+                    if let Some(callback) = cb.borrow_mut().as_mut() {
+                        let proxy = ProgressDialogProxy::non_owning(id);
+                        let keep_open = (callback.0)(index, &proxy);
+                        if !keep_open {
+                            wnd_btn_click.hide();
+                        }
+                    } else {
+                        wnd_btn_click.hide();
+                        if let Some(sender) = rs.borrow_mut().take() {
+                            let _ = sender.send(XDialogResult::ButtonPressed(index));
+                        }
                     }
                 });
                 flex_button_wrapper.end();

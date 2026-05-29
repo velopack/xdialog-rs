@@ -41,7 +41,7 @@ pub enum XDialogIcon {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
-/// Options for constructing a new custom message dialog
+/// Options for constructing a new custom message or progress dialog
 pub struct XDialogOptions {
     /// The title of the dialog window (required)
     pub title: String,
@@ -52,6 +52,8 @@ pub struct XDialogOptions {
     /// The icon to display in the dialog, or None for no icon.
     pub icon: XDialogIcon,
     /// The buttons to display in the dialog. This can be an empty array to collapse the button panel.
+    /// For progress dialogs the buttons are shown on every platform; an empty array shows no button
+    /// except on platforms which require one (Windows shows a default button).
     pub buttons: Vec<String>,
 }
 
@@ -85,7 +87,7 @@ pub enum DialogMessageRequest {
     ShowMessageWindow(usize, XDialogOptions, CreationSender),
 
     // progress
-    ShowProgressWindow(usize, XDialogOptions, CreationSender),
+    ShowProgressWindow(usize, XDialogOptions, CreationSender, Option<crate::progress::ProgressButtonCallback>),
     SetProgressIndeterminate(usize),
     SetProgressValue(usize, f32),
     SetProgressText(usize, String),
