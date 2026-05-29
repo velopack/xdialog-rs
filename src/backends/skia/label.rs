@@ -5,7 +5,7 @@ use tiny_skia::PixmapMut;
 
 use super::component::{Component, ControllerUpdate, LayoutCtx, PaintCtx, Rect, Role, Size, BODY_SIZE, TITLE_SIZE};
 use super::renderer::fill_rect;
-use super::text::{layout_text, render_text};
+use super::text::{layout_text, render_text, CachedLayout};
 use super::theme::SkiaTheme;
 
 /// Which kind of label this is — selects font, size and colour, and whether it reacts to
@@ -21,6 +21,8 @@ pub struct Label {
     text: String,
     bounds: Rect,
     dirty: bool,
+    /// Shaped text for the paint pass, reused until the text or physical layout changes.
+    cache: CachedLayout,
 }
 
 impl Label {
@@ -30,6 +32,7 @@ impl Label {
             text: text.to_string(),
             bounds: Rect::default(),
             dirty: true,
+            cache: CachedLayout::default(),
         }
     }
 
@@ -89,8 +92,9 @@ impl Component for Label {
         );
         // Clear our own bounds to the background, then render the text wrapped at physical width.
         fill_rect(pm, x, y, w, h, ctx.theme.color_background);
-        let layout = layout_text(&self.text, self.bold(), phys_size, w);
-        render_text(pm, &layout, self.color(ctx.theme), x, y);
+        let color = self.color(ctx.theme);
+        let layout = self.cache.get(&self.text, self.bold(), phys_size, w);
+        render_text(pm, layout, color, x, y);
         self.dirty = false;
         Rect::new(x, y, w, h)
     }

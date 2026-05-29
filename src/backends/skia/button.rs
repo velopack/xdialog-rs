@@ -6,7 +6,7 @@ use tiny_skia::PixmapMut;
 
 use super::component::{Component, LayoutCtx, PaintCtx, Rect, Role, Size, BODY_SIZE};
 use super::renderer::{fill_rect, fill_rounded_rect, stroke_rounded_rect};
-use super::text::{layout_text, measure_text_width, render_text};
+use super::text::{measure_text_width, render_text, CachedLayout};
 use super::theme::SkiaTheme;
 
 #[derive(Animate, Clone, Debug, Default, PartialEq)]
@@ -47,6 +47,8 @@ pub struct SkiaButton {
     animating: bool,
     current_state: ButtonState,
     animator: Rc<RefCell<Box<dyn StateAnimator<State = ButtonState, Values = ButtonColorState>>>>,
+    /// Shaped label, reused across the per-frame repaints driven by hover/focus animations.
+    label_cache: CachedLayout,
 }
 
 impl SkiaButton {
@@ -118,6 +120,7 @@ impl SkiaButton {
             animating: false,
             current_state: ButtonState::Idle,
             animator: Rc::new(RefCell::new(Box::new(animator))),
+            label_cache: CachedLayout::default(),
         }
     }
 
@@ -205,12 +208,12 @@ impl Component for SkiaButton {
             );
         }
 
-        let label_layout = layout_text(&self.label, false, BODY_SIZE * s, bw);
+        let label_layout = self.label_cache.get(&self.label, false, BODY_SIZE * s, bw);
         let text_x = bx + (bw - label_layout.total_width) / 2.0;
         let text_y = by + (bh - label_layout.total_height) / 2.0;
         render_text(
             pm,
-            &label_layout,
+            label_layout,
             (colors.text_r, colors.text_g, colors.text_b),
             text_x,
             text_y,
