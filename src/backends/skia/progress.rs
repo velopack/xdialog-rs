@@ -81,9 +81,12 @@ impl SkiaProgressBar {
             self.state != before
         } else if let Some(ref mut animator) = self.value_animator {
             let before = self.state.clone();
-            animator.update(&mut self.state, self.current_time);
+            // Advance first, then sample: this guarantees the final tick samples at (or past) the
+            // 0.3s end of the timeline so the bar always lands exactly on the target value, even if
+            // a single tick covers the whole animation.
             self.current_time += elapsed_secs;
-            if self.current_time > 0.3 {
+            animator.update(&mut self.state, self.current_time);
+            if self.current_time >= 0.3 {
                 self.value_animator = None;
             }
             self.state != before

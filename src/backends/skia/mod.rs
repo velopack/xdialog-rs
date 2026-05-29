@@ -103,7 +103,11 @@ impl AppState {
             return;
         }
         self.current_time = now;
-        let elapsed_secs = elapsed.as_secs_f32();
+        // Clamp the per-tick delta. The loop sleeps on ControlFlow::Wait between animations, so the
+        // first tick after an idle gap reports the whole gap as elapsed. Without this clamp that
+        // single huge step would jump an animation straight past short transitions (a 0.3s value
+        // animation would advance ~2s in one frame and be discarded before it ever rendered).
+        let elapsed_secs = elapsed.as_secs_f32().min(0.1);
         for dialog in self.dialogs.values_mut() {
             dialog.tick(elapsed_secs);
         }
