@@ -1,177 +1,185 @@
-use fontdue::Font;
+//! Text layout, measurement and rasterization for the software backend.
+//!
+//! Built on **cosmic-text**: the bundled Ubuntu font is the primary family, and cosmic-text
+//! performs per-glyph fallback to the system fonts loaded by [`FontSystem::new`] for anything
+//! Ubuntu lacks (CJK, Arabic, color emoji, …). Complex-script shaping (rustybuzz) and color-emoji
+//! rasterization (swash) come for free. Callers select the face with a `bold` flag rather than
+//! passing a font handle.
+
+use std::sync::{LazyLock, Mutex};
+
+use cosmic_text::{Attrs, Buffer, Color, Family, FontSystem, Metrics, Shaping, SwashCache, Weight};
 use tiny_skia::PixmapMut;
 
-pub struct TextLine {
-    pub text: String,
-    #[allow(dead_code)]
-    pub width: f32,
+use super::font::{FONT_BOLD_DATA, FONT_REGULAR_DATA, UI_FONT_FAMILY};
+
+/// Line height as a multiple of the font size (close to the previous fontdue line spacing).
+const LINE_HEIGHT_SCALE: f32 = 1.2;
+
+struct FontContext {
+    font_system: FontSystem,
+    swash_cache: SwashCache,
 }
 
+/// Shared font context: the installed system fonts (for fallback) plus the bundled Ubuntu faces
+/// (the primary family).
+///
+/// Behind a `Mutex` because cosmic-text needs `&mut FontSystem`/`&mut SwashCache` for both layout
+/// and rasterization. Dialog painting is infrequent, so lock contention is irrelevant; the lock
+/// is never held across a call that could re-enter.
+static FONT_CONTEXT: LazyLock<Mutex<FontContext>> = LazyLock::new(|| {
+    let mut font_system = FontSystem::new(); // discovers and loads the installed system fonts
+    let db = font_system.db_mut();
+    db.load_font_data(FONT_REGULAR_DATA.to_vec());
+    db.load_font_data(FONT_BOLD_DATA.to_vec());
+    Mutex::new(FontContext {
+        font_system,
+        swash_cache: SwashCache::new(),
+    })
+});
+
+fn attrs(bold: bool) -> Attrs<'static> {
+    Attrs::new()
+        .family(Family::Name(UI_FONT_FAMILY))
+        .weight(if bold { Weight::BOLD } else { Weight::NORMAL })
+}
+
+/// A shaped, wrapped paragraph ready to render. Owns a cosmic-text [`Buffer`].
 pub struct TextLayout {
-    pub lines: Vec<TextLine>,
+    buffer: Buffer,
     pub total_width: f32,
     pub total_height: f32,
+    #[allow(dead_code)]
     pub line_height: f32,
 }
 
-/// Measure the width of a single line of text (no wrapping).
-pub fn measure_text_width(text: &str, font: &Font, size: f32) -> f32 {
-    text.chars()
-        .map(|c| font.metrics(c, size).advance_width)
-        .sum()
-}
+/// Lay out `text` at `size`, wrapping at `max_width` (pass `f32::INFINITY` for no wrapping).
+pub fn layout_text(text: &str, bold: bool, size: f32, max_width: f32) -> TextLayout {
+    let mut ctx = FONT_CONTEXT.lock().unwrap();
+    let ctx = &mut *ctx;
 
-/// Measure the height of a single line.
-pub fn measure_line_height(font: &Font, size: f32) -> f32 {
-    let metrics = font.horizontal_line_metrics(size).unwrap();
-    metrics.new_line_size
-}
+    let line_height = size * LINE_HEIGHT_SCALE;
+    let metrics = Metrics::new(size, line_height);
 
-/// Layout text with word wrapping at max_width. Returns line info for rendering.
-pub fn layout_text(text: &str, font: &Font, size: f32, max_width: f32) -> TextLayout {
-    let line_height = measure_line_height(font, size);
-    let mut lines = Vec::new();
+    let mut buffer = Buffer::new(&mut ctx.font_system, metrics);
+    let width_opt = if max_width.is_finite() { Some(max_width) } else { None };
+    buffer.set_size(&mut ctx.font_system, width_opt, None);
+    buffer.set_text(&mut ctx.font_system, text, attrs(bold), Shaping::Advanced);
+    buffer.shape_until_scroll(&mut ctx.font_system, false);
+
     let mut total_width: f32 = 0.0;
-
-    for paragraph in text.split('\n') {
-        if paragraph.is_empty() {
-            lines.push(TextLine {
-                text: String::new(),
-                width: 0.0,
-            });
-            continue;
-        }
-
-        let mut current_line = String::new();
-        let mut current_width: f32 = 0.0;
-
-        for word in paragraph.split_whitespace() {
-            let word_width = measure_text_width(word, font, size);
-            let space_width = if current_line.is_empty() {
-                0.0
-            } else {
-                font.metrics(' ', size).advance_width
-            };
-
-            if !current_line.is_empty() && current_width + space_width + word_width > max_width {
-                // Wrap to next line
-                total_width = total_width.max(current_width);
-                lines.push(TextLine {
-                    text: current_line,
-                    width: current_width,
-                });
-                current_line = word.to_string();
-                current_width = word_width;
-            } else {
-                if !current_line.is_empty() {
-                    current_line.push(' ');
-                    current_width += space_width;
-                }
-                current_line.push_str(word);
-                current_width += word_width;
-            }
-        }
-
-        // Push remaining text
-        total_width = total_width.max(current_width);
-        lines.push(TextLine {
-            text: current_line,
-            width: current_width,
-        });
+    let mut line_count: u32 = 0;
+    for run in buffer.layout_runs() {
+        total_width = total_width.max(run.line_w);
+        line_count += 1;
     }
-
-    if lines.is_empty() {
-        lines.push(TextLine {
-            text: String::new(),
-            width: 0.0,
-        });
-    }
-
-    let total_height = lines.len() as f32 * line_height;
+    // An empty string still occupies a single line.
+    let total_height = line_count.max(1) as f32 * line_height;
 
     TextLayout {
-        lines,
+        buffer,
         total_width,
         total_height,
         line_height,
     }
 }
 
-/// Render text layout onto a pixmap at the given position.
+/// Measure the width of a single (unwrapped) line of text.
+pub fn measure_text_width(text: &str, bold: bool, size: f32) -> f32 {
+    layout_text(text, bold, size, f32::INFINITY).total_width
+}
+
+/// Render a laid-out paragraph onto `pixmap` with its top-left at (`x`, `y`).
+///
+/// `color` is the text color; color-emoji glyphs ignore it and use their own pixels. The pixmap is
+/// assumed opaque (dialogs are), so glyphs are alpha-blended over the existing pixels and the
+/// destination alpha is kept at 255.
 pub fn render_text(
     pixmap: &mut PixmapMut,
     layout: &TextLayout,
-    font: &Font,
-    size: f32,
     color: (u8, u8, u8),
     x: f32,
     y: f32,
 ) {
-    let metrics = font.horizontal_line_metrics(size).unwrap();
-    let ascent = metrics.ascent;
+    let mut ctx = FONT_CONTEXT.lock().unwrap();
+    let ctx = &mut *ctx;
 
-    for (i, line) in layout.lines.iter().enumerate() {
-        let line_y = y + i as f32 * layout.line_height + ascent;
-        render_line(pixmap, &line.text, font, size, color, x, line_y);
-    }
-}
-
-/// Render a single line of text at the given baseline position.
-fn render_line(
-    pixmap: &mut PixmapMut,
-    text: &str,
-    font: &Font,
-    size: f32,
-    color: (u8, u8, u8),
-    x: f32,
-    baseline_y: f32,
-) {
-    let mut cursor_x = x;
     let (cr, cg, cb) = color;
+    let text_color = Color::rgb(cr, cg, cb);
 
-    for ch in text.chars() {
-        let (metrics, bitmap) = font.rasterize(ch, size);
+    let pm_w = pixmap.width() as i32;
+    let pm_h = pixmap.height() as i32;
+    let ox = x.round() as i32;
+    let oy = y.round() as i32;
+    let data = pixmap.data_mut();
 
-        if !bitmap.is_empty() && metrics.width > 0 && metrics.height > 0 {
-            let glyph_x = cursor_x as i32 + metrics.xmin;
-            let glyph_y = baseline_y as i32 - metrics.height as i32 - metrics.ymin;
-
-            let pm_width = pixmap.width() as i32;
-            let pm_height = pixmap.height() as i32;
-            let data = pixmap.data_mut();
-
-            for row in 0..metrics.height {
-                for col in 0..metrics.width {
-                    let px = glyph_x + col as i32;
-                    let py = glyph_y + row as i32;
-
-                    if px >= 0 && px < pm_width && py >= 0 && py < pm_height {
-                        let alpha = bitmap[row * metrics.width + col];
-                        if alpha > 0 {
-                            let idx = (py as usize * pm_width as usize + px as usize) * 4;
-                            if alpha == 255 {
-                                data[idx] = cr;
-                                data[idx + 1] = cg;
-                                data[idx + 2] = cb;
-                                data[idx + 3] = 255;
-                            } else {
-                                // Alpha blend
-                                let a = alpha as f32 / 255.0;
-                                let inv_a = 1.0 - a;
-                                data[idx] = (cr as f32 * a + data[idx] as f32 * inv_a) as u8;
-                                data[idx + 1] =
-                                    (cg as f32 * a + data[idx + 1] as f32 * inv_a) as u8;
-                                data[idx + 2] =
-                                    (cb as f32 * a + data[idx + 2] as f32 * inv_a) as u8;
-                                data[idx + 3] =
-                                    (255.0f32.min(data[idx + 3] as f32 + alpha as f32)) as u8;
-                            }
-                        }
+    layout
+        .buffer
+        .draw(&mut ctx.font_system, &mut ctx.swash_cache, text_color, |gx, gy, w, h, px| {
+            // cosmic-text emits straight (non-premultiplied) coverage/color: `Mask` glyphs carry
+            // the text color with coverage in alpha; `Color` (emoji) glyphs carry their own RGBA.
+            let a = px.a();
+            if a == 0 {
+                return;
+            }
+            let (sr, sg, sb) = (px.r(), px.g(), px.b());
+            for dy in 0..h as i32 {
+                for dx in 0..w as i32 {
+                    let xx = ox + gx + dx;
+                    let yy = oy + gy + dy;
+                    if xx < 0 || yy < 0 || xx >= pm_w || yy >= pm_h {
+                        continue;
+                    }
+                    let idx = (yy as usize * pm_w as usize + xx as usize) * 4;
+                    if a == 255 {
+                        data[idx] = sr;
+                        data[idx + 1] = sg;
+                        data[idx + 2] = sb;
+                        data[idx + 3] = 255;
+                    } else {
+                        let af = a as f32 / 255.0;
+                        let inv = 1.0 - af;
+                        data[idx] = (sr as f32 * af + data[idx] as f32 * inv) as u8;
+                        data[idx + 1] = (sg as f32 * af + data[idx + 1] as f32 * inv) as u8;
+                        data[idx + 2] = (sb as f32 * af + data[idx + 2] as f32 * inv) as u8;
+                        data[idx + 3] = 255;
                     }
                 }
             }
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tiny_skia::Pixmap;
+
+    /// Renders a multi-script sample and asserts glyphs actually rasterize. Latin + Cyrillic are
+    /// covered by the bundled Ubuntu font (so this passes anywhere); CJK/Arabic/emoji exercise the
+    /// system-font fallback and are confirmed visually via the dumped PNG.
+    #[test]
+    fn renders_multiscript_with_fallback() {
+        let mut pixmap = Pixmap::new(960, 80).unwrap();
+        for px in pixmap.data_mut().chunks_exact_mut(4) {
+            px.copy_from_slice(&[255, 255, 255, 255]); // white background
         }
 
-        cursor_x += metrics.advance_width;
+        let sample = "Ubuntu Ąćé | Кириллица | 日本語 中文 한국어 | العربية | 😀🎉🌍";
+        let layout = layout_text(sample, false, 32.0, 940.0);
+        assert!(layout.total_width > 0.0, "layout produced zero width");
+
+        {
+            let mut pm = pixmap.as_mut();
+            render_text(&mut pm, &layout, (0, 0, 0), 10.0, 10.0);
+        }
+
+        let drawn = pixmap
+            .data()
+            .chunks_exact(4)
+            .filter(|p| p[0] < 250 || p[1] < 250 || p[2] < 250)
+            .count();
+        eprintln!("rendered non-background pixels: {drawn}");
+        let _ = pixmap.save_png("target/skia_unicode_check.png");
+        assert!(drawn > 1000, "expected substantial glyph coverage, got {drawn}");
     }
 }

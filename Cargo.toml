@@ -23,11 +23,13 @@ log = "0.4"
 oneshot = { version = "0.2", features = ["std"] }
 thiserror = "2.0"
 
-# Skia software-rendering backend (cross-platform: winit + softbuffer + tiny-skia + fontdue)
+# Skia software-rendering backend (cross-platform: winit + softbuffer + tiny-skia + cosmic-text)
 winit = "0.30"
 softbuffer = "0.4"
 tiny-skia = "0.12"
-fontdue = "0.9"
+# Text layout/shaping with per-glyph font fallback (bundled Ubuntu primary, system fonts as
+# fallback) and color-emoji rasterization via swash.
+cosmic-text = "0.12"
 # Animation (used by the skia and fltk backends)
 enum-map = "2.7"
 mina = "0.1"
