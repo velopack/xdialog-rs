@@ -89,6 +89,36 @@ pub fn measure_text_width(text: &str, bold: bool, size: f32) -> f32 {
     layout_text(text, bold, size, f32::INFINITY).total_width
 }
 
+/// Memoizes a shaped [`TextLayout`], re-shaping only when the text, weight, font size or wrap
+/// width actually change.
+///
+/// Shaping (cosmic-text / rustybuzz) is by far the most expensive part of painting text, and a
+/// component's text is constant across the repaints driven by its animations — a button's label
+/// doesn't change as its colours fade on hover/focus. Caching here lets those 60fps repaints reuse
+/// the shaped layout instead of re-shaping the same string every frame; the layout is rebuilt only
+/// on a real change (new text) or a relayout/DPI change (new size or width).
+#[derive(Default)]
+pub struct CachedLayout {
+    entry: Option<(String, bool, f32, f32, TextLayout)>,
+}
+
+impl CachedLayout {
+    /// Return the shaped layout for these inputs, reshaping only on a cache miss. Keys on the exact
+    /// `(size, max_width)` values; during an animation the caller passes bit-identical values
+    /// (same scale, same bounds) every frame, so this hits.
+    pub fn get(&mut self, text: &str, bold: bool, size: f32, max_width: f32) -> &TextLayout {
+        let hit = matches!(
+            &self.entry,
+            Some((t, b, s, w, _)) if t == text && *b == bold && *s == size && *w == max_width
+        );
+        if !hit {
+            let layout = layout_text(text, bold, size, max_width);
+            self.entry = Some((text.to_string(), bold, size, max_width, layout));
+        }
+        &self.entry.as_ref().unwrap().4
+    }
+}
+
 /// Render a laid-out paragraph onto `pixmap` with its top-left at (`x`, `y`).
 ///
 /// `color` is the text color; color-emoji glyphs ignore it and use their own pixels. The pixmap is
@@ -181,5 +211,28 @@ mod tests {
         eprintln!("rendered non-background pixels: {drawn}");
         let _ = pixmap.save_png("target/skia_unicode_check.png");
         assert!(drawn > 1000, "expected substantial glyph coverage, got {drawn}");
+    }
+
+    /// The cache must return a layout matching the *current* inputs — never a stale one after the
+    /// text, size or wrap width changes — while matching `layout_text` exactly on a hit.
+    #[test]
+    fn cached_layout_tracks_inputs() {
+        let mut cache = CachedLayout::default();
+
+        let a = cache.get("Hello", false, 16.0, f32::INFINITY).total_width;
+        // Same inputs → identical result (served from cache).
+        let a2 = cache.get("Hello", false, 16.0, f32::INFINITY).total_width;
+        assert_eq!(a, a2);
+        // …and identical to a fresh, uncached shape of the same inputs.
+        assert_eq!(a, layout_text("Hello", false, 16.0, f32::INFINITY).total_width);
+
+        // Longer text must reshape (and be wider), not return the stale "Hello" width.
+        let b = cache.get("Hello, world!", false, 16.0, f32::INFINITY).total_width;
+        assert_eq!(b, layout_text("Hello, world!", false, 16.0, f32::INFINITY).total_width);
+        assert!(b > a, "longer text should be wider: {b} vs {a}");
+
+        // Larger font must reshape (and grow).
+        let c = cache.get("Hello, world!", false, 32.0, f32::INFINITY).total_width;
+        assert!(c > b, "larger size should be wider: {c} vs {b}");
     }
 }
