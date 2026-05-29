@@ -2,14 +2,8 @@ use crate::model::{DialogMessageRequest, XDialogTheme};
 use std::sync::mpsc::Receiver;
 
 // Cross-platform pure-Rust software renderer (winit + softbuffer + tiny-skia).
-// Default backend on Linux; selectable elsewhere via XDialogBackend::Skia.
+// The backend on Linux; Windows and macOS use their native backends.
 pub mod skia;
-
-#[cfg(all(target_os = "linux", feature = "fltk"))]
-pub mod fltk;
-
-#[cfg(all(target_os = "linux", feature = "gtk"))]
-pub mod gtk3;
 
 #[cfg(windows)]
 pub mod win32;

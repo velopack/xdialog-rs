@@ -47,7 +47,7 @@ pub fn get_theme(appearance: &DesktopAppearance) -> SkiaTheme {
     theme
 }
 
-/// The original hard-coded Ubuntu light theme - matching fltk_theme.rs apply_ubuntu_theme().
+/// The original hard-coded Ubuntu light theme.
 fn ubuntu_light() -> SkiaTheme {
     SkiaTheme {
         button_panel_height: 48,

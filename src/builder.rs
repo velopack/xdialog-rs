@@ -8,13 +8,12 @@ use crate::model::*;
 /// Builder pattern to configure/initialise the XDialog library. Must be configured and `run` in
 /// the main thread before any other XDialog functions are called.
 pub struct XDialogBuilder {
-    backend: XDialogBackend,
     theme: XDialogTheme,
 }
 
 impl Default for XDialogBuilder {
     fn default() -> XDialogBuilder {
-        XDialogBuilder { backend: XDialogBackend::Automatic, theme: XDialogTheme::SystemDefault }
+        XDialogBuilder { theme: XDialogTheme::SystemDefault }
     }
 }
 
@@ -22,12 +21,6 @@ impl XDialogBuilder {
     /// Create a new XDialogBuilder
     pub fn new() -> XDialogBuilder {
         XDialogBuilder::default()
-    }
-
-    /// Set the backend to use for the dialog. By default, the backend is chosen automatically.
-    pub fn with_backend(mut self, backend: XDialogBackend) -> XDialogBuilder {
-        self.backend = backend;
-        self
     }
 
     /// Set the theme to use for the dialog. By default, the theme is chosen automatically.
@@ -80,7 +73,7 @@ impl XDialogBuilder {
         });
 
         let backend_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            Self::dispatch_backend(self.backend, receive_message, self.theme);
+            Self::run_default_backend(receive_message, self.theme);
         }));
 
         if let Err(e) = backend_result {
@@ -105,41 +98,8 @@ impl XDialogBuilder {
         crate::backends::appkit::AppKitBackend::run_loop(receiver, theme);
     }
 
-    #[cfg(all(target_os = "linux", feature = "gtk"))]
-    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
-        crate::backends::gtk3::GtkBackend::run_loop(receiver, theme);
-    }
-
-    #[cfg(all(target_os = "linux", not(feature = "gtk")))]
+    #[cfg(target_os = "linux")]
     fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
         crate::backends::skia::SkiaBackend::run_loop(receiver, theme);
-    }
-
-    fn dispatch_backend(
-        backend: XDialogBackend,
-        receiver: std::sync::mpsc::Receiver<DialogMessageRequest>,
-        theme: XDialogTheme,
-    ) {
-        match backend {
-            XDialogBackend::Automatic | XDialogBackend::NativePreferred => {
-                Self::run_default_backend(receiver, theme);
-            }
-            // The software renderer is available on every platform.
-            XDialogBackend::Skia => crate::backends::skia::SkiaBackend::run_loop(receiver, theme),
-            #[cfg(all(target_os = "linux", feature = "fltk"))]
-            XDialogBackend::Fltk => crate::backends::fltk::FltkBackend::run_loop(receiver, theme),
-            #[cfg(not(all(target_os = "linux", feature = "fltk")))]
-            XDialogBackend::Fltk => {
-                error!("xdialog: FLTK backend is not available (enable the 'fltk' feature on Linux)");
-                Self::dispatch_backend(XDialogBackend::Automatic, receiver, theme);
-            }
-            #[cfg(all(target_os = "linux", feature = "gtk"))]
-            XDialogBackend::Gtk => crate::backends::gtk3::GtkBackend::run_loop(receiver, theme),
-            #[cfg(not(all(target_os = "linux", feature = "gtk")))]
-            XDialogBackend::Gtk => {
-                error!("xdialog: GTK backend is not available (enable the 'gtk' feature on Linux)");
-                Self::dispatch_backend(XDialogBackend::Automatic, receiver, theme);
-            }
-        }
     }
 }

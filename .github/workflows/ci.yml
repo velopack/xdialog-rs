@@ -13,7 +13,6 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   LINUX_APT_DEPS: libx11-dev libxext-dev libxcursor-dev libxrender-dev libxfixes-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libdbus-1-dev
-  LINUX_FLTK_APT_DEPS: libxft-dev libxinerama-dev libpango1.0-dev libgl1-mesa-dev libglu1-mesa-dev cmake
 
 jobs:
   build:
@@ -28,16 +27,6 @@ jobs:
 
           - os: ubuntu-latest
             name: Linux
-
-          - os: ubuntu-latest
-            name: Linux FLTK
-            cargo-args: --features fltk
-            extra-apt-deps: $LINUX_FLTK_APT_DEPS
-
-          - os: ubuntu-latest
-            name: Linux GTK
-            cargo-args: --features gtk
-            extra-apt-deps: libgtk-3-dev
 
           - os: macos-latest
             name: macOS
@@ -82,16 +71,6 @@ jobs:
 
           - os: ubuntu-latest
             name: Linux
-
-          - os: ubuntu-latest
-            name: Linux FLTK
-            cargo-args: --features fltk
-            extra-apt-deps: $LINUX_FLTK_APT_DEPS
-
-          - os: ubuntu-latest
-            name: Linux GTK
-            cargo-args: --features gtk
-            extra-apt-deps: libgtk-3-dev
 
           - os: macos-latest
             name: macOS
@@ -140,7 +119,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ${{ env.LINUX_APT_DEPS }} ${{ env.LINUX_FLTK_APT_DEPS }} libgtk-3-dev
+          sudo apt-get install -y ${{ env.LINUX_APT_DEPS }}
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -149,7 +128,7 @@ jobs:
           key: doctest
 
       - name: Run doc tests
-        run: cargo test --locked --doc --features gtk,fltk
+        run: cargo test --locked --doc
 
   headless-build:
     name: Headless Build

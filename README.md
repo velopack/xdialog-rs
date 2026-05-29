@@ -3,10 +3,10 @@
 [![License](https://img.shields.io/crates/l/xdialog?style=flat-square)](https://github.com/velopack/xdialog/blob/master/LICENSE)
 
 A cross-platform library for displaying native dialogs in Rust. On Windows and macOS, this
-library uses native system dialogs (Win32 TaskDialog and AppKit). On Linux, the default backend
-is a pure Rust software renderer (winit + tiny-skia) with no C/C++ build dependencies, making it
-fully compatible with static musl builds. Optional GTK3 and FLTK backends are available via
-feature flags. This allows for a simplified API and consistent behavior across platforms.
+library uses native system dialogs (Win32 TaskDialog and AppKit). On Linux, the backend is a
+pure Rust software renderer (winit + tiny-skia) with no C/C++ build dependencies, making it
+fully compatible with static musl builds. This allows for a simplified API and consistent
+behavior across platforms.
 
 This is not a replacement for a proper GUI framework. It is meant to be used for CLI / background
 applications which occasionally need to show dialogs (such as alerts, or progress) to the user.
@@ -18,8 +18,7 @@ update framework.
 - Cross-platform: works on Windows, macOS, and Linux
 - Native backends on Windows (Win32) and macOS (AppKit) with zero additional build dependencies
 - Pure Rust software-rendered backend on Linux (no C/C++ dependencies, static musl compatible)
-- Optional GTK3 and FLTK backends on Linux via feature flags
-- Embedded font (Liberation Sans) - no system font dependencies on Linux
+- Embedded font (Ubuntu) - no system font dependencies on Linux
 - Simple and consistent API across all platforms
 
 ## Installation
@@ -27,7 +26,7 @@ update framework.
 Add the following to your `Cargo.toml`:
 ```toml
 [dependencies]
-xdialog = "0" # replace with the latest version
+xdialog = "0"
 ```
 
 Or, run the following command:
@@ -95,25 +94,11 @@ cargo run --example various_options
 ## Backends
 - **Windows**: Native Win32 TaskDialog API
 - **macOS**: Native AppKit dialogs
-- **Linux** (default): Pure Rust software renderer using winit + tiny-skia + fontdue. No C/C++ build
-  dependencies, works with static musl linking, and embeds its own font.
-- **Linux** (`gtk` feature): GTK3 backend. Requires `libgtk-3-dev` on Debian/Ubuntu. When enabled,
-  GTK3 becomes the default backend with automatic fallback to the software renderer if GTK fails
-  to initialize.
-- **Linux** (`fltk` feature): [fltk-rs](https://github.com/fltk-rs/fltk-rs) backend. Requires
-  cmake and X11/Wayland development libraries. Must be explicitly selected via
-  `XDialogBuilder::new().with_backend(XDialogBackend::Fltk)`.
+- **Linux**: Pure Rust software renderer using winit + tiny-skia + cosmic-text. No C/C++ build
+  dependencies, works with static musl linking, and embeds its own font (Ubuntu), falling back to
+  system fonts for glyphs it doesn't cover (CJK, emoji, …).
 
 ```toml
-# Default (pure Rust, no extra dependencies)
 [dependencies]
 xdialog = "0"
-
-# With GTK3 support
-[dependencies]
-xdialog = { version = "0", features = ["gtk"] }
-
-# With FLTK support
-[dependencies]
-xdialog = { version = "0", features = ["fltk"] }
 ```

@@ -1,20 +1,4 @@
 #[derive(Debug, Clone, Eq, PartialEq)]
-/// The backend to use for the dialog. Automatic will choose the best backend for the current platform.
-pub enum XDialogBackend {
-    /// Automatically choose the best backend for the current platform
-    Automatic = 0,
-    /// Use the FLTK backend
-    Fltk,
-    /// Prefer the native backend for the current platform (eg. Win32), falling back to FLTK
-    NativePreferred,
-    /// Use the GTK3 backend (Linux only)
-    Gtk,
-    /// Use the pure-Rust software renderer (winit + tiny-skia). Available on all platforms; the
-    /// default on Linux. Selectable elsewhere for testing or to avoid native dialogs.
-    Skia,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
 /// The theme to use for the dialog. The concrete colors and fonts are chosen by each backend;
 /// this only selects light vs dark. `SystemDefault` follows the OS/desktop preference where the
 /// backend can detect it, otherwise falls back to a light theme.
