@@ -124,6 +124,8 @@ impl XDialogBuilder {
             XDialogBackend::Automatic | XDialogBackend::NativePreferred => {
                 Self::run_default_backend(receiver, theme);
             }
+            // The software renderer is available on every platform.
+            XDialogBackend::Skia => crate::backends::skia::SkiaBackend::run_loop(receiver, theme),
             #[cfg(all(target_os = "linux", feature = "fltk"))]
             XDialogBackend::Fltk => crate::backends::fltk::FltkBackend::run_loop(receiver, theme),
             #[cfg(not(all(target_os = "linux", feature = "fltk")))]

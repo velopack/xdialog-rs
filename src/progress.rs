@@ -162,10 +162,11 @@ impl ProgressDialogProxy {
         send_request(DialogMessageRequest::SetProgressIndeterminate(self.id))
     }
 
-    /// Sets the progress bar to a specific value between 0.0 and 1.0.
+    /// Sets the progress bar to a specific value between 0.0 and 1.0. Values outside that range
+    /// are clamped (e.g. `50.0` becomes `1.0`), matching the native progress controls.
     pub fn set_value(&self, value: f32) -> Result<(), XDialogError> {
         if self.silent { return Ok(()); }
-        send_request(DialogMessageRequest::SetProgressValue(self.id, value))
+        send_request(DialogMessageRequest::SetProgressValue(self.id, value.clamp(0.0, 1.0)))
     }
 
     /// Sets the text displayed below the progress bar.

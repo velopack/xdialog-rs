@@ -1,6 +1,12 @@
 use std::sync::LazyLock;
 
 use mina::prelude::*;
+use tiny_skia::PixmapMut;
+
+use super::component::{
+    Component, ControllerUpdate, LayoutCtx, PaintCtx, Rect, Role, Size, PROGRESS_HEIGHT,
+};
+use super::renderer::{fill_rect, fill_rounded_rect};
 
 #[derive(Animate, Clone, Debug, Default, PartialEq)]
 pub struct ProgressState {
@@ -30,6 +36,8 @@ pub struct SkiaProgressBar {
     pub is_indeterminate: bool,
     current_time: f32,
     value_animator: Option<ProgressStateTimeline>,
+    bounds: Rect,
+    dirty: bool,
 }
 
 impl SkiaProgressBar {
@@ -39,10 +47,12 @@ impl SkiaProgressBar {
             is_indeterminate: false,
             current_time: 0.0,
             value_animator: None,
+            bounds: Rect::default(),
+            dirty: true,
         }
     }
 
-    pub fn set_value(&mut self, value: f32) {
+    fn set_value(&mut self, value: f32) {
         let animation: ProgressStateTimeline = timeline!(
             ProgressState 0.3s Easing::OutCubic
             from { x1: 0.0, x2: self.state.x2 }
@@ -54,16 +64,13 @@ impl SkiaProgressBar {
         self.value_animator = Some(animation);
     }
 
-    pub fn set_indeterminate(&mut self) {
+    fn set_indeterminate(&mut self) {
         self.is_indeterminate = true;
         self.current_time = 0.0;
     }
 
-    pub fn is_animating(&self) -> bool {
-        self.is_indeterminate || self.value_animator.is_some()
-    }
-
-    pub fn tick(&mut self, elapsed_secs: f32) -> bool {
+    /// Advance the timeline by `elapsed_secs`; returns whether the visible state changed.
+    fn advance(&mut self, elapsed_secs: f32) -> bool {
         if self.is_indeterminate {
             let before = self.state.clone();
             INDETERMINATE_TIMELINE.update(&mut self.state, self.current_time);
@@ -83,5 +90,94 @@ impl SkiaProgressBar {
         } else {
             false
         }
+    }
+}
+
+impl Component for SkiaProgressBar {
+    fn role(&self) -> Role {
+        Role::Content
+    }
+
+    fn measure(&mut self, _ctx: &LayoutCtx) -> Size {
+        // No intrinsic width (it stretches to the content column); fixed logical height.
+        Size {
+            w: 0.0,
+            h: PROGRESS_HEIGHT,
+        }
+    }
+
+    fn set_bounds(&mut self, b: Rect) {
+        self.bounds = b;
+    }
+
+    fn bounds(&self) -> Rect {
+        self.bounds
+    }
+
+    fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+
+    fn paint(&mut self, pm: &mut PixmapMut, ctx: &PaintCtx) {
+        let s = ctx.scale;
+        let (x, y, w, h) = (
+            self.bounds.x * s,
+            self.bounds.y * s,
+            self.bounds.w * s,
+            self.bounds.h * s,
+        );
+        let radius = 2.0 * s;
+
+        // Clear our own bounds to the background.
+        fill_rect(pm, x, y, w, h, ctx.theme.color_background);
+
+        // Background track.
+        fill_rounded_rect(pm, x, y, w, h, radius, ctx.theme.color_progress_background);
+
+        // Foreground bar. Clamp to [0, 1] as a render-layer guard so the bar can never draw past
+        // the track regardless of how the state was set (the public API also clamps the input).
+        let bar_start = self.state.x1.clamp(0.0, 1.0) * w;
+        let bar_end = self.state.x2.clamp(0.0, 1.0) * w;
+        let bar_w = bar_end - bar_start;
+        if bar_w > 0.0 {
+            fill_rounded_rect(
+                pm,
+                x + bar_start,
+                y,
+                bar_w,
+                h,
+                radius,
+                ctx.theme.color_progress_foreground,
+            );
+        }
+
+        self.dirty = false;
+    }
+
+    fn tick(&mut self, dt: f32) -> bool {
+        let changed = self.advance(dt);
+        if changed {
+            self.dirty = true;
+        }
+        changed
+    }
+
+    fn is_animating(&self) -> bool {
+        self.is_indeterminate || self.value_animator.is_some()
+    }
+
+    fn apply(&mut self, u: &ControllerUpdate) -> bool {
+        match u {
+            ControllerUpdate::ProgressValue(v) => {
+                self.set_value(*v);
+                self.dirty = true;
+            }
+            ControllerUpdate::ProgressIndeterminate => {
+                self.set_indeterminate();
+                self.dirty = true;
+            }
+            ControllerUpdate::BodyText(_) => {}
+        }
+        false // progress changes never alter layout
     }
 }

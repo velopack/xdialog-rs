@@ -2,7 +2,7 @@ use xdialog::XDialogIcon;
 
 fn main() {
     println!("Showing OK/Cancel Dialog!");
-    xdialog::XDialogBuilder::new().run(run);
+    xdialog::XDialogBuilder::new().with_backend(xdialog::XDialogBackend::Skia).run(run);
 }
 
 fn run() {
