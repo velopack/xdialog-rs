@@ -345,6 +345,11 @@ impl XDialogBackendImpl for SkiaBackend {
         // falls back to the hard-coded Ubuntu light theme.
         let appearance = desktop::resolve_appearance(xdialog_theme);
         let mut state = AppState::new(theme::get_theme(&appearance));
+
+        // Start process CPU/RSS sampling for the duration of the run; `report()` stops it.
+        #[cfg(feature = "skia-instrumentation")]
+        instrument::start_sampler();
+
         if let Err(e) = event_loop.run_app(&mut state) {
             error!("xdialog: skia event loop error: {:?}", e);
         }

@@ -13,9 +13,10 @@ categories = ["graphics", "gui", "visualization"]
 default = []
 win32-direct = []
 maccf-direct = ["dep:core-foundation", "dep:core-foundation-sys"]
-# Opt-in per-frame render/present timing for the skia backend. Empty (no deps): compiles out
-# entirely unless enabled, so the shipping crate is unaffected. Drives `examples/skia_bench.rs`.
-skia-instrumentation = []
+# Opt-in per-frame render/present timing (plus process CPU/RSS sampling) for the skia backend.
+# Pulls in `sysinfo` only when enabled — the default shipping crate is unaffected. Drives
+# `examples/skia_bench.rs`.
+skia-instrumentation = ["dep:sysinfo"]
 
 [dependencies]
 log = "0.4"
@@ -33,6 +34,9 @@ cosmic-text = "0.12"
 enum-map = "2.7"
 mina = "0.1"
 multiversion = "0.8.0"
+# Process CPU/memory sampling for the benchmark instrumentation (optional; only the `system`
+# feature, to keep the transitive tree small). Gated behind `skia-instrumentation`.
+sysinfo = { version = "0.33", optional = true, default-features = false, features = ["system"] }
 
 # AppKit Backend
 [target.'cfg(target_os = "macos")'.dependencies]
