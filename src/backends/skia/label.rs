@@ -5,7 +5,7 @@ use tiny_skia::PixmapMut;
 
 use super::component::{Component, ControllerUpdate, LayoutCtx, PaintCtx, Rect, Role, Size, BODY_SIZE, TITLE_SIZE};
 use super::renderer::fill_rect;
-use super::text::{layout_text, render_text, CachedLayout};
+use super::text::{render_text, CachedLayout};
 use super::theme::SkiaTheme;
 
 /// Which kind of label this is — selects font, size and colour, and whether it reacts to
@@ -62,7 +62,9 @@ impl Component for Label {
 
     fn measure(&mut self, ctx: &LayoutCtx) -> Size {
         // Measure in logical pixels (resolution-independent); paint re-lays-out at physical size.
-        let layout = layout_text(&self.text, self.bold(), self.logical_size(), ctx.available_width);
+        // Goes through the shared cache so repeated relayouts (e.g. an unchanged title on every
+        // body-text update) reuse the shaped layout instead of re-shaping.
+        let layout = self.cache.get(&self.text, self.bold(), self.logical_size(), ctx.available_width);
         Size {
             w: layout.total_width,
             h: layout.total_height,

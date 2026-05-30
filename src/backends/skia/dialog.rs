@@ -49,6 +49,10 @@ pub struct SkiaDialog {
     repaint_all: bool,
     /// Last physical size passed to `surface.resize()`.
     last_surface_size: (u32, u32),
+    /// Last logical window size produced by layout. A relayout that doesn't change this leaves the
+    /// component geometry identical, so only the components that marked themselves dirty (e.g. the
+    /// body label whose text changed) need repainting — no blanket `repaint_all`.
+    last_logical_size: (f32, f32),
 }
 
 impl SkiaDialog {
@@ -133,6 +137,7 @@ impl SkiaDialog {
             scale_factor,
             repaint_all: true,
             last_surface_size: (0, 0),
+            last_logical_size: (win_w, win_h),
         };
 
         // Focus the last focusable component (button) by default.
@@ -371,7 +376,13 @@ impl SkiaDialog {
         let _ = self
             .window
             .request_inner_size(LogicalSize::new(win_w as f64, win_h as f64));
-        self.repaint_all = true;
+        // Only force a full repaint when the window actually changed size (which also triggers a
+        // pixmap realloc via the Resized event). If the size is unchanged, every component's bounds
+        // are identical and only those that self-marked dirty (the changed body text) repaint.
+        if (win_w, win_h) != self.last_logical_size {
+            self.last_logical_size = (win_w, win_h);
+            self.repaint_all = true;
+        }
     }
 
     // ── Rendering ──────────────────────────────────────────────────────

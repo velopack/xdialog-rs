@@ -182,7 +182,9 @@ impl Component for SkiaButton {
         );
         let radius = colors.border_radius as f32 * s;
 
-        // Clear to the footer colour the button sits on, then draw fill + border + label.
+        // Clear to the footer colour the button sits on, then draw fill + border + label. This keeps
+        // the anti-aliased rounded corners blending against a fresh background every frame rather
+        // than over the previous frame's pixels during a hover/focus colour transition.
         fill_rect(pm, bx, by, bw, bh, ctx.theme.color_background_alt);
 
         fill_rounded_rect(
