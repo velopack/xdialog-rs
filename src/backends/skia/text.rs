@@ -89,33 +89,66 @@ pub fn measure_text_width(text: &str, bold: bool, size: f32) -> f32 {
     layout_text(text, bold, size, f32::INFINITY).total_width
 }
 
-/// Memoizes a shaped [`TextLayout`], re-shaping only when the text, weight, font size or wrap
-/// width actually change.
+/// A single memoized shape: the inputs it was shaped from plus the resulting [`TextLayout`].
+struct CacheEntry {
+    text: String,
+    bold: bool,
+    size: f32,
+    max_width: f32,
+    layout: TextLayout,
+}
+
+/// Number of shaped layouts kept per component. A label is shaped at up to three distinct keys per
+/// frame — the natural-width measure (`max_width == ∞`), the wrapped-width measure, and the
+/// physical-size paint — so the cache must hold all three at once for a relayout to be free.
+const CACHE_CAP: usize = 4;
+
+/// Memoizes shaped [`TextLayout`]s, re-shaping only when no cached entry matches the requested
+/// `(text, weight, size, wrap-width)`.
 ///
 /// Shaping (cosmic-text / rustybuzz) is by far the most expensive part of painting text, and a
 /// component's text is constant across the repaints driven by its animations — a button's label
-/// doesn't change as its colours fade on hover/focus. Caching here lets those 60fps repaints reuse
-/// the shaped layout instead of re-shaping the same string every frame; the layout is rebuilt only
-/// on a real change (new text) or a relayout/DPI change (new size or width).
+/// doesn't change as its colours fade on hover/focus. The same layout is also requested repeatedly
+/// across relayouts: a label is measured (at two widths) *and* painted, and an unchanged title is
+/// re-measured on every body-text update. A small LRU keyed on the exact inputs lets all of those
+/// reuse the shaped layout instead of re-shaping; entries are rebuilt only on a real change (new
+/// text) or a relayout/DPI change (new size or width).
 #[derive(Default)]
 pub struct CachedLayout {
-    entry: Option<(String, bool, f32, f32, TextLayout)>,
+    /// Least-recently-used at the front, most-recently-used at the back.
+    entries: Vec<CacheEntry>,
 }
 
 impl CachedLayout {
     /// Return the shaped layout for these inputs, reshaping only on a cache miss. Keys on the exact
-    /// `(size, max_width)` values; during an animation the caller passes bit-identical values
-    /// (same scale, same bounds) every frame, so this hits.
+    /// `(size, max_width)` values; during an animation, or across relayouts with unchanged text,
+    /// the caller passes bit-identical values so this hits.
     pub fn get(&mut self, text: &str, bold: bool, size: f32, max_width: f32) -> &TextLayout {
-        let hit = matches!(
-            &self.entry,
-            Some((t, b, s, w, _)) if t == text && *b == bold && *s == size && *w == max_width
-        );
-        if !hit {
-            let layout = layout_text(text, bold, size, max_width);
-            self.entry = Some((text.to_string(), bold, size, max_width, layout));
+        if let Some(idx) = self
+            .entries
+            .iter()
+            .position(|e| e.text == text && e.bold == bold && e.size == size && e.max_width == max_width)
+        {
+            // Promote to most-recently-used so the live working set survives eviction.
+            if idx != self.entries.len() - 1 {
+                let e = self.entries.remove(idx);
+                self.entries.push(e);
+            }
+            return &self.entries.last().unwrap().layout;
         }
-        &self.entry.as_ref().unwrap().4
+
+        let layout = layout_text(text, bold, size, max_width);
+        if self.entries.len() >= CACHE_CAP {
+            self.entries.remove(0); // evict least-recently-used
+        }
+        self.entries.push(CacheEntry {
+            text: text.to_string(),
+            bold,
+            size,
+            max_width,
+            layout,
+        });
+        &self.entries.last().unwrap().layout
     }
 }
 
@@ -124,6 +157,25 @@ impl CachedLayout {
 /// `color` is the text color; color-emoji glyphs ignore it and use their own pixels. The pixmap is
 /// assumed opaque (dialogs are), so glyphs are alpha-blended over the existing pixels and the
 /// destination alpha is kept at 255.
+/// Alpha-blend one straight (non-premultiplied) source sample over an opaque destination pixel at
+/// byte offset `idx`, keeping the destination alpha at 255. Fully opaque samples are a plain copy.
+#[inline(always)]
+fn blend_px(data: &mut [u8], idx: usize, sr: u8, sg: u8, sb: u8, a: u8) {
+    if a == 255 {
+        data[idx] = sr;
+        data[idx + 1] = sg;
+        data[idx + 2] = sb;
+        data[idx + 3] = 255;
+    } else {
+        let af = a as f32 / 255.0;
+        let inv = 1.0 - af;
+        data[idx] = (sr as f32 * af + data[idx] as f32 * inv) as u8;
+        data[idx + 1] = (sg as f32 * af + data[idx + 1] as f32 * inv) as u8;
+        data[idx + 2] = (sb as f32 * af + data[idx + 2] as f32 * inv) as u8;
+        data[idx + 3] = 255;
+    }
+}
+
 pub fn render_text(
     pixmap: &mut PixmapMut,
     layout: &TextLayout,
@@ -139,6 +191,7 @@ pub fn render_text(
 
     let pm_w = pixmap.width() as i32;
     let pm_h = pixmap.height() as i32;
+    let pm_w_us = pm_w as usize;
     let ox = x.round() as i32;
     let oy = y.round() as i32;
     let data = pixmap.data_mut();
@@ -153,26 +206,34 @@ pub fn render_text(
                 return;
             }
             let (sr, sg, sb) = (px.r(), px.g(), px.b());
-            for dy in 0..h as i32 {
-                for dx in 0..w as i32 {
-                    let xx = ox + gx + dx;
-                    let yy = oy + gy + dy;
-                    if xx < 0 || yy < 0 || xx >= pm_w || yy >= pm_h {
+            let gox = ox + gx;
+            let goy = oy + gy;
+            let (gw, gh) = (w as i32, h as i32);
+
+            if gox >= 0 && goy >= 0 && gox + gw <= pm_w && goy + gh <= pm_h {
+                // Fast path: the whole glyph cell is inside the pixmap (the common case for dialog
+                // text). Skip the per-pixel bounds test and advance the row index by a full stride
+                // instead of recomputing `y * width + x` for every texel.
+                for dy in 0..gh {
+                    let mut idx = ((goy + dy) as usize * pm_w_us + gox as usize) * 4;
+                    for _ in 0..gw {
+                        blend_px(data, idx, sr, sg, sb, a);
+                        idx += 4;
+                    }
+                }
+            } else {
+                // Slow path: the glyph straddles a pixmap edge; clip per pixel.
+                for dy in 0..gh {
+                    let yy = goy + dy;
+                    if yy < 0 || yy >= pm_h {
                         continue;
                     }
-                    let idx = (yy as usize * pm_w as usize + xx as usize) * 4;
-                    if a == 255 {
-                        data[idx] = sr;
-                        data[idx + 1] = sg;
-                        data[idx + 2] = sb;
-                        data[idx + 3] = 255;
-                    } else {
-                        let af = a as f32 / 255.0;
-                        let inv = 1.0 - af;
-                        data[idx] = (sr as f32 * af + data[idx] as f32 * inv) as u8;
-                        data[idx + 1] = (sg as f32 * af + data[idx + 1] as f32 * inv) as u8;
-                        data[idx + 2] = (sb as f32 * af + data[idx + 2] as f32 * inv) as u8;
-                        data[idx + 3] = 255;
+                    for dx in 0..gw {
+                        let xx = gox + dx;
+                        if xx < 0 || xx >= pm_w {
+                            continue;
+                        }
+                        blend_px(data, (yy as usize * pm_w_us + xx as usize) * 4, sr, sg, sb, a);
                     }
                 }
             }

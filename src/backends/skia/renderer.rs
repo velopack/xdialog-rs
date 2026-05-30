@@ -1,14 +1,14 @@
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Stroke, Transform};
 
-/// Fill a rectangle with a solid color.
+/// Fill a rectangle with a solid color. Uses tiny-skia's native `fill_rect` so the common
+/// clear-your-bounds path doesn't build (and free) a `PathBuilder` per call.
 pub fn fill_rect(pixmap: &mut PixmapMut, x: f32, y: f32, w: f32, h: f32, color: (u8, u8, u8)) {
     let mut paint = Paint::default();
     paint.set_color(Color::from_rgba8(color.0, color.1, color.2, 255));
     paint.anti_alias = false;
 
     if let Some(rect) = tiny_skia::Rect::from_xywh(x, y, w, h) {
-        let path = PathBuilder::from_rect(rect);
-        pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+        pixmap.fill_rect(rect, &paint, Transform::identity(), None);
     }
 }
 

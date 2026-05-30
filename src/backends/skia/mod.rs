@@ -126,10 +126,11 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
 
         let mut any_needs_frame = false;
         for dialog in self.dialogs.values() {
-            if dialog.needs_redraw() {
+            let needs_redraw = dialog.needs_redraw();
+            if needs_redraw {
                 dialog.window.request_redraw();
             }
-            if dialog.needs_redraw() || dialog.is_animating() {
+            if needs_redraw || dialog.is_animating() {
                 any_needs_frame = true;
             }
         }
