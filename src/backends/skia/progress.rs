@@ -14,20 +14,31 @@ pub struct ProgressState {
     pub x2: f32,
 }
 
-static INDETERMINATE_TIMELINE: LazyLock<ProgressStateTimeline> = LazyLock::new(|| {
+/// Normalized travel position of the indeterminate capsule: 0 = parked (as a circle) at the left,
+/// 1 = parked (as a circle) at the right. mina drives this; the circle→pill stretch is derived from
+/// it analytically at paint time so the ends are always exact circles.
+#[derive(Animate, Clone, Debug, Default, PartialEq)]
+struct PillPos {
+    pos: f32,
+}
+
+/// Indeterminate cycle length, seconds. Keep in sync with the `timeline!` duration below.
+const INDETERMINATE_CYCLE: f32 = 2.20;
+/// Constant capsule length during travel, as a fraction of the track beyond the circle diameter.
+const INDETERMINATE_STRETCH: f32 = 0.45;
+
+// macOS-style "stretchy capsule": the capsule eases out from a circle at one end, elongating into a
+// pill as it speeds up, then decelerates and contracts back to a perfect circle at the far end,
+// pauses briefly, and reverses. mina drives the position with an ease-in-out; the two flat keyframe
+// segments are the end pauses. The circle↔pill stretch is computed in `paint` from this position.
+static INDETERMINATE_TIMELINE: LazyLock<PillPosTimeline> = LazyLock::new(|| {
     timeline!(
-        ProgressState 2.50s
-        // first expanding cycle
-        from { x1: 0.0, x2: 0.0 }
-        10% { x1: 0.0, x2: 0.3 }
-        30% { x1: 0.5, x2: 1.0 }
-        50% { x1: 1.0, x2: 1.0 }
-        // second contracting cycle
-        60% { x1: 0.0, x2: 0.0 }
-        70% { x1: 0.0, x2: 0.5 }
-        80% { x1: 0.5, x2: 0.8 }
-        90% { x1: 0.85, x2: 1.0 }
-        to { x1: 1.0, x2: 1.0 }
+        PillPos 2.20s Easing::InOutCubic
+        from { pos: 0.0 } // circle at the left, about to leave
+        40%  { pos: 1.0 } // sweep across, arriving as a circle at the right
+        50%  { pos: 1.0 } // brief pause at the right
+        90%  { pos: 0.0 } // sweep back, arriving as a circle at the left
+        to   { pos: 0.0 } // brief pause at the left → seamless loop
     )
 });
 
@@ -35,6 +46,8 @@ pub struct SkiaProgressBar {
     pub state: ProgressState,
     pub is_indeterminate: bool,
     current_time: f32,
+    /// Indeterminate capsule position; only meaningful while `is_indeterminate`.
+    pill: PillPos,
     value_animator: Option<ProgressStateTimeline>,
     bounds: Rect,
     dirty: bool,
@@ -46,6 +59,7 @@ impl SkiaProgressBar {
             state: ProgressState::default(),
             is_indeterminate: false,
             current_time: 0.0,
+            pill: PillPos::default(),
             value_animator: None,
             bounds: Rect::default(),
             dirty: true,
@@ -67,18 +81,19 @@ impl SkiaProgressBar {
     fn set_indeterminate(&mut self) {
         self.is_indeterminate = true;
         self.current_time = 0.0;
+        self.pill = PillPos::default();
     }
 
     /// Advance the timeline by `elapsed_secs`; returns whether the visible state changed.
     fn advance(&mut self, elapsed_secs: f32) -> bool {
         if self.is_indeterminate {
-            let before = self.state.clone();
-            INDETERMINATE_TIMELINE.update(&mut self.state, self.current_time);
+            let before = self.pill.pos;
+            INDETERMINATE_TIMELINE.update(&mut self.pill, self.current_time);
             self.current_time += elapsed_secs;
-            if self.current_time > 2.6 {
+            if self.current_time > INDETERMINATE_CYCLE {
                 self.current_time = 0.0;
             }
-            self.state != before
+            self.pill.pos != before
         } else if let Some(ref mut animator) = self.value_animator {
             let before = self.state.clone();
             // Advance first, then sample: this guarantees the final tick samples at (or past) the
@@ -129,29 +144,47 @@ impl Component for SkiaProgressBar {
             self.bounds.w * s,
             self.bounds.h * s,
         );
-        let radius = 2.0 * s;
-
         // Clear our own bounds to the background.
         fill_rect(pm, x, y, w, h, ctx.theme.color_background);
 
-        // Background track.
-        fill_rounded_rect(pm, x, y, w, h, radius, ctx.theme.color_progress_background);
+        if self.is_indeterminate {
+            // Fully-rounded "pill" track and a stretchy capsule. A circle has diameter == bar
+            // height; passing radius = h/2 yields a circle when width == h and a stadium when wider.
+            let r = h / 2.0;
+            fill_rounded_rect(pm, x, y, w, h, r, ctx.theme.color_progress_background);
 
-        // Foreground bar. Clamp to [0, 1] as a render-layer guard so the bar can never draw past
-        // the track regardless of how the state was set (the public API also clamps the input).
-        let bar_start = self.state.x1.clamp(0.0, 1.0) * w;
-        let bar_end = self.state.x2.clamp(0.0, 1.0) * w;
-        let bar_w = bar_end - bar_start;
-        if bar_w > 0.0 {
-            fill_rounded_rect(
-                pm,
-                x + bar_start,
-                y,
-                bar_w,
-                h,
-                radius,
-                ctx.theme.color_progress_foreground,
-            );
+            let pos = self.pill.pos.clamp(0.0, 1.0);
+            let d = h; // circle diameter (== bar height)
+            // A constant-width capsule whose centre sweeps from just outside the left wall to just
+            // outside the right. Clamping each edge to the track makes it expand from a circle while
+            // anchored to the near wall, travel at constant width, then contract back to a circle
+            // anchored to the far wall — the macOS behaviour.
+            let len = d + INDETERMINATE_STRETCH * (w - d);
+            let cx = (d - len / 2.0) + pos * (w - 2.0 * d + len);
+            let left = (cx - len / 2.0).max(0.0);
+            let right = (cx + len / 2.0).min(w);
+            fill_rounded_rect(pm, x + left, y, right - left, h, r, ctx.theme.color_progress_foreground);
+        } else {
+            let radius = 2.0 * s;
+            // Background track.
+            fill_rounded_rect(pm, x, y, w, h, radius, ctx.theme.color_progress_background);
+
+            // Foreground bar. Clamp to [0, 1] as a render-layer guard so the bar can never draw past
+            // the track regardless of how the state was set (the public API also clamps the input).
+            let bar_start = self.state.x1.clamp(0.0, 1.0) * w;
+            let bar_end = self.state.x2.clamp(0.0, 1.0) * w;
+            let bar_w = bar_end - bar_start;
+            if bar_w > 0.0 {
+                fill_rounded_rect(
+                    pm,
+                    x + bar_start,
+                    y,
+                    bar_w,
+                    h,
+                    radius,
+                    ctx.theme.color_progress_foreground,
+                );
+            }
         }
 
         self.dirty = false;
