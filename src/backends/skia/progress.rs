@@ -23,7 +23,7 @@ struct PillPos {
 }
 
 /// Indeterminate cycle length, seconds. Keep in sync with the `timeline!` duration below.
-const INDETERMINATE_CYCLE: f32 = 2.20;
+const INDETERMINATE_CYCLE: f32 = 3.0;
 /// Constant capsule length during travel, as a fraction of the track beyond the circle diameter.
 const INDETERMINATE_STRETCH: f32 = 0.45;
 
@@ -33,7 +33,7 @@ const INDETERMINATE_STRETCH: f32 = 0.45;
 // segments are the end pauses. The circle↔pill stretch is computed in `paint` from this position.
 static INDETERMINATE_TIMELINE: LazyLock<PillPosTimeline> = LazyLock::new(|| {
     timeline!(
-        PillPos 2.20s Easing::InOutCubic
+        PillPos 3.0s Easing::InOutCubic
         from { pos: 0.0 } // circle at the left, about to leave
         40%  { pos: 1.0 } // sweep across, arriving as a circle at the right
         50%  { pos: 1.0 } // brief pause at the right
