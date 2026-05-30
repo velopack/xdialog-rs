@@ -152,9 +152,15 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
         // frames (display-link redraw requests, input events) would otherwise keep sliding the
         // deadline forward, bunching renders into ~4ms bursts separated by ~21ms stalls — high
         // average FPS but visibly choppy. Anchoring keeps the spacing even.
+        #[cfg(feature = "skia-instrumentation")]
+        let mut due_tick = false;
         if self.dialogs.values().any(|d| d.is_animating()) {
             let due = self.next_frame_at.is_none_or(|t| now >= t);
             if due {
+                #[cfg(feature = "skia-instrumentation")]
+                {
+                    due_tick = true;
+                }
                 // Starting a fresh run after an idle/non-animating gap: reset the tick clock so the
                 // first frame advances ~0 instead of by the whole stale gap. `tick()` advances
                 // animations by wall-clock elapsed (clamped to 0.1s); without this reset that first
@@ -179,6 +185,14 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
                 dialog.window.request_redraw();
                 pending = true;
             }
+        }
+
+        // Record one pacing sample per scheduled animation frame, painted or not. Parked frames
+        // (e.g. the indeterminate spinner's end-pauses) advance the cadence without repainting;
+        // counting only painted frames would mis-read those intentional idle windows as stalls.
+        #[cfg(feature = "skia-instrumentation")]
+        if due_tick {
+            instrument::record_tick(pending);
         }
 
         match self.next_frame_at {
