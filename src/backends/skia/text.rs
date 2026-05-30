@@ -157,21 +157,81 @@ impl CachedLayout {
 /// `color` is the text color; color-emoji glyphs ignore it and use their own pixels. The pixmap is
 /// assumed opaque (dialogs are), so glyphs are alpha-blended over the existing pixels and the
 /// destination alpha is kept at 255.
-/// Alpha-blend one straight (non-premultiplied) source sample over an opaque destination pixel at
-/// byte offset `idx`, keeping the destination alpha at 255. Fully opaque samples are a plain copy.
-#[inline(always)]
-fn blend_px(data: &mut [u8], idx: usize, sr: u8, sg: u8, sb: u8, a: u8) {
-    if a == 255 {
-        data[idx] = sr;
-        data[idx + 1] = sg;
-        data[idx + 2] = sb;
-        data[idx + 3] = 255;
-    } else {
+/// Reverse lookup resolution for linear → sRGB. 12 bits keeps the round-trip error below one 8-bit
+/// step while staying small enough to live in L1.
+const LINEAR_LUT_SIZE: usize = 4096;
+
+/// sRGB (gamma-encoded) 8-bit value → linear-light intensity in `[0, 1]`.
+static SRGB_TO_LINEAR: LazyLock<[f32; 256]> = LazyLock::new(|| {
+    let mut t = [0.0f32; 256];
+    for (i, v) in t.iter_mut().enumerate() {
+        let c = i as f32 / 255.0;
+        *v = if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        };
+    }
+    t
+});
+
+/// Linear-light intensity (quantized to [`LINEAR_LUT_SIZE`] buckets) → sRGB 8-bit value.
+static LINEAR_TO_SRGB: LazyLock<[u8; LINEAR_LUT_SIZE]> = LazyLock::new(|| {
+    let mut t = [0u8; LINEAR_LUT_SIZE];
+    for (i, v) in t.iter_mut().enumerate() {
+        let l = i as f32 / (LINEAR_LUT_SIZE - 1) as f32;
+        let s = if l <= 0.003_130_8 {
+            l * 12.92
+        } else {
+            1.055 * l.powf(1.0 / 2.4) - 0.055
+        };
+        *v = (s * 255.0 + 0.5) as u8;
+    }
+    t
+});
+
+/// The sRGB↔linear lookup tables, borrowed once per `render_text` call so the per-pixel hot loop
+/// never re-derefs the `LazyLock`s.
+struct Gamma {
+    s2l: &'static [f32; 256],
+    l2s: &'static [u8; LINEAR_LUT_SIZE],
+}
+
+impl Gamma {
+    fn get() -> Self {
+        Gamma {
+            s2l: &SRGB_TO_LINEAR,
+            l2s: &LINEAR_TO_SRGB,
+        }
+    }
+
+    /// Alpha-blend one straight (non-premultiplied) source sample over an opaque destination pixel
+    /// at byte offset `idx`, keeping the destination alpha at 255. Fully opaque samples are a plain
+    /// copy.
+    ///
+    /// The blend is done in **linear light**: anti-aliased coverage is a geometric fraction of pixel
+    /// area, so it must be mixed on linear intensities, not on gamma-encoded sRGB bytes. Compositing
+    /// the raw bytes (the naive `src*a + dst*(1-a)`) darkens partially-covered edge pixels, which
+    /// reads as muddy/over-thin text — most visible on light glyphs over a dark background.
+    #[inline(always)]
+    fn blend_px(&self, data: &mut [u8], idx: usize, sr: u8, sg: u8, sb: u8, a: u8) {
+        if a == 255 {
+            data[idx] = sr;
+            data[idx + 1] = sg;
+            data[idx + 2] = sb;
+            data[idx + 3] = 255;
+            return;
+        }
         let af = a as f32 / 255.0;
         let inv = 1.0 - af;
-        data[idx] = (sr as f32 * af + data[idx] as f32 * inv) as u8;
-        data[idx + 1] = (sg as f32 * af + data[idx + 1] as f32 * inv) as u8;
-        data[idx + 2] = (sb as f32 * af + data[idx + 2] as f32 * inv) as u8;
+        let scale = (LINEAR_LUT_SIZE - 1) as f32;
+        let blend = |src: u8, dst: u8| -> u8 {
+            let lin = self.s2l[src as usize] * af + self.s2l[dst as usize] * inv;
+            self.l2s[(lin * scale) as usize]
+        };
+        data[idx] = blend(sr, data[idx]);
+        data[idx + 1] = blend(sg, data[idx + 1]);
+        data[idx + 2] = blend(sb, data[idx + 2]);
         data[idx + 3] = 255;
     }
 }
@@ -194,6 +254,7 @@ pub fn render_text(
     let pm_w_us = pm_w as usize;
     let ox = x.round() as i32;
     let oy = y.round() as i32;
+    let gamma = Gamma::get();
     let data = pixmap.data_mut();
 
     layout
@@ -217,7 +278,7 @@ pub fn render_text(
                 for dy in 0..gh {
                     let mut idx = ((goy + dy) as usize * pm_w_us + gox as usize) * 4;
                     for _ in 0..gw {
-                        blend_px(data, idx, sr, sg, sb, a);
+                        gamma.blend_px(data, idx, sr, sg, sb, a);
                         idx += 4;
                     }
                 }
@@ -233,7 +294,7 @@ pub fn render_text(
                         if xx < 0 || xx >= pm_w {
                             continue;
                         }
-                        blend_px(data, (yy as usize * pm_w_us + xx as usize) * 4, sr, sg, sb, a);
+                        gamma.blend_px(data, (yy as usize * pm_w_us + xx as usize) * 4, sr, sg, sb, a);
                     }
                 }
             }
@@ -272,6 +333,46 @@ mod tests {
         eprintln!("rendered non-background pixels: {drawn}");
         let _ = pixmap.save_png("target/skia_unicode_check.png");
         assert!(drawn > 1000, "expected substantial glyph coverage, got {drawn}");
+    }
+
+    /// Renders representative dialog text (bold title + regular body) on both the light and dark
+    /// theme backgrounds at 2× scale, and dumps a PNG for eyeballing rasterization/compositing
+    /// quality. Not an assertion — a manual A/B aid, so it's `#[ignore]`d (run on demand with
+    /// `cargo test dump_quality_sample -- --ignored`).
+    #[test]
+    #[ignore = "manual visual aid; writes target/quality_sample.png"]
+    fn dump_quality_sample() {
+        let scale = 1.0_f32;
+        let cases = [
+            ("light", (250u8, 250, 250), (61u8, 61, 61)),
+            ("dark", (45, 45, 45), (238, 238, 238)),
+        ];
+        let (w, h) = (520u32, 220u32);
+        let mut pixmap = Pixmap::new(w, h).unwrap();
+        for (i, (_name, bg, fg)) in cases.iter().enumerate() {
+            let y0 = i as u32 * (h / 2);
+            for y in y0..y0 + h / 2 {
+                for x in 0..w {
+                    let idx = ((y * w + x) * 4) as usize;
+                    let d = pixmap.data_mut();
+                    d[idx] = bg.0;
+                    d[idx + 1] = bg.1;
+                    d[idx + 2] = bg.2;
+                    d[idx + 3] = 255;
+                }
+            }
+            let title = layout_text("Information", true, 18.0 * scale, f32::INFINITY);
+            let body = layout_text(
+                "This is a test message for visual regression testing.",
+                false,
+                14.0 * scale,
+                f32::INFINITY,
+            );
+            let mut pm = pixmap.as_mut();
+            render_text(&mut pm, &title, *fg, 20.0, y0 as f32 + 16.0);
+            render_text(&mut pm, &body, *fg, 20.0, y0 as f32 + 56.0);
+        }
+        let _ = pixmap.save_png("target/quality_sample.png");
     }
 
     /// The cache must return a layout matching the *current* inputs — never a stale one after the
