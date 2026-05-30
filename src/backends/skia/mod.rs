@@ -6,6 +6,8 @@ mod dialog;
 mod font;
 mod icon;
 mod icons;
+#[cfg(feature = "skia-instrumentation")]
+mod instrument;
 mod label;
 mod progress;
 mod renderer;
@@ -33,6 +35,9 @@ struct AppState {
     dialogs: HashMap<usize, dialog::SkiaDialog>,
     window_to_id: HashMap<WindowId, usize>,
     current_time: Instant,
+    /// Scheduled time of the next animation frame while something is animating (`None` when idle).
+    /// Anchored to a fixed cadence so frame pacing stays even — see `about_to_wait`.
+    next_frame_at: Option<Instant>,
 }
 
 impl AppState {
@@ -42,6 +47,7 @@ impl AppState {
             dialogs: HashMap::new(),
             window_to_id: HashMap::new(),
             current_time: Instant::now(),
+            next_frame_at: None,
         }
     }
 
@@ -122,26 +128,59 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        self.tick();
-
-        let mut any_needs_frame = false;
-        for dialog in self.dialogs.values() {
-            let needs_redraw = dialog.needs_redraw();
-            if needs_redraw {
-                dialog.window.request_redraw();
+        // Uncapped (max-throughput) benchmark phase: advance and request a redraw every iteration
+        // and never sleep, so the loop renders as fast as it can.
+        #[cfg(feature = "skia-instrumentation")]
+        if instrument::uncapped() {
+            self.tick();
+            let mut any = false;
+            for dialog in self.dialogs.values() {
+                if dialog.needs_redraw() {
+                    dialog.window.request_redraw();
+                }
+                any |= dialog.needs_redraw() || dialog.is_animating();
             }
-            if needs_redraw || dialog.is_animating() {
-                any_needs_frame = true;
+            event_loop.set_control_flow(if any { ControlFlow::Poll } else { ControlFlow::Wait });
+            return;
+        }
+
+        const FRAME_TIME: Duration = Duration::from_millis(16);
+        let now = Instant::now();
+
+        // Drive animations on a fixed ~60fps cadence. The next deadline is anchored to the previous
+        // one rather than recomputed as `now + FRAME_TIME` on every wake-up: extra wake-ups between
+        // frames (display-link redraw requests, input events) would otherwise keep sliding the
+        // deadline forward, bunching renders into ~4ms bursts separated by ~21ms stalls — high
+        // average FPS but visibly choppy. Anchoring keeps the spacing even.
+        if self.dialogs.values().any(|d| d.is_animating()) {
+            let due = self.next_frame_at.is_none_or(|t| now >= t);
+            if due {
+                self.tick();
+                let next = self.next_frame_at.unwrap_or(now) + FRAME_TIME;
+                // If we fell more than a frame behind, resync to `now` to avoid a catch-up burst.
+                self.next_frame_at = Some(if next <= now { now + FRAME_TIME } else { next });
+            }
+        } else {
+            self.next_frame_at = None;
+        }
+
+        // Request redraws for any dialog with pending content (this frame's tick, or an async
+        // update such as a text change). The flag clears once the dialog renders.
+        let mut pending = false;
+        for dialog in self.dialogs.values() {
+            if dialog.needs_redraw() {
+                dialog.window.request_redraw();
+                pending = true;
             }
         }
 
-        if any_needs_frame {
-            // Cap animation rendering at ~60fps
-            const FRAME_TIME: Duration = Duration::from_millis(16);
-            event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME_TIME));
-        } else {
-            // Nothing animating – sleep until next event
-            event_loop.set_control_flow(ControlFlow::Wait);
+        match self.next_frame_at {
+            // Animating: wake at the next scheduled frame.
+            Some(next) => event_loop.set_control_flow(ControlFlow::WaitUntil(next)),
+            // A one-off redraw is queued; re-check shortly, then fall through to sleep.
+            None if pending => event_loop.set_control_flow(ControlFlow::WaitUntil(now + FRAME_TIME)),
+            // Idle: sleep until the next event.
+            None => event_loop.set_control_flow(ControlFlow::Wait),
         }
     }
 
@@ -288,5 +327,10 @@ impl XDialogBackendImpl for SkiaBackend {
         if let Err(e) = event_loop.run_app(&mut state) {
             error!("xdialog: skia event loop error: {:?}", e);
         }
+
+        // `run_app` returns once `main()` finishes and sends `ExitEventLoop`, so this fires
+        // deterministically at the end of the benchmark, on the loop thread that recorded frames.
+        #[cfg(feature = "skia-instrumentation")]
+        instrument::report();
     }
 }

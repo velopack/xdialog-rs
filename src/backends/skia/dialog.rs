@@ -1,5 +1,7 @@
 use std::num::NonZeroU32;
 use std::sync::Arc;
+#[cfg(feature = "skia-instrumentation")]
+use std::time::{Duration, Instant};
 
 use softbuffer::{Rect as DamageRect, Surface};
 use tiny_skia::Pixmap;
@@ -409,12 +411,19 @@ impl SkiaDialog {
             // Nothing changed, but the OS requested a redraw (e.g. window expose) – re-present the
             // existing pixmap. `None` damage forces a full reconvert since the surface buffer may
             // be a fresh one with no relation to what's on screen.
+            #[cfg(feature = "skia-instrumentation")]
+            let present_start = Instant::now();
             self.present(pw, ph, None);
+            // Record expose-only frames (zero render time) so they don't vanish from FPS accounting.
+            #[cfg(feature = "skia-instrumentation")]
+            super::instrument::record_frame(Duration::ZERO, present_start.elapsed());
             return;
         }
 
         // Take the pixmap out so the paint loop can borrow `&mut components` and `&theme` disjointly.
         let mut pixmap = self.pixmap.take().unwrap();
+        #[cfg(feature = "skia-instrumentation")]
+        let render_start = Instant::now();
         // Union of every painted component's physical dirty rect; drives the partial present below.
         let mut damage: Option<Rect> = None;
         {
@@ -431,10 +440,16 @@ impl SkiaDialog {
                 }
             }
         }
+        #[cfg(feature = "skia-instrumentation")]
+        let render = render_start.elapsed();
         self.repaint_all = false;
         self.pixmap = Some(pixmap);
 
+        #[cfg(feature = "skia-instrumentation")]
+        let present_start = Instant::now();
         self.present(pw, ph, damage);
+        #[cfg(feature = "skia-instrumentation")]
+        super::instrument::record_frame(render, present_start.elapsed());
     }
 
     /// Convert the internal RGBA pixmap to the softbuffer ARGB surface and present it.
