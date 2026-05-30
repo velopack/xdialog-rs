@@ -21,6 +21,8 @@
 //!   separately as a "painted" percentage.
 
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 /// One actual painted (or expose-re-presented) frame: how long the component paint loop took, how
@@ -86,18 +88,101 @@ pub fn record_tick(painted: bool) {
     });
 }
 
+// ── Process CPU / memory sampling ──────────────────────────────────────────
+//
+// Frame timings live in the thread-local `RECORDER`, but CPU/RSS are process-wide and sampled on a
+// dedicated background thread, so they collect into these globals instead. `report()` (on the loop
+// thread) stops the sampler and folds the result into the emitted stats.
+
+#[derive(Clone, Copy)]
+struct ResourceSample {
+    /// Process CPU usage from sysinfo: percent of a *single* core, so it can exceed 100 when more
+    /// than one thread is busy.
+    cpu: f32,
+    /// Resident set size, bytes.
+    rss: u64,
+}
+
+static RESOURCE_SAMPLES: Mutex<Vec<ResourceSample>> = Mutex::new(Vec::new());
+static SAMPLER_STOP: AtomicBool = AtomicBool::new(false);
+static SAMPLER_HANDLE: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
+
+/// Spawn a background thread that samples this process's CPU and resident memory on a fixed cadence
+/// until [`report`] stops it. Call once at loop start; a second call is a no-op.
+pub fn start_sampler() {
+    use sysinfo::{
+        get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System,
+        MINIMUM_CPU_UPDATE_INTERVAL,
+    };
+
+    let mut slot = SAMPLER_HANDLE.lock().unwrap();
+    if slot.is_some() {
+        return;
+    }
+    let Ok(pid) = get_current_pid() else {
+        eprintln!("Skia Bench: could not resolve current pid; CPU/RSS will be N/A");
+        return;
+    };
+    let handle = std::thread::Builder::new()
+        .name("skia-bench-sampler".into())
+        .spawn(move || {
+            let kind = || ProcessRefreshKind::nothing().with_cpu().with_memory();
+            let mut sys = System::new();
+            // CPU usage is a delta between two refreshes, so prime it once, then wait at least
+            // MINIMUM_CPU_UPDATE_INTERVAL before each real sample so the percentage is meaningful.
+            sys.refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), true, kind());
+            let interval = MINIMUM_CPU_UPDATE_INTERVAL.max(Duration::from_millis(200));
+            while !SAMPLER_STOP.load(Ordering::Relaxed) {
+                std::thread::sleep(interval);
+                sys.refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), true, kind());
+                if let Some(proc) = sys.process(pid) {
+                    RESOURCE_SAMPLES.lock().unwrap().push(ResourceSample {
+                        cpu: proc.cpu_usage(),
+                        rss: proc.memory(),
+                    });
+                }
+            }
+        })
+        .ok();
+    *slot = handle;
+}
+
+/// Signal the sampler thread to finish and join it.
+fn stop_sampler() {
+    SAMPLER_STOP.store(true, Ordering::Relaxed);
+    if let Some(h) = SAMPLER_HANDLE.lock().unwrap().take() {
+        let _ = h.join();
+    }
+}
+
+/// Fold the collected resource samples into `(cpu %, rss MB)` stat blocks. `None` when too few
+/// samples were gathered (very short run, or the pid couldn't be resolved).
+fn resource_stats() -> (Option<Stats>, Option<Stats>) {
+    let samples = std::mem::take(&mut *RESOURCE_SAMPLES.lock().unwrap());
+    if samples.len() < 2 {
+        return (None, None);
+    }
+    let cpu = Stats::from_values(samples.iter().map(|s| s.cpu as f64).collect());
+    let rss = Stats::from_values(samples.iter().map(|s| s.rss as f64 / (1024.0 * 1024.0)).collect());
+    (Some(cpu), Some(rss))
+}
+
 /// Compute statistics over the recorded frames and emit them to stderr, the GitHub step summary
 /// (if `GITHUB_STEP_SUMMARY` is set), and as a `::notice` annotation.
 pub fn report() {
+    stop_sampler();
+    let (cpu, rss) = resource_stats();
     RECORDER.with(|r| {
         let rec = r.borrow();
-        let report = if rec.uncapped {
+        let built = if rec.uncapped {
             build_uncapped(&rec)
         } else {
             build_capped(&rec)
         };
-        match report {
-            Ok(report) => {
+        match built {
+            Ok(mut report) => {
+                report.cpu = cpu;
+                report.rss = rss;
                 report.emit_stderr();
                 report.emit_step_summary();
                 report.emit_notice();
@@ -137,6 +222,8 @@ fn build_uncapped(rec: &Recorder) -> Result<Report, String> {
         interval,
         painted: None,
         dropped: None,
+        cpu: None,
+        rss: None,
     })
 }
 
@@ -161,7 +248,7 @@ fn build_capped(rec: &Recorder) -> Result<Report, String> {
         .windows(2)
         .map(|w| w[1].at.duration_since(w[0].at).as_secs_f64() * 1000.0)
         .collect();
-    let interval = Stats::from_ms(gaps_ms.clone());
+    let interval = Stats::from_values(gaps_ms.clone());
 
     // Dropped frames = scheduled slots skipped because the loop woke late. A clean 16ms gap counts
     // 0; a 33ms hitch counts 1, etc. Idle/parked frames still tick on time, so they count 0.
@@ -198,6 +285,8 @@ fn build_capped(rec: &Recorder) -> Result<Report, String> {
         interval,
         painted: Some(painted_pct),
         dropped: Some(dropped),
+        cpu: None,
+        rss: None,
     })
 }
 
@@ -213,6 +302,10 @@ struct Report {
     /// Capped mode only: percentage of scheduled frames that actually painted (vs. parked idle).
     painted: Option<f64>,
     dropped: Option<i64>,
+    /// Process CPU usage (% of one core) sampled over the run. `None` if sampling was unavailable.
+    cpu: Option<Stats>,
+    /// Process resident memory (MB) sampled over the run. `None` if sampling was unavailable.
+    rss: Option<Stats>,
 }
 
 /// Summary statistics (milliseconds) for one stage.
@@ -226,25 +319,26 @@ struct Stats {
 
 impl Stats {
     fn compute(durs: impl Iterator<Item = Duration>) -> Self {
-        Self::from_ms(durs.map(|d| d.as_secs_f64() * 1000.0).collect())
+        Self::from_values(durs.map(|d| d.as_secs_f64() * 1000.0).collect())
     }
 
-    fn from_ms(mut ms: Vec<f64>) -> Self {
-        if ms.is_empty() {
+    /// Mean and percentiles over an arbitrary value series (ms, CPU %, MB — caller's unit).
+    fn from_values(mut vals: Vec<f64>) -> Self {
+        if vals.is_empty() {
             return Self { mean: 0.0, p50: 0.0, p95: 0.0, p99: 0.0, max: 0.0 };
         }
-        let mean = ms.iter().sum::<f64>() / ms.len() as f64;
-        ms.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mean = vals.iter().sum::<f64>() / vals.len() as f64;
+        vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let pct = |p: f64| {
-            let idx = ((p / 100.0) * (ms.len() - 1) as f64).round() as usize;
-            ms[idx.min(ms.len() - 1)]
+            let idx = ((p / 100.0) * (vals.len() - 1) as f64).round() as usize;
+            vals[idx.min(vals.len() - 1)]
         };
         Self {
             mean,
             p50: pct(50.0),
             p95: pct(95.0),
             p99: pct(99.0),
-            max: *ms.last().unwrap(),
+            max: *vals.last().unwrap(),
         }
     }
 }
@@ -259,7 +353,7 @@ fn painted_str(painted: Option<f64>) -> String {
 
 impl Report {
     fn emit_stderr(&self) {
-        let Report { mode, frames, discarded, fps, render, present, interval, painted, dropped } = self;
+        let Report { mode, frames, discarded, fps, render, present, interval, painted, dropped, cpu, rss } = self;
         eprintln!();
         eprintln!("─── Skia Bench ({mode}) ───");
         eprintln!(
@@ -267,7 +361,7 @@ impl Report {
             painted_str(*painted),
             dropped_str(*dropped)
         );
-        eprintln!("stage      mean      p50      p95      p99      max   (ms)");
+        eprintln!("stage      mean      p50      p95      p99      max   (ms unless noted)");
         eprintln!(
             "render   {:>6.3}  {:>6.3}  {:>6.3}  {:>6.3}  {:>6.3}",
             render.mean, render.p50, render.p95, render.p99, render.max
@@ -280,11 +374,23 @@ impl Report {
             "interval {:>6.2}  {:>6.2}  {:>6.2}  {:>6.2}  {:>6.2}   (frame pacing; high p95/p99 = choppy)",
             interval.mean, interval.p50, interval.p95, interval.p99, interval.max
         );
+        if let Some(cpu) = cpu {
+            eprintln!(
+                "cpu (%)  {:>6.1}  {:>6.1}  {:>6.1}  {:>6.1}  {:>6.1}   (process; % of one core)",
+                cpu.mean, cpu.p50, cpu.p95, cpu.p99, cpu.max
+            );
+        }
+        if let Some(rss) = rss {
+            eprintln!(
+                "rss (MB) {:>6.1}  {:>6.1}  {:>6.1}  {:>6.1}  {:>6.1}   (resident set)",
+                rss.mean, rss.p50, rss.p95, rss.p99, rss.max
+            );
+        }
         eprintln!("───────────────────────────");
     }
 
     fn emit_step_summary(&self) {
-        let Report { mode, frames, discarded, fps, render, present, interval, painted, dropped } = self;
+        let Report { mode, frames, discarded, fps, render, present, interval, painted, dropped, cpu, rss } = self;
         let Ok(path) = std::env::var("GITHUB_STEP_SUMMARY") else {
             return;
         };
@@ -312,9 +418,22 @@ impl Report {
             present.mean, present.p50, present.p95, present.p99, present.max
         ));
         md.push_str(&format!(
-            "| interval (ms) | {:.2} | {:.2} | {:.2} | {:.2} | {:.2} |\n\n",
+            "| interval (ms) | {:.2} | {:.2} | {:.2} | {:.2} | {:.2} |\n",
             interval.mean, interval.p50, interval.p95, interval.p99, interval.max
         ));
+        if let Some(cpu) = cpu {
+            md.push_str(&format!(
+                "| cpu (% of 1 core) | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} |\n",
+                cpu.mean, cpu.p50, cpu.p95, cpu.p99, cpu.max
+            ));
+        }
+        if let Some(rss) = rss {
+            md.push_str(&format!(
+                "| rss (MB) | {:.1} | {:.1} | {:.1} | {:.1} | {:.1} |\n",
+                rss.mean, rss.p50, rss.p95, rss.p99, rss.max
+            ));
+        }
+        md.push('\n');
         md.push_str(
             "_interval = gap between scheduled frames (frame pacing); high p95/p99 means choppy. \
              painted = share of scheduled frames that actually repainted; the rest are intentional \
@@ -326,10 +445,12 @@ impl Report {
     }
 
     fn emit_notice(&self) {
-        let Report { mode, fps, render, present, interval, painted, dropped, .. } = self;
+        let Report { mode, fps, render, present, interval, painted, dropped, cpu, rss, .. } = self;
+        let cpu_str = cpu.as_ref().map(|c| format!(" | cpu p50 {:.1}% max {:.1}%", c.p50, c.max)).unwrap_or_default();
+        let rss_str = rss.as_ref().map(|m| format!(" | rss p50 {:.1}MB max {:.1}MB", m.p50, m.max)).unwrap_or_default();
         println!(
             "::notice title=Skia Bench ({mode})::FPS {fps:.1} | render p50 {:.3}ms p95 {:.3}ms | \
-             present p50 {:.3}ms p95 {:.3}ms | interval p95 {:.2}ms | painted {} | dropped {}",
+             present p50 {:.3}ms p95 {:.3}ms | interval p95 {:.2}ms | painted {} | dropped {}{cpu_str}{rss_str}",
             render.p50, render.p95, present.p50, present.p95, interval.p95,
             painted_str(*painted),
             dropped_str(*dropped)
