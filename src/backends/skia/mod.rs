@@ -155,6 +155,13 @@ impl ApplicationHandler<DialogMessageRequest> for AppState {
         if self.dialogs.values().any(|d| d.is_animating()) {
             let due = self.next_frame_at.is_none_or(|t| now >= t);
             if due {
+                // Starting a fresh run after an idle/non-animating gap: reset the tick clock so the
+                // first frame advances ~0 instead of by the whole stale gap. `tick()` advances
+                // animations by wall-clock elapsed (clamped to 0.1s); without this reset that first
+                // step would jump a short hover animation straight to its end (snap, no animation).
+                if self.next_frame_at.is_none() {
+                    self.current_time = now;
+                }
                 self.tick();
                 let next = self.next_frame_at.unwrap_or(now) + FRAME_TIME;
                 // If we fell more than a frame behind, resync to `now` to avoid a catch-up burst.
