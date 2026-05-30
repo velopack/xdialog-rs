@@ -304,12 +304,12 @@ jobs:
 
       - name: Run benchmark (capped 60fps)
         env:
-          XDIALOG_BENCH_DURATION_SECS: "10"
+          XDIALOG_BENCH_DURATION_SECS: "30"
         run: cargo run --locked --features skia-instrumentation --example skia_bench
 
       - name: Run benchmark (uncapped)
         env:
-          XDIALOG_BENCH_DURATION_SECS: "10"
+          XDIALOG_BENCH_DURATION_SECS: "30"
           XDIALOG_BENCH_UNCAPPED: "1"
         run: cargo run --locked --features skia-instrumentation --example skia_bench
 
