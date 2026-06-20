@@ -105,9 +105,9 @@ name = "visual_regression"
 harness = false
 
 [dev-dependencies]
-ntest = "0.9"
-image = "0.25"
-xcap = "0.9"
+ntest = "=0.9.5"
+image = "=0.25.10"
+xcap = "=0.9.6"
 
 [target.'cfg(windows)'.dev-dependencies]
 windows = { version = "=0.62.2", features = [
