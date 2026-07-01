@@ -6,6 +6,7 @@ db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 ignore = [
     "RUSTSEC-2024-0436", # paste unmaintained (dev-only: xcap -> image -> rav1e)
+    "RUSTSEC-2026-0192", # ttf-parser unmaintained (transitive: cosmic-text/fontdb/rustybuzz + winit sctk-adwaita); no replacement adopted upstream
 ]
 
 [licenses]
