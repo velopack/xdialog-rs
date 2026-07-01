@@ -23,21 +23,6 @@ log = "0.4"
 oneshot = { version = "0.2", features = ["std"] }
 thiserror = "2.0"
 
-# Skia software-rendering backend (cross-platform: winit + softbuffer + tiny-skia + cosmic-text)
-winit = "0.30"
-softbuffer = "0.4"
-tiny-skia = "0.12"
-# Text layout/shaping with per-glyph font fallback (bundled Ubuntu primary, system fonts as
-# fallback) and color-emoji rasterization via swash.
-cosmic-text = "0.12"
-# Animation (used by the skia backend). enum-map is required in scope for mina's `State` derive.
-enum-map = "2.7"
-mina = "0.1"
-multiversion = "0.8.0"
-# Process CPU/memory sampling for the benchmark instrumentation (optional; only the `system`
-# feature, to keep the transitive tree small). Gated behind `skia-instrumentation`.
-sysinfo = { version = "0.33", optional = true, default-features = false, features = ["system"] }
-
 # AppKit Backend
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
@@ -78,11 +63,17 @@ block2 = "0.6"
 core-foundation = { version = "0.10", optional = true }
 core-foundation-sys = { version = "0.8", optional = true }
 
-# Linux-only dependencies
+# Linux / Skia backend
 [target.'cfg(target_os = "linux")'.dependencies]
-# Read the user's desktop theme (light/dark + accent) via the XDG desktop portal Settings
-# interface. Used by the skia backend; blocking API so no async runtime is required.
+winit = "0.30"
+softbuffer = "0.4"
+tiny-skia = "0.12"
+cosmic-text = "0.12"
+enum-map = "2.7"
+mina = "0.1"
+multiversion = "0.8.0"
 zbus = "5"
+sysinfo = { version = "0.33", optional = true, default-features = false, features = ["system"] }
 
 # Win32 Backend
 [target.'cfg(windows)'.dependencies]
@@ -118,6 +109,7 @@ harness = false
 [[bench]]
 name = "convert"
 harness = false
+required-features = ["skia-instrumentation"]
 
 [dev-dependencies]
 ntest = "0.9"
