@@ -110,6 +110,21 @@ jobs:
       - name: Build
         run: cargo build --locked --features win32-direct
 
+  maccf-direct:
+    name: macOS (maccf-direct)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: maccf-direct
+
+      - name: Build
+        run: cargo build --locked --features maccf-direct
+
   doctest:
     name: Doc Tests
     runs-on: ubuntu-latest
