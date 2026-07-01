@@ -62,6 +62,7 @@ pub fn rgba_to_argb_rect(
 
 /// Plain scalar reference implementation, identical in output to [`rgba_to_argb`]. Kept for the
 /// `convert` benchmark (to measure the SIMD speedup) and as a behavioural oracle in tests.
+#[cfg(any(feature = "skia-instrumentation", test))]
 pub fn rgba_to_argb_scalar(src: &[u8], dst: &mut [u32]) {
     for (px, out) in src.chunks_exact(4).zip(dst.iter_mut()) {
         *out = (px[0] as u32) << 16 | (px[1] as u32) << 8 | px[2] as u32;
