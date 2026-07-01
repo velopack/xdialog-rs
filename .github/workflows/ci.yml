@@ -202,7 +202,7 @@ jobs:
           - os: windows-latest
             name: Windows
 
-          - os: macos-latest
+          - os: macos-26
             name: macOS
 
           - os: ubuntu-latest
