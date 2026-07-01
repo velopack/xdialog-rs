@@ -33,26 +33,15 @@
     },
     {
       "groupName": "windows crates",
-      "matchPackageNames": [
-        "windows",
-        "widestring"
-      ]
+      "matchPackageNames": ["windows", "widestring"]
     },
     {
       "groupName": "linux crates",
-      "matchPackageNames": [
-        "gtk",
-        "glib"
-      ]
+      "matchPackageNames": ["gtk", "glib"]
     },
     {
       "groupName": "fltk crates",
-      "matchPackageNames": [
-        "fltk",
-        "font-kit",
-        "mina",
-        "enum-map"
-      ]
+      "matchPackageNames": ["fltk", "font-kit", "mina", "enum-map"]
     },
     {
       "groupName": "macos crates",
