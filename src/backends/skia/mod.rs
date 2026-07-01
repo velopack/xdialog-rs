@@ -9,6 +9,10 @@ mod icons;
 #[cfg(feature = "skia-instrumentation")]
 mod instrument;
 mod label;
+#[cfg(feature = "skia-instrumentation")]
+pub mod pixels;
+#[cfg(not(feature = "skia-instrumentation"))]
+mod pixels;
 mod progress;
 mod renderer;
 mod text;

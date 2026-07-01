@@ -119,8 +119,9 @@ use state::*;
 
 mod backends;
 
+#[cfg(all(target_os = "linux", feature = "skia-instrumentation"))]
 #[doc(hidden)]
-pub mod pixels;
+pub use backends::skia::pixels;
 
 mod channel;
 use channel::send_request;

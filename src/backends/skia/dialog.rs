@@ -485,9 +485,9 @@ impl SkiaDialog {
 
         let (x, y, w, h) = partial.unwrap_or((0, 0, pw, ph));
         if (x, y, w, h) == (0, 0, pw, ph) {
-            crate::pixels::rgba_to_argb(pixmap.data(), &mut buffer);
+            super::pixels::rgba_to_argb(pixmap.data(), &mut buffer);
         } else {
-            crate::pixels::rgba_to_argb_rect(
+            super::pixels::rgba_to_argb_rect(
                 pixmap.data(),
                 &mut buffer,
                 pw as usize,
