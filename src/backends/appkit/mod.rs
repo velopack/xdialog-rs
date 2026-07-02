@@ -102,19 +102,42 @@ fn create_handler_instance() -> Retained<AnyObject> {
 
 impl XDialogBackendImpl for AppKitBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
+        // Headless phase: do not touch AppKit until a dialog is actually requested.
+        // Connecting to the window server registers the process with LaunchServices —
+        // when the executable lives inside another app's bundle (e.g. an updater in
+        // Contents/MacOS) it checks in as a second instance of that app, which can
+        // surface in the Dock and steal focus. Most invocations of such tools never
+        // show any UI, so stay completely invisible until one does.
+        let first_message = loop {
+            match receiver.recv() {
+                Err(_) => return,
+                Ok(DialogMessageRequest::ExitEventLoop) => return,
+                Ok(
+                    message @ (DialogMessageRequest::ShowMessageWindow(..)
+                    | DialogMessageRequest::ShowProgressWindow(..)),
+                ) => break message,
+                // close/progress updates for dialogs that were never created are no-ops
+                Ok(_) => continue,
+            }
+        };
+
         register_button_handler_class();
         let handler = create_handler_instance();
 
         let app = unsafe {
             let app = NSApplication::sharedApplication(objc2::MainThreadMarker::new_unchecked());
+            // the equivalent of LSUIElement: no Dock icon or menu bar, but windows can
+            // still be shown and focused. Must be set before the app finishes launching.
             app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
             app.finishLaunching();
-            #[allow(deprecated)]
-            app.activateIgnoringOtherApps(true);
             app
         };
 
         let mut dialogs: HashMap<usize, AppKitDialog> = HashMap::new();
+
+        if Self::handle_message(first_message, &mut dialogs, &handler) {
+            return;
+        }
 
         loop {
             // Pump AppKit events with 50ms timeout
@@ -168,58 +191,72 @@ impl XDialogBackendImpl for AppKitBackend {
                     Err(TryRecvError::Disconnected) => return,
                 };
 
-                match message {
-                    DialogMessageRequest::None => {}
-                    DialogMessageRequest::ExitEventLoop => {
-                        for (_id, dialog) in dialogs.drain() {
-                            dialog.close();
-                        }
-                        PROGRESS_CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()).clear();
-                        return;
-                    }
-                    DialogMessageRequest::CloseWindow(id) => {
-                        if let Some(dialog) = dialogs.remove(&id) {
-                            dialog.close();
-                            remove_progress_callback(id);
-                            send_dialog_result(id, XDialogResult::WindowClosed);
-                        }
-                    }
-                    DialogMessageRequest::ShowMessageWindow(id, options, creation) => {
-                        let (dialog_sender, dialog_receiver) = oneshot::channel();
-                        RESULT_SENDERS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, dialog_sender);
-                        let dialog = AppKitDialog::new(id, options, false, &handler);
-                        dialog.show();
-                        dialogs.insert(id, dialog);
-                        let _ = creation.send(Ok(dialog_receiver));
-                    }
-                    DialogMessageRequest::ShowProgressWindow(id, options, creation, on_button) => {
-                        let (dialog_sender, dialog_receiver) = oneshot::channel();
-                        RESULT_SENDERS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, dialog_sender);
-                        if let Some(cb) = on_button {
-                            PROGRESS_CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, cb);
-                        }
-                        let dialog = AppKitDialog::new(id, options, true, &handler);
-                        dialog.show();
-                        dialogs.insert(id, dialog);
-                        let _ = creation.send(Ok(dialog_receiver));
-                    }
-                    DialogMessageRequest::SetProgressIndeterminate(id) => {
-                        if let Some(dialog) = dialogs.get_mut(&id) {
-                            dialog.set_progress_indeterminate();
-                        }
-                    }
-                    DialogMessageRequest::SetProgressValue(id, value) => {
-                        if let Some(dialog) = dialogs.get_mut(&id) {
-                            dialog.set_progress_value(value);
-                        }
-                    }
-                    DialogMessageRequest::SetProgressText(id, text) => {
-                        if let Some(dialog) = dialogs.get_mut(&id) {
-                            dialog.set_body_text(&text);
-                        }
-                    }
+                if Self::handle_message(message, &mut dialogs, &handler) {
+                    return;
                 }
             }
         }
+    }
+}
+
+impl AppKitBackend {
+    /// Processes a single dialog message. Returns true when the event loop should exit.
+    fn handle_message(
+        message: DialogMessageRequest,
+        dialogs: &mut HashMap<usize, AppKitDialog>,
+        handler: &Retained<AnyObject>,
+    ) -> bool {
+        match message {
+            DialogMessageRequest::None => {}
+            DialogMessageRequest::ExitEventLoop => {
+                for (_id, dialog) in dialogs.drain() {
+                    dialog.close();
+                }
+                PROGRESS_CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+                return true;
+            }
+            DialogMessageRequest::CloseWindow(id) => {
+                if let Some(dialog) = dialogs.remove(&id) {
+                    dialog.close();
+                    remove_progress_callback(id);
+                    send_dialog_result(id, XDialogResult::WindowClosed);
+                }
+            }
+            DialogMessageRequest::ShowMessageWindow(id, options, creation) => {
+                let (dialog_sender, dialog_receiver) = oneshot::channel();
+                RESULT_SENDERS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, dialog_sender);
+                let dialog = AppKitDialog::new(id, options, false, handler);
+                dialog.show();
+                dialogs.insert(id, dialog);
+                let _ = creation.send(Ok(dialog_receiver));
+            }
+            DialogMessageRequest::ShowProgressWindow(id, options, creation, on_button) => {
+                let (dialog_sender, dialog_receiver) = oneshot::channel();
+                RESULT_SENDERS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, dialog_sender);
+                if let Some(cb) = on_button {
+                    PROGRESS_CALLBACKS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, cb);
+                }
+                let dialog = AppKitDialog::new(id, options, true, handler);
+                dialog.show();
+                dialogs.insert(id, dialog);
+                let _ = creation.send(Ok(dialog_receiver));
+            }
+            DialogMessageRequest::SetProgressIndeterminate(id) => {
+                if let Some(dialog) = dialogs.get_mut(&id) {
+                    dialog.set_progress_indeterminate();
+                }
+            }
+            DialogMessageRequest::SetProgressValue(id, value) => {
+                if let Some(dialog) = dialogs.get_mut(&id) {
+                    dialog.set_progress_value(value);
+                }
+            }
+            DialogMessageRequest::SetProgressText(id, text) => {
+                if let Some(dialog) = dialogs.get_mut(&id) {
+                    dialog.set_body_text(&text);
+                }
+            }
+        }
+        false
     }
 }
