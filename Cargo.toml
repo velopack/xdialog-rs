@@ -73,7 +73,7 @@ enum-map = "2.7"
 mina = "0.1"
 multiversion = "0.8.0"
 zbus = "5"
-sysinfo = { version = "0.33", optional = true, default-features = false, features = ["system"] }
+sysinfo = { version = "0.39", optional = true, default-features = false, features = ["system"] }
 
 # Win32 Backend
 [target.'cfg(windows)'.dependencies]
