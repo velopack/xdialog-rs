@@ -112,10 +112,10 @@ harness = false
 required-features = ["skia-instrumentation"]
 
 [dev-dependencies]
-ntest = "0.9"
-image = "0.25"
-xcap = "0.9"
-criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+ntest = "=0.9.5"
+image = "=0.25.10"
+xcap = "=0.9.6"
+criterion = { version = "=0.8.2", default-features = false, features = ["cargo_bench_support"] }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows = { version = "=0.62.2", features = [
