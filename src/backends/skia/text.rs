@@ -63,8 +63,8 @@ pub fn layout_text(text: &str, bold: bool, size: f32, max_width: f32) -> TextLay
 
     let mut buffer = Buffer::new(&mut ctx.font_system, metrics);
     let width_opt = if max_width.is_finite() { Some(max_width) } else { None };
-    buffer.set_size(&mut ctx.font_system, width_opt, None);
-    buffer.set_text(&mut ctx.font_system, text, attrs(bold), Shaping::Advanced);
+    buffer.set_size(width_opt, None);
+    buffer.set_text(text, &attrs(bold), Shaping::Advanced, None);
     buffer.shape_until_scroll(&mut ctx.font_system, false);
 
     let mut total_width: f32 = 0.0;
@@ -123,7 +123,7 @@ impl CachedLayout {
     /// Return the shaped layout for these inputs, reshaping only on a cache miss. Keys on the exact
     /// `(size, max_width)` values; during an animation, or across relayouts with unchanged text,
     /// the caller passes bit-identical values so this hits.
-    pub fn get(&mut self, text: &str, bold: bool, size: f32, max_width: f32) -> &TextLayout {
+    pub fn get(&mut self, text: &str, bold: bool, size: f32, max_width: f32) -> &mut TextLayout {
         if let Some(idx) = self
             .entries
             .iter()
@@ -134,7 +134,7 @@ impl CachedLayout {
                 let e = self.entries.remove(idx);
                 self.entries.push(e);
             }
-            return &self.entries.last().unwrap().layout;
+            return &mut self.entries.last_mut().unwrap().layout;
         }
 
         let layout = layout_text(text, bold, size, max_width);
@@ -148,7 +148,7 @@ impl CachedLayout {
             max_width,
             layout,
         });
-        &self.entries.last().unwrap().layout
+        &mut self.entries.last_mut().unwrap().layout
     }
 }
 
@@ -238,7 +238,7 @@ impl Gamma {
 
 pub fn render_text(
     pixmap: &mut PixmapMut,
-    layout: &TextLayout,
+    layout: &mut TextLayout,
     color: (u8, u8, u8),
     x: f32,
     y: f32,
@@ -259,7 +259,7 @@ pub fn render_text(
 
     layout
         .buffer
-        .draw(&mut ctx.font_system, &mut ctx.swash_cache, text_color, |gx, gy, w, h, px| {
+        .draw(&mut ctx.font_system, &mut ctx.swash_cache, text_color, |gx, gy, w, h, px: Color| {
             // cosmic-text emits straight (non-premultiplied) coverage/color: `Mask` glyphs carry
             // the text color with coverage in alpha; `Color` (emoji) glyphs carry their own RGBA.
             let a = px.a();
@@ -317,12 +317,12 @@ mod tests {
         }
 
         let sample = "Ubuntu Ąćé | Кириллица | 日本語 中文 한국어 | العربية | 😀🎉🌍";
-        let layout = layout_text(sample, false, 32.0, 940.0);
+        let mut layout = layout_text(sample, false, 32.0, 940.0);
         assert!(layout.total_width > 0.0, "layout produced zero width");
 
         {
             let mut pm = pixmap.as_mut();
-            render_text(&mut pm, &layout, (0, 0, 0), 10.0, 10.0);
+            render_text(&mut pm, &mut layout, (0, 0, 0), 10.0, 10.0);
         }
 
         let drawn = pixmap
@@ -361,16 +361,16 @@ mod tests {
                     d[idx + 3] = 255;
                 }
             }
-            let title = layout_text("Information", true, 18.0 * scale, f32::INFINITY);
-            let body = layout_text(
+            let mut title = layout_text("Information", true, 18.0 * scale, f32::INFINITY);
+            let mut body = layout_text(
                 "This is a test message for visual regression testing.",
                 false,
                 14.0 * scale,
                 f32::INFINITY,
             );
             let mut pm = pixmap.as_mut();
-            render_text(&mut pm, &title, *fg, 20.0, y0 as f32 + 16.0);
-            render_text(&mut pm, &body, *fg, 20.0, y0 as f32 + 56.0);
+            render_text(&mut pm, &mut title, *fg, 20.0, y0 as f32 + 16.0);
+            render_text(&mut pm, &mut body, *fg, 20.0, y0 as f32 + 56.0);
         }
         let _ = pixmap.save_png("target/quality_sample.png");
     }
