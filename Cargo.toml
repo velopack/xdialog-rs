@@ -68,7 +68,7 @@ core-foundation-sys = { version = "0.8", optional = true }
 winit = "0.30"
 softbuffer = "0.4"
 tiny-skia = "0.12"
-cosmic-text = "0.12"
+cosmic-text = "0.19"
 enum-map = "2.7"
 mina = "0.1"
 multiversion = "0.8.0"
