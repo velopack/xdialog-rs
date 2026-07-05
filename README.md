@@ -26,7 +26,7 @@ update framework.
 Add the following to your `Cargo.toml`:
 ```toml
 [dependencies]
-xdialog = "3.0.0"
+xdialog = "3.1.0"
 ```
 
 Or, run the following command:
@@ -100,5 +100,5 @@ cargo run --example various_options
 
 ```toml
 [dependencies]
-xdialog = "3.0.0"
+xdialog = "3.1.0"
 ```
