@@ -161,7 +161,7 @@ impl TaskDialogManager {
 
     pub fn close_all(&self) {
         let mut dialogs = self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner());
-        for (_id, obj) in dialogs.iter_mut() {
+        for obj in dialogs.values_mut() {
             let _ = obj.0.send(DialogRequest::Close);
         }
     }
