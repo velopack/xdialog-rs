@@ -114,7 +114,7 @@ required-features = ["skia-instrumentation"]
 [dev-dependencies]
 ntest = "=0.9.5"
 image = "=0.25.10"
-xcap = "=0.9.6"
+xcap = "=0.9.7"
 criterion = { version = "=0.8.2", default-features = false, features = ["cargo_bench_support"] }
 
 [target.'cfg(windows)'.dev-dependencies]
