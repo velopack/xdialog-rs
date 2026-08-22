@@ -19,12 +19,12 @@ use multiversion::multiversion;
 /// `dst.len()` must be at least `src.len() / 4`; extra `dst` entries are left untouched. The
 /// dialog always sizes the two buffers to the same physical dimensions, so they match exactly.
 ///
-/// Reads operate on `&[u8]` via `chunks_exact(4)` rather than casting to `&[u32]`, because a
+/// Reads operate on `&[u8]` via `as_chunks::<4>()` rather than casting to `&[u32]`, because a
 /// tiny-skia `Pixmap`'s backing `Vec<u8>` is only 1-byte aligned; the multiversioned loop still
 /// vectorizes the per-pixel channel shuffle.
 #[multiversion(targets = "simd")]
 pub fn rgba_to_argb(src: &[u8], dst: &mut [u32]) {
-    for (px, out) in src.chunks_exact(4).zip(dst.iter_mut()) {
+    for (px, out) in src.as_chunks::<4>().0.iter().zip(dst.iter_mut()) {
         // px = [R, G, B, A] → 0x00RRGGBB. Alpha is dropped (opaque dialogs; ignored by softbuffer).
         *out = (px[0] as u32) << 16 | (px[1] as u32) << 8 | px[2] as u32;
     }
@@ -54,7 +54,7 @@ pub fn rgba_to_argb_rect(
         let start = row * buf_width + x;
         let src_row = &src[start * 4..(start + w) * 4];
         let dst_row = &mut dst[start..start + w];
-        for (px, out) in src_row.chunks_exact(4).zip(dst_row.iter_mut()) {
+        for (px, out) in src_row.as_chunks::<4>().0.iter().zip(dst_row.iter_mut()) {
             *out = (px[0] as u32) << 16 | (px[1] as u32) << 8 | px[2] as u32;
         }
     }
@@ -64,7 +64,7 @@ pub fn rgba_to_argb_rect(
 /// `convert` benchmark (to measure the SIMD speedup) and as a behavioural oracle in tests.
 #[cfg(any(feature = "skia-instrumentation", test))]
 pub fn rgba_to_argb_scalar(src: &[u8], dst: &mut [u32]) {
-    for (px, out) in src.chunks_exact(4).zip(dst.iter_mut()) {
+    for (px, out) in src.as_chunks::<4>().0.iter().zip(dst.iter_mut()) {
         *out = (px[0] as u32) << 16 | (px[1] as u32) << 8 | px[2] as u32;
     }
 }
@@ -99,7 +99,7 @@ mod tests {
         let w = 4usize;
         let h = 3usize;
         let mut src = vec![0u8; w * h * 4];
-        for (i, px) in src.chunks_exact_mut(4).enumerate() {
+        for (i, px) in src.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             px.copy_from_slice(&[i as u8, (i + 1) as u8, (i + 2) as u8, 0xFF]);
         }
         let sentinel = 0xDEAD_BEEFu32;
