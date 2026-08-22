@@ -99,7 +99,7 @@ mod tests {
         let w = 4usize;
         let h = 3usize;
         let mut src = vec![0u8; w * h * 4];
-        for (i, px) in src.chunks_exact_mut(4).enumerate() {
+        for (i, px) in src.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             px.copy_from_slice(&[i as u8, (i + 1) as u8, (i + 2) as u8, 0xFF]);
         }
         let sentinel = 0xDEAD_BEEFu32;
