@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn renders_multiscript_with_fallback() {
         let mut pixmap = Pixmap::new(960, 80).unwrap();
-        for px in pixmap.data_mut().chunks_exact_mut(4) {
+        for px in pixmap.data_mut().as_chunks_mut::<4>().0 {
             px.copy_from_slice(&[255, 255, 255, 255]); // white background
         }
 
@@ -327,7 +327,9 @@ mod tests {
 
         let drawn = pixmap
             .data()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|p| p[0] < 250 || p[1] < 250 || p[2] < 250)
             .count();
         eprintln!("rendered non-background pixels: {drawn}");
