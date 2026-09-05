@@ -972,16 +972,7 @@ version = "2.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6866f3bfdf8207509a033af1a75a7b08abda06bbaaeae6669323fd5a097df2e9"
 dependencies = [
- "enum-map-derive 0.17.0",
-]
-
-[[package]]
-name = "enum-map"
-version = "3.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4532960034c15ba2f55e9eee631040ecc473c32e6c4b200828c759840f13a06"
-dependencies = [
- "enum-map-derive 1.0.1",
+ "enum-map-derive",
 ]
 
 [[package]]
@@ -993,17 +984,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "enum-map-derive"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7127272f64b3e098f7d81f350d672081b879bff896d219c42370dc858b1af9ff"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.4",
 ]
 
 [[package]]
@@ -1904,7 +1884,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "458d9494e13bcf370de31080d12fd4c2122aa6499fe48a062858b594a97dcb58"
 dependencies = [
  "dyn-clone",
- "enum-map 2.7.3",
+ "enum-map",
  "lazy_static",
  "lyon_geom",
  "num-traits",
@@ -4607,7 +4587,7 @@ dependencies = [
  "core-foundation-sys",
  "cosmic-text",
  "criterion",
- "enum-map 3.1.0",
+ "enum-map",
  "image",
  "log",
  "mina",
