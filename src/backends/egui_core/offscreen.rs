@@ -24,13 +24,13 @@ use super::appearance::Appearance;
 use super::clock::DialogClock;
 use super::dialog::{AppearanceSource, Dialog, DialogContent, DialogParams, ResultSink};
 use super::render::MemoryPresenter;
-use super::testhooks::api::{HostEvent, TestAppearance, TestKind, TestProgress};
+use super::testhooks::api::{rect_centre, HostEvent, TestAppearance, TestKind, TestProgress};
 use super::theme::{DialogKind, SizeLimits, Theme};
 use crate::model::{XDialogOptions, XDialogResult};
 
-/// Size limits (logical px) of every offscreen dialog: a 1920×1080 monitor × 0.9, like the own
+/// Size limits (logical px) of every offscreen dialog: a 1080 px high monitor × 0.9, like the own
 /// loop derives from a real monitor. Fixed so renders don't depend on the machine.
-pub(crate) const OFFSCREEN_LIMITS: SizeLimits = SizeLimits { max_height: 972.0, max_width: 1728.0 };
+pub(crate) const OFFSCREEN_LIMITS: SizeLimits = SizeLimits { max_height: 972.0 };
 
 /// Offscreen dialog ids start high so they never collide with request ids in logs.
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1 << 30);
@@ -40,7 +40,6 @@ enum Queued {
     Event(HostEvent),
     Progress(TestProgress),
     Text(String),
-    Disable(usize, bool),
 }
 
 /// Object-safe view of a `Dialog<T>` plus its theme.
@@ -93,7 +92,7 @@ impl<T: Theme> OffscreenDyn for Inner<T> {
     }
 
     fn freeze(&mut self, t: f64) {
-        self.d.freeze_clock(Some(t));
+        self.d.freeze_clock(t);
     }
 
     fn apply(&mut self, q: Queued) {
@@ -102,7 +101,6 @@ impl<T: Theme> OffscreenDyn for Inner<T> {
             Queued::Progress(TestProgress::Value(v)) => self.d.set_progress_value(v),
             Queued::Progress(TestProgress::Indeterminate) => self.d.set_progress_indeterminate(),
             Queued::Text(s) => self.d.set_text(&self.theme, &s),
-            Queued::Disable(i, dis) => self.d.set_disabled(i, dis),
         }
     }
 
@@ -177,6 +175,12 @@ impl OffscreenDialog {
         self.inner.button_rects()
     }
 
+    /// Centre of button `i` in physical px (for pointer events), `None` for an unknown index.
+    pub fn button_centre_px(&self, i: usize) -> Option<(f64, f64)> {
+        let (x, y) = rect_centre(*self.button_rects().get(i)?);
+        Some((x * self.ppp as f64, y * self.ppp as f64))
+    }
+
     /// Queue an event (physical px coordinates); applied at the next render.
     pub fn event(&mut self, ev: HostEvent) {
         self.queue.push(Queued::Event(ev));
@@ -190,11 +194,6 @@ impl OffscreenDialog {
     /// Queue a body text change (applied at the next render; the dialog may resize after it).
     pub fn set_text(&mut self, text: &str) {
         self.queue.push(Queued::Text(text.to_owned()));
-    }
-
-    /// Force a button's disabled state (applied at the next render).
-    pub fn force_disabled(&mut self, index: usize, disabled: bool) {
-        self.queue.push(Queued::Disable(index, disabled));
     }
 
     /// Advance the dialog clock to `t` seconds and render; returns RGBA8 of the rendered size

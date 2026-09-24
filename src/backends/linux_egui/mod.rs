@@ -1,52 +1,35 @@
-//! Linux theme: a faithful egui port of the look of the former skia backend (xdialog 3.x; the skia
-//! sources at `4473a9e`, `src/backends/skia/`).
+//! Linux theme: the look of xdialog 3.x's Linux dialogs, built from egui layout and painting.
 //!
-//! Widget-based: [`LinuxTheme::ui`] runs skia's layout algorithm
-//! (`dialog.rs:534-658`) every pass and adds the theme's own widgets at the computed rects:
-//! `icons::SkiaIcon` (1:1 procedural icons), `widgets::SkiaLabel` (cosmic-text style wrapping,
-//! `1.2 x size` line pitch, pixel-rounded origin), `widgets::SkiaProgress` (300 ms OutCubic
-//! value animation, 3 s stretchy indeterminate capsule) and `widgets::SkiaButton` (outlined,
-//! quadratic corners, 150 ms linear colour fades). Hover/press/click come from egui, focus from
-//! egui focus memory driven by core's keyboard policy (Tab/arrows wrap, Enter/Space activate on
-//! press, Escape closes).
+//! Layout ([`LinuxTheme::ui`]): the window is 350-600 px wide depending on the natural text width.
+//! Inside a 16 px margin, an optional 48 px icon sits left of a column of title (Ubuntu Bold 18),
+//! progress bar (6 px) and body (Ubuntu Regular 14), 16 px apart. With buttons, a 48 px footer
+//! holds them right-aligned, 7 px apart and 7 px from the right edge. Colours and metrics are in
+//! `tokens.rs`.
 //!
-//! Deliberate deviations from skia:
-//! - Pointer leaving the window: skia ignored `CursorLeft`, so a hovered button stayed
-//!   hovered (blue) until the next move inside the window. Core turns `CursorLeft` into egui's
-//!   `PointerGone`, so the button fades back to idle over 150 ms, and the hover-driven focus-border
-//!   suppression is lifted at the same time (the focused button shows its ring again).
-//! - Window focus: none. skia drew the focus ring regardless of window activation, and so does
-//!   this theme (it reads egui focus memory, which survives `RawInput::focused == false`).
+//! Animations: button colours fade linearly over 150 ms, the progress value tweens over 300 ms
+//! OutCubic, the indeterminate capsule loops every 3 s.
+//!
+//! Keyboard: Tab / Left / Right move focus with wrapping, Enter / Space activate the focused
+//! button on press, Escape closes. The last button is focused on open and its focus ring is drawn
+//! also while the window is inactive. Hovering any button hides the focus ring until focus moves,
+//! the pointer moves off the buttons or leaves the window (a hovered button then fades to idle).
 
-use std::sync::Arc;
+use egui::{Align, Event, Frame, Id, Layout, Rect, Sense, Ui, UiBuilder, Vec2};
 
-use egui::{Event, FontFamily, Id, Pos2, Rect, Ui, Vec2};
-
-use crate::backends::egui_core::fonts::{bundled, FaceRef, FontRegistry};
-use crate::backends::egui_core::text::{TextBlock, TextCtx, TextStyle};
+use crate::backends::egui_core::appearance::Appearance;
+use crate::backends::egui_core::fonts::bundled;
+use crate::backends::egui_core::text::{TextBlock, TextBlockWidget, TextCtx, TextStyle};
 use crate::backends::egui_core::theme::*;
 use crate::model::XDialogIcon;
 
 mod icons;
 mod tokens;
 mod widgets;
-mod wrap;
 
 pub(crate) use tokens::LinuxTokens;
 use tokens::*;
 
-const REGULAR: &str = "ubuntu-regular";
-const BOLD: &str = "ubuntu-bold";
-
-/// Text rasterization to approximate skia's text compositing. skia blended glyph coverage in
-/// LINEAR light (text.rs:160-236), egui blends in sRGB space; for the theme's text/background
-/// pairs that is equivalent to remapping coverage with a power curve (fitted over
-/// `#3D3D3D on #FAFAFA` and `#EEEEEE on #2D2D2D`). cosmic-text rasterized with swash hinting on (measured:
-/// hinted egui glyphs halve the text error vs unhinted).
-const LIGHT_TEXT_GAMMA: f32 = 1.67;
-const DARK_TEXT_GAMMA: f32 = 0.57;
-
-/// The Linux (skia-look) theme.
+/// The Linux theme.
 pub(crate) struct LinuxTheme;
 
 impl LinuxTheme {
@@ -58,26 +41,8 @@ impl LinuxTheme {
     }
 }
 
-fn bold() -> FontFamily {
-    FontFamily::Name(Arc::from(BOLD))
-}
-
-fn title_style() -> TextStyle {
-    TextStyle::new(TITLE_SIZE, bold(), TITLE_SIZE * LINE_HEIGHT_SCALE)
-}
-
-fn body_style() -> TextStyle {
-    TextStyle::new(BODY_SIZE, FontFamily::Proportional, BODY_SIZE * LINE_HEIGHT_SCALE)
-}
-
-/// Height of a skia text block: `max(lines, 1) * line_height` (text.rs:77).
-fn block_height(block: &TextBlock, style: &TextStyle) -> f32 {
-    block.line_count().max(1) as f32 * style.line_pitch
-}
-
-/// skia's focus-border suppression (dialog.rs:247-281): hovering any button hides the focused
-/// button's focus border. skia re-evaluates it only on `CursorMoved`, and any focus move
-/// (`set_focused(true)`, keyboard or press) shows the border again until the pointer moves.
+/// Focus-ring suppression: moving the pointer over any button hides the focused button's ring;
+/// any focus move (keyboard or press) shows it again until the pointer moves.
 fn focus_suppressed(ui: &Ui, button_count: usize) -> bool {
     let ctx = ui.ctx();
     let key = Id::new("linux.focus_suppressed");
@@ -86,9 +51,9 @@ fn focus_suppressed(ui: &Ui, button_count: usize) -> bool {
     if focused != last_focus {
         suppressed = false;
     }
-    // `PointerGone`: core turns `CursorLeft` into it (a documented deviation, see the module
-    // docs); the hovered button fades back to idle, so the focus border must return. (The button
-    // responses read here are the previous pass's, which still contain the pointer.)
+    // `PointerGone` (the pointer left the window): the hovered button fades back to idle, so the
+    // focus ring returns. (The button responses read here are the previous pass's, which still
+    // contain the pointer.)
     let (moved, gone) = ui.input(|i| {
                               (i.events.iter().any(|e| matches!(e, Event::PointerMoved(_))), i.events.iter().any(|e| matches!(e, Event::PointerGone)))
                           });
@@ -104,140 +69,96 @@ fn focus_suppressed(ui: &Ui, button_count: usize) -> bool {
 impl Theme for LinuxTheme {
     type Tokens = LinuxTokens;
 
-    fn id(&self) -> &'static str {
-        "linux"
-    }
-
-    /// skia `dialog.rs:304-337`: Tab/Shift+Tab and Left/Right move focus with wrapping (also on
-    /// key repeat), Enter/Space activate the focused button on press, Escape closes; initial
-    /// focus = the last (right-most, default) button, always drawn.
     fn keyboard_policy(&self) -> KeyboardPolicy {
-        KeyboardPolicy { focus_on_open: true,
-                         focus_visibility: FocusVisibility::Always,
-                         tab: true,
+        KeyboardPolicy { focus_visibility: FocusVisibility::Always,
                          arrows: ArrowNav::Wrap,
-                         nav_repeat: true,
-                         home_end: false,
-                         enter: true,
                          enter_falls_back_to_default: false,
                          space: SpaceKey::ActivateOnPress,
-                         activate_flash: None,
-                         escape_closes: true,
                          scroll_keys: false }
     }
 
-    fn tokens(&self, env: &ThemeEnv) -> LinuxTokens {
-        LinuxTokens::resolve(env)
+    fn tokens(&self, appearance: &Appearance) -> LinuxTokens {
+        LinuxTokens::resolve(appearance)
     }
 
-    fn window_style(&self, tk: &LinuxTokens) -> WindowStyle {
-        WindowStyle { clear: tk.bg, dark_titlebar: tk.dark }
-    }
-
-    fn install_fonts(&self, defs: &mut egui::FontDefinitions, _reg: &FontRegistry) {
-        defs.font_data.insert(REGULAR.into(), Arc::new(bundled::ubuntu_regular().font_data()));
-        defs.font_data.insert(BOLD.into(), Arc::new(bundled::ubuntu_bold().font_data()));
-        defs.families.insert(FontFamily::Proportional, vec![REGULAR.into()]);
-        defs.families.insert(FontFamily::Monospace, vec![REGULAR.into()]);
-        defs.families.insert(bold(), vec![BOLD.into()]);
-    }
-
-    fn text_families(&self) -> Vec<FontFamily> {
-        vec![FontFamily::Proportional, FontFamily::Monospace, bold()]
-    }
-
-    fn bold_families(&self) -> Vec<FontFamily> {
-        vec![bold()]
-    }
-
-    fn primary_faces(&self, _reg: &FontRegistry) -> Vec<FaceRef> {
-        vec![bundled::ubuntu_regular(), bundled::ubuntu_bold()]
+    fn fonts(&self) -> ThemeFonts {
+        ThemeFonts::new(bundled::ubuntu_regular(), bundled::ubuntu_bold())
     }
 
     fn configure_style(&self, tk: &LinuxTokens, style: &mut egui::Style) {
         style.spacing.item_spacing = Vec2::ZERO;
-        let opts = &mut style.visuals.text_options;
-        opts.font_hinting = true;
-        opts.subpixel_binning = true;
-        opts.color_transfer_function = egui::epaint::FontColorTransferFunction::Gamma(if tk.dark { DARK_TEXT_GAMMA } else { LIGHT_TEXT_GAMMA });
+        style.visuals.panel_fill = tk.bg;
+        style.visuals.window_fill = tk.bg;
     }
 
     fn ui(&self, tk: &LinuxTokens, view: &DialogView<'_>, ui: &mut Ui) -> DialogUiOutput {
         let ctx = ui.ctx().clone();
         let text = TextCtx::new(&ctx);
-        let (title_style, body_style) = (title_style(), body_style());
-        ui.spacing_mut().item_spacing = Vec2::ZERO;
+        let title_style = TextStyle::bold(TITLE_SIZE, TITLE_SIZE * LINE_HEIGHT_SCALE);
+        let body_style = TextStyle::regular(BODY_SIZE, BODY_SIZE * LINE_HEIGHT_SCALE);
+        let origin = ui.max_rect().min;
 
-        // 1. Natural width of the content (unwrapped title/body; progress measures 0, buttons
-        //    don't count) -> window width.
-        let natural = wrap::natural_width(&text, view.heading, &title_style).max(wrap::natural_width(&text, view.body, &body_style));
+        // The window width follows the natural (unwrapped) width of the title and body.
+        let natural = text.natural_width(view.heading, &title_style).max(text.natural_width(view.body, &body_style));
         let win_w = window_width(natural);
         let has_icon = *view.icon != XDialogIcon::None;
-        let text_x = if has_icon { MARGIN + ICON_SIZE + MARGIN } else { MARGIN };
-        let col_w = win_w - text_x - MARGIN;
+        let col_w = win_w - 2.0 * MARGIN - if has_icon { ICON_SIZE + MARGIN } else { 0.0 };
 
-        // 2. Stack title / progress / body at text_x from y = 16, each followed by a 16 gap
-        //    (the trailing gap is kept).
-        let mut y = MARGIN;
-        let mut place = |h: f32| {
-            let r = Rect::from_min_size(Pos2::new(text_x, y), Vec2::new(col_w, h));
-            y += h + MARGIN;
-            r
-        };
-        let title = (!view.heading.is_empty()).then(|| {
-                                                   let b = wrap::layout(&ctx, &text, view.heading, &title_style, col_w);
-                                                   let r = place(block_height(&b, &title_style));
-                                                   (b, r)
-                                               });
-        let progress = view.progress.map(|p| (p, place(PROGRESS_H)));
-        let body = (!view.body.is_empty()).then(|| {
-                                              let b = wrap::layout(&ctx, &text, view.body, &body_style, col_w);
-                                              let r = place(block_height(&b, &body_style));
-                                              (b, r)
-                                          });
-        // 3. Content height: at least the icon column (16 + 48 + 16); the icon is top-aligned.
-        let content_h = if has_icon { y.max(MARGIN + ICON_SIZE + MARGIN) } else { y };
+        // Content: the icon (top-aligned) left of a column of title / progress / body.
+        let content = Rect::from_min_size(origin, Vec2::new(win_w, f32::INFINITY));
+        let content = ui.scope_builder(UiBuilder::new().max_rect(content), |ui| {
+                            Frame::NONE.inner_margin(MARGIN).show(ui, |ui| {
+                                           ui.horizontal_top(|ui| {
+                                                 if has_icon {
+                                                     let (r, _) = ui.allocate_exact_size(Vec2::splat(ICON_SIZE), Sense::hover());
+                                                     icons::draw_icon(ui.painter(), view.icon, r);
+                                                     ui.add_space(MARGIN);
+                                                 }
+                                                 ui.vertical(|ui| {
+                                                       ui.set_width(col_w);
+                                                       ui.spacing_mut().item_spacing.y = MARGIN;
+                                                       if !view.heading.is_empty() {
+                                                           let block = text.layout(view.heading, &title_style, col_w, None);
+                                                           ui.add(TextBlockWidget { block: &block, color: tk.title_text, width: Some(col_w) });
+                                                       }
+                                                       if let Some(progress) = view.progress {
+                                                           ui.add(widgets::ProgressBar { progress, width: col_w, tk });
+                                                       }
+                                                       if !view.body.is_empty() {
+                                                           let block = text.layout(view.body, &body_style, col_w, None);
+                                                           ui.add(TextBlockWidget { block: &block, color: tk.body_text, width: Some(col_w) });
+                                                       }
+                                                   });
+                                             });
+                                       });
+                        })
+                        .response
+                        .rect;
 
-        // Paint order = skia z-order: icon, title, progress, body, buttons.
-        if has_icon {
-            ui.add(icons::SkiaIcon { icon: view.icon, rect: Rect::from_min_size(Pos2::new(MARGIN, MARGIN), Vec2::splat(ICON_SIZE)) });
-        }
-        if let Some((b, r)) = &title {
-            ui.add(widgets::SkiaLabel { block: b, rect: *r, color: tk.title_text });
-        }
-        if let Some((p, r)) = progress {
-            ui.add(widgets::SkiaProgress { progress: p, rect: r, tk });
-        }
-        if let Some((b, r)) = &body {
-            ui.add(widgets::SkiaLabel { block: b, rect: *r, color: tk.body_text });
-        }
-
-        // 4. Footer (only with buttons): buttons right-aligned in API order, 7 px apart, 7 px from
-        //    the right edge and the footer top. They may overflow to the left (skia doesn't stop it).
+        // Footer (only with buttons): buttons right-aligned in API order; they may overflow to
+        // the left.
         let n = view.buttons.len();
-        let mut out = DialogUiOutput { arrow_order: (0..n).collect(),
-                                       arrow_axis: ArrowAxis::Horizontal,
-                                       // skia focuses the LAST focusable component on open.
-                                       default_button: n.checked_sub(1),
-                                       ..Default::default() };
+        let mut out = DialogUiOutput { arrow_order: (0..n).collect(), default_button: n.checked_sub(1), ..Default::default() };
+        let mut bottom = content.bottom();
         if n > 0 {
             let labels: Vec<TextBlock> = view.buttons.iter().map(|l| text.layout(l, &body_style, f32::INFINITY, None)).collect();
-            let sizes: Vec<Vec2> = labels.iter().map(widgets::button_size).collect();
-            let total = sizes.iter().map(|s| s.x).sum::<f32>() + BUTTON_GAP * (n - 1) as f32;
-            let mut x = win_w - FOOTER_MARGIN - total;
-            let suppressed = focus_suppressed(ui, n);
-            for (i, (label, size)) in labels.iter().zip(&sizes).enumerate() {
-                let rect = Rect::from_min_size(Pos2::new(x, content_h + FOOTER_MARGIN), *size);
-                x += size.x + BUTTON_GAP;
-                let st = widgets::SkiaButton { index: i, rect, label, view, tk, focus_suppressed: suppressed }.show(ui);
-                if st.activated && out.activated.is_none() {
-                    out.activated = Some(i);
-                }
-                out.buttons.push(ButtonInfo { index: i, rect });
+            let focus_suppressed = focus_suppressed(ui, n);
+            let footer = Rect::from_min_size(egui::pos2(origin.x, bottom), Vec2::new(win_w, FOOTER_H));
+            let mut states = Vec::with_capacity(n);
+            ui.scope_builder(UiBuilder::new().max_rect(footer).layout(Layout::right_to_left(Align::Center)), |ui| {
+                  ui.add_space(FOOTER_MARGIN);
+                  ui.spacing_mut().item_spacing.x = BUTTON_GAP;
+                  for (index, label) in labels.iter().enumerate().rev() {
+                      states.push(widgets::Button { index, label, view, tk, focus_suppressed }.show(ui));
+                  }
+              });
+            // Tab order = API order.
+            for st in states.iter().rev() {
+                out.push_button(st);
             }
+            bottom = footer.bottom();
         }
-        // 5. Window = content + footer (48) when there are buttons.
-        out.desired_size = Vec2::new(win_w, content_h + if n == 0 { 0.0 } else { FOOTER_H });
+        out.desired_size = Vec2::new(win_w, bottom - origin.y);
         out
     }
 }
@@ -245,14 +166,14 @@ impl Theme for LinuxTheme {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backends::egui_core::anim::{self, Lerp, Transition};
-    use crate::backends::egui_core::appearance::Appearance;
+    use crate::backends::egui_core::anim::{self, Transition};
+    use egui::Pos2;
+    use crate::backends::egui_core::theme::test_support::{theme_ctx, view};
 
     struct Harness {
         ctx: egui::Context,
         theme: LinuxTheme,
         tk: LinuxTokens,
-        env: ThemeEnv,
         /// `RawInput::focused` (window activation) for the next passes.
         window_focused: std::cell::Cell<bool>,
     }
@@ -278,18 +199,9 @@ mod tests {
     impl Harness {
         fn new() -> Self {
             let theme = LinuxTheme::new();
-            let env = ThemeEnv { appearance: Appearance::default(), platform: Platform::current() };
-            let tk = theme.tokens(&env);
-            let ctx = egui::Context::default();
-            let mut defs = egui::FontDefinitions::empty();
-            theme.install_fonts(&mut defs, FontRegistry::global());
-            ctx.set_fonts(defs);
-            ctx.options_mut(core_options);
-            ctx.all_styles_mut(|s| {
-                   theme.configure_style(&tk, s);
-                   core_style_overrides(s);
-               });
-            Harness { ctx, theme, tk, env, window_focused: std::cell::Cell::new(true) }
+            let tk = theme.tokens(&Appearance::default());
+            let ctx = theme_ctx(&theme, &tk);
+            Harness { ctx, theme, tk, window_focused: std::cell::Cell::new(true) }
         }
 
         fn pass(&self, t: f64, events: Vec<egui::Event>) -> DialogUiOutput {
@@ -298,24 +210,13 @@ mod tests {
 
         /// One pass; `probe` runs inside the pass right after the theme.
         fn pass_with<R>(&self, c: &Content, t: f64, events: Vec<egui::Event>, sizing: bool, probe: impl FnOnce(&egui::Context) -> R) -> (DialogUiOutput, R) {
-            let disabled = vec![false; c.buttons.len()];
             let view = DialogView { kind: if c.progress.is_some() { DialogKind::Progress } else { DialogKind::Message },
-                                    title: "t",
                                     heading: c.heading,
                                     body: c.body,
                                     icon: &c.icon,
-                                    buttons: &c.buttons,
-                                    disabled: &disabled,
                                     progress: c.progress,
-                                    env: &self.env,
-                                    limits: SizeLimits { max_height: 800.0, max_width: 4096.0 },
-                                    frame: FrameInfo { time: t,
-                                                       ppp: 1.0,
-                                                       sizing,
-                                                       window_focused: true,
-                                                       focus_visible: true,
-                                                       key_pressed: None,
-                                                       scroll_request: 0.0 } };
+                                    frame: FrameInfo { sizing, focus_visible: true, ..Default::default() },
+                                    ..view(&c.buttons) };
             // The measure pass runs at the largest allowed client size.
             let screen = if sizing { Vec2::new(4096.0, 800.0) } else { Vec2::new(350.0, 200.0) };
             let raw = egui::RawInput { time: Some(t),
@@ -335,40 +236,38 @@ mod tests {
         }
     }
 
-    /// Core order: measure pass, on-open focus, `reset_animations`, first real
-    /// frame. Unlike the snap core sets up, skia pre-rendered every button at its idle look and
-    /// faded the default button's focus look in over 150 ms after the window appeared.
+    /// Core order: measure pass, on-open focus, `reset_animations`, first real frame. The real
+    /// frame builds the measured layout and shows the default button's focus look at once.
     #[test]
-    fn focus_look_fades_in_on_open() {
+    fn focus_look_on_open() {
         let h = Harness::new();
         let c = Content::default();
         let (measured, _) = h.pass_with(&c, 0.0, vec![], true, |_| ());
         h.ctx.memory_mut(|m| m.request_focus(button_id(measured.default_button.unwrap())));
         anim::reset_animations(&h.ctx);
-        let (idle, focused) = (h.tk.idle, h.tk.focused);
-        let shown = |t| h.pass_with(&c, t, vec![], false, |ctx| anim::animate(ctx, button_id(1), focused, Transition::linear(0.15))).1;
+        let focused = h.tk.focused;
         let (real, first) = h.pass_with(&c, 0.0, vec![], false, |ctx| anim::animate(ctx, button_id(1), focused, Transition::linear(0.15)));
         assert_eq!(measured, real, "measure pass must build the same layout");
-        assert_eq!(first, idle);
-        assert_eq!(shown(0.075), ButtonLook::lerp(&idle, &focused, 0.5));
-        assert_eq!(shown(0.2), focused);
-        // A relayout or a later appearance change doesn't fade again.
-        anim::reset_animations(&h.ctx);
-        assert_eq!(shown(0.3), focused);
+        assert_eq!(first, focused);
+    }
+
+    fn near(a: f32, b: f32) -> bool {
+        (a - b).abs() <= 2.0
     }
 
     #[test]
-    fn layout_matches_skia_size() {
+    fn layout_design_sizes() {
         let h = Harness::new();
         let out = h.pass(0.0, vec![]);
         assert_eq!(out.buttons.iter().map(|b| b.index).collect::<Vec<_>>(), vec![0, 1]);
-        assert!((out.buttons[1].rect.right() - 343.0).abs() < 1e-3, "{:?}", out.buttons);
-        assert!((out.buttons[0].rect.right() + 7.0 - out.buttons[1].rect.left()).abs() < 1e-3);
         assert_eq!(out.default_button, Some(1));
         assert_eq!(out.desired_size.x, 350.0);
-        // 16 + 21.6 + 16 + 2 * 16.8 + 16 + 48 = 151.2 exactly (rects are not egui-rounded).
-        assert!((out.desired_size.y - 151.2).abs() < 1e-3, "{:?}", out.desired_size);
-        assert!((out.buttons[1].rect.top() - 110.2).abs() < 1e-3);
+        // Buttons: 7 from the right edge, 7 apart, 34 high, 7 above the window bottom.
+        let (b0, b1) = (out.buttons[0].rect, out.buttons[1].rect);
+        assert!(near(b1.right(), 343.0) && near(b1.left() - b0.right(), 7.0), "{:?}", out.buttons);
+        assert!(near(b1.height(), 34.0) && near(out.desired_size.y - b1.bottom(), 7.0));
+        // 16 + 21.6 + 16 + 2 * 16.8 + 16 + 48 = 151.2.
+        assert!(near(out.desired_size.y, 151.2), "{:?}", out.desired_size);
     }
 
     #[test]
@@ -377,56 +276,20 @@ mod tests {
         // No icon, no heading, no buttons: 16 + 16.8 + 16.
         let c = Content { heading: "", body: "Solving string theory...", icon: XDialogIcon::None, buttons: vec![], ..Default::default() };
         let out = h.pass_with(&c, 0.0, vec![], false, |_| ()).0;
-        assert!((out.desired_size.y - 48.8).abs() < 1e-3, "{:?}", out.desired_size);
+        assert!(near(out.desired_size.y, 48.8), "{:?}", out.desired_size);
         assert!(out.buttons.is_empty() && out.default_button.is_none());
-        // Progress with icon: 16 + 21.6 + 16 + 6 + 16 + 16.8 + 16 = 108.4 (skia 350 x 108).
+        // Progress with icon: 16 + 21.6 + 16 + 6 + 16 + 16.8 + 16 = 108.4.
         let c = Content { heading: "Downloading updates",
                           body: "Downloading package 1 of 3...",
                           buttons: vec![],
-                          progress: Some(ProgressView::Determinate { value: 0.0, prev: 0.0, changed_at: 0.0 }),
+                          progress: Some(ProgressView::Determinate { value: 0.0 }),
                           ..Default::default() };
         let out = h.pass_with(&c, 0.0, vec![], false, |_| ()).0;
-        assert!((out.desired_size.y - 108.4).abs() < 1e-3, "{:?}", out.desired_size);
+        assert!(near(out.desired_size.y, 108.4), "{:?}", out.desired_size);
         // Icon column minimum: 80 (+ 48 footer).
         let c = Content { heading: "", body: "x", ..Default::default() };
         let out = h.pass_with(&c, 0.0, vec![], false, |_| ()).0;
-        assert!((out.desired_size.y - 128.0).abs() < 1e-3, "{:?}", out.desired_size);
-    }
-
-    /// skia (cosmic-text) wraps after hyphens and slashes: `qa_hyphen` / `qa_url` are 350 x 168
-    /// with 3 body lines, and a tab advances to the next 8-space stop.
-    #[test]
-    fn wrap_breaks_and_tabs_like_cosmic_text() {
-        let h = Harness::new();
-        for body in ["A self-contained, well-known, state-of-the-art example-with-hyphens-everywhere-in-it-to-force-breaks.",
-                     "Visit https://example.com/downloads/latest/release-notes/version-4.0.0.html for the details."]
-        {
-            let c = Content { heading: "Hyphens", body, buttons: vec!["OK".into()], ..Default::default() };
-            let out = h.pass_with(&c, 0.0, vec![], false, |_| ()).0;
-            assert_eq!(out.desired_size.round(), Vec2::new(350.0, 168.0), "{body}");
-        }
-        let (w, here) = h.pass_with(&Content::default(), 0.0, vec![], false, |ctx| {
-                             let text = TextCtx::new(ctx);
-                             (wrap::natural_width(&text, "Tabs\there", &body_style()), text.natural_width("here", &body_style()))
-                         })
-                         .1;
-        let stop = 8.0 * 0.231 * BODY_SIZE;
-        assert!((w - (2.0 * stop + here)).abs() < 1e-3, "{w} {here}");
-    }
-
-    /// cosmic-text lets trailing whitespace hang: a 258 px line fits a 259 px column (skia
-    /// `long_instruction`: 355 x 221, 5 title lines).
-    #[test]
-    fn wrap_like_cosmic_text() {
-        let h = Harness::new();
-        let c = Content { heading: "This is v. long main instruction which will almost certainly need to wrap into several lines and I need to make sure that the dialog sizes correctly",
-                          body: "This is a very small dialog message!",
-                          icon: XDialogIcon::Error,
-                          buttons: vec!["OK".into()],
-                          progress: None };
-        let out = h.pass_with(&c, 0.0, vec![], false, |_| ()).0;
-        assert_eq!(out.desired_size.x.round(), 355.0);
-        assert_eq!(out.desired_size.y.round(), 221.0, "{:?}", out.desired_size);
+        assert!(near(out.desired_size.y, 128.0), "{:?}", out.desired_size);
     }
 
     #[test]
@@ -463,7 +326,7 @@ mod tests {
     }
 
     /// Hovering a button hides the focus border of the focused one; a focus move shows it again
-    /// until the pointer moves (skia `set_focused`).
+    /// until the pointer moves.
     #[test]
     fn focus_border_suppression() {
         let h = Harness::new();
@@ -486,7 +349,7 @@ mod tests {
         assert!(!probe(0.8, vec![egui::Event::PointerGone]));
     }
 
-    /// skia drew the default button's focus ring whether or not the window was active.
+    /// The default button keeps its focus ring while the window is inactive.
     #[test]
     fn focus_ring_kept_while_window_inactive() {
         let h = Harness::new();

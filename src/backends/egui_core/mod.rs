@@ -20,7 +20,6 @@ pub(crate) mod fonts;
 pub(crate) mod input;
 pub(crate) mod keyboard;
 pub(crate) mod manager;
-pub(crate) mod paint_util;
 pub(crate) mod render;
 pub(crate) mod testhooks;
 pub(crate) mod text;

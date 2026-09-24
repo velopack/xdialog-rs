@@ -581,10 +581,7 @@ fn do_pump(shared: &Shared, state: &mut HostState, host: &mut dyn HostWindows) -
     loop {
         let cmd = shared.lock().remote.pop_front();
         let Some(cmd) = cmd else { break };
-        let id = match &cmd {
-            super::manager::live::RemoteCmd::Inject(id, _) | super::manager::live::RemoteCmd::FreezeClock(id, _) => *id,
-        };
-        guarded(state, host, Some(id), "a test-hook command", |m, ws| m.handle_remote(ws, cmd));
+        guarded(state, host, Some(cmd.id()), "a test-hook command", |m, ws| m.handle_remote(ws, cmd));
     }
 
     if shared.refresh_pending.swap(false, Ordering::SeqCst) {

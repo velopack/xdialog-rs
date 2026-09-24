@@ -400,8 +400,7 @@ mod selftest {
                     }
                 }
                 let _ = win;
-                let r = d.button_rects_px[0];
-                let (x, y) = ((r[0] + r[2] / 2.0) as f64, (r[1] + r[3] / 2.0) as f64);
+                let (x, y) = d.button_centre(0).unwrap();
                 Self::inject(elwt, xd, HostEvent::CursorMoved { x, y });
                 Self::inject(elwt, xd, HostEvent::MouseButton { button: xdialog::host::MouseButton::Primary, pressed: true });
                 Self::inject(elwt, xd, HostEvent::MouseButton { button: xdialog::host::MouseButton::Primary, pressed: false });

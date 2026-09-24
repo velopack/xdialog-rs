@@ -1,7 +1,6 @@
-use std::{sync::mpsc::channel, thread};
+use std::sync::mpsc::{channel, Receiver};
+use std::thread;
 
-#[allow(unused_imports)]
-use crate::backends::XDialogBackendImpl;
 use crate::channel::{send_request, ChannelHandler};
 use crate::model::*;
 
@@ -102,7 +101,7 @@ impl XDialogBuilder {
 }
 
 impl XDialogBuilder {
-    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
+    fn run_default_backend(receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) {
         use crate::backends::select::{builder_backend, BackendKind};
         match builder_backend() {
             #[cfg(windows)]
@@ -110,17 +109,9 @@ impl XDialogBuilder {
             #[cfg(target_os = "macos")]
             BackendKind::AppKit => crate::backends::appkit::AppKitBackend::run_loop(receiver, theme),
             #[cfg(all(xd_own_loop, xd_theme_linux))]
-            BackendKind::LinuxEgui => {
-                let theme_impl = crate::backends::linux_egui::LinuxTheme::new();
-                let result = crate::backends::egui_core::own_loop::run_builder(theme_impl, receiver, theme.clone());
-                Self::egui_fallback(result, theme);
-            }
+            BackendKind::LinuxEgui => Self::run_egui(crate::backends::linux_egui::LinuxTheme::new(), receiver, theme),
             #[cfg(all(xd_own_loop, xd_theme_fluent))]
-            BackendKind::FluentEgui => {
-                let theme_impl = crate::backends::fluent_egui::FluentTheme::new();
-                let result = crate::backends::egui_core::own_loop::run_builder(theme_impl, receiver, theme.clone());
-                Self::egui_fallback(result, theme);
-            }
+            BackendKind::FluentEgui => Self::run_egui(crate::backends::fluent_egui::FluentTheme::new(), receiver, theme),
             BackendKind::None => {
                 let _ = theme;
                 crate::backends::drain_with_error(receiver, || crate::XDialogError::NoBackendAvailable);
@@ -128,12 +119,12 @@ impl XDialogBuilder {
         }
     }
 
-    /// The egui own loop could not be built (an `Err` or a panic inside `EventLoop::build`):
-    /// nothing has consumed the receiver yet, so fall back cleanly — Win32 on
-    /// Windows, `NoBackendAvailable` elsewhere.
+    /// Run the egui own loop with `theme_impl`. If it could not be built (an `Err` or a panic
+    /// inside `EventLoop::build`), nothing has consumed the receiver yet, so fall back cleanly:
+    /// Win32 on Windows, `NoBackendAvailable` elsewhere.
     #[cfg(xd_own_loop)]
-    fn egui_fallback(result: Result<(), crate::backends::egui_core::own_loop::BuildFailed>, theme: XDialogTheme) {
-        if let Err(failed) = result {
+    fn run_egui<T: crate::backends::egui_core::theme::Theme>(theme_impl: T, receiver: Receiver<DialogMessageRequest>, theme: XDialogTheme) {
+        if let Err(failed) = crate::backends::egui_core::own_loop::run_builder(theme_impl, receiver, theme.clone()) {
             warn!("xdialog: egui backend unavailable ({}), falling back", failed.reason);
             #[cfg(windows)]
             crate::backends::win32::Win32Backend::run_loop(failed.receiver, theme);

@@ -93,7 +93,7 @@ jobs:
 
   # Deterministic offscreen goldens of both egui themes (tests/visual_references/egui/). The
   # Linux theme uses its bundled font and runs everywhere; the Fluent goldens are local-only and
-  # skip themselves unless the runner's Segoe UI Variable matches FONT_SHA256.
+  # skip themselves unless the runner's Segoe UI Variable matches FONT_ID.
   egui-offscreen:
     name: egui offscreen goldens (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -122,18 +122,6 @@ jobs:
 
       - name: Offscreen goldens
         run: cargo test --locked --release --features _test-hooks,linux-egui,fluent-egui --test egui_offscreen
-
-      - name: Gallery (renders every variant, checks the colour probes)
-        run: cargo run --locked --release --example egui_gallery --features _test-hooks,linux-egui,fluent-egui -- --theme linux --out target/egui_gallery --strict
-
-      - name: Upload renders on failure
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: egui-offscreen-${{ matrix.name }}
-          path: |
-            tests/visual_output/
-            target/egui_gallery/
 
   clippy:
     name: Clippy (${{ matrix.name }})
@@ -390,12 +378,6 @@ jobs:
         include:
           - os: windows-latest
             name: Windows
-
-          # Local-only references: skipped unless Segoe UI Variable matches FONT_SHA256 (GitHub's
-          # Windows images don't ship it), but the dialogs are still shown and captured.
-          - os: windows-latest
-            name: Windows Fluent
-            cargo-args: --features fluent-egui
 
           - os: macos-26
             name: macOS

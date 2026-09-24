@@ -8,7 +8,7 @@
 //! the dialog clock), never of frame counts, so dropped frames never change the motion and the
 //! offscreen harness is deterministic.
 
-use egui::{Color32, Id, Pos2, Rect, Vec2};
+use egui::{Color32, Id};
 
 /// An easing curve mapping linear progress `t` in 0..=1 to eased progress.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -118,11 +118,6 @@ impl Transition {
         }
         self.easing.apply((elapsed / self.duration as f64) as f32)
     }
-
-    /// Whether the transition has finished at `elapsed` seconds after its start.
-    pub fn finished(&self, elapsed: f64) -> bool {
-        self.duration <= 0.0 || elapsed >= self.duration as f64
-    }
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -144,27 +139,9 @@ impl Lerp for f32 {
 }
 
 impl Lerp for Color32 {
-    /// Straight-alpha sRGB(A) per channel, rounded to u8 (skia/mina interpolated u8 channels).
+    /// Per channel in gamma (sRGB) space.
     fn lerp(a: &Color32, b: &Color32, t: f32) -> Color32 {
-        super::color::mix(*a, *b, t)
-    }
-}
-
-impl Lerp for Vec2 {
-    fn lerp(a: &Vec2, b: &Vec2, t: f32) -> Vec2 {
-        *a + (*b - *a) * t
-    }
-}
-
-impl Lerp for Pos2 {
-    fn lerp(a: &Pos2, b: &Pos2, t: f32) -> Pos2 {
-        *a + (*b - *a) * t
-    }
-}
-
-impl Lerp for Rect {
-    fn lerp(a: &Rect, b: &Rect, t: f32) -> Rect {
-        Rect::from_min_max(<Pos2 as Lerp>::lerp(&a.min, &b.min, t), <Pos2 as Lerp>::lerp(&a.max, &b.max, t))
+        a.lerp_to_gamma(*b, t)
     }
 }
 
@@ -184,16 +161,15 @@ impl<T: Lerp> Tween<T> {
     }
 
     fn value(&self, now: f64) -> T {
-        let elapsed = now - self.start;
-        if self.tr.finished(elapsed) {
-            self.to.clone()
+        if self.active(now) {
+            T::lerp(&self.from, &self.to, self.tr.progress(now - self.start))
         } else {
-            T::lerp(&self.from, &self.to, self.tr.progress(elapsed))
+            self.to.clone()
         }
     }
 
     fn active(&self, now: f64) -> bool {
-        !self.tr.finished(now - self.start)
+        self.tr.duration > 0.0 && now - self.start < self.tr.duration as f64
     }
 }
 
@@ -235,21 +211,9 @@ pub(crate) fn animate<T: Lerp>(ctx: &egui::Context, id: Id, target: T, tr: Trans
     value
 }
 
-/// [`animate`] for a colour.
-#[cfg(test)]
-pub(crate) fn animate_color(ctx: &egui::Context, id: Id, target: Color32, tr: Transition) -> Color32 {
-    animate(ctx, id, target, tr)
-}
-
-/// [`animate`] for a scalar.
-pub(crate) fn animate_f32(ctx: &egui::Context, id: Id, target: f32, tr: Transition) -> f32 {
-    animate(ctx, id, target, tr)
-}
-
 /// Stop the tween of `id` at the value it displays now (a later [`animate`] call with a new target
 /// starts from there) and return that value; `None` if `id` has no tween of type `T` yet. Use it
-/// for skia's progress bar, whose value tween is frozen while the bar is indeterminate
-/// (`progress.rs:88-106`: `advance` doesn't run the value animator in indeterminate mode).
+/// to freeze a progress value tween while the bar is indeterminate.
 pub(crate) fn stop<T: Lerp>(ctx: &egui::Context, id: Id) -> Option<T> {
     let now = ctx.input(|i| i.time);
     let key = id.with("xdialog.anim");
@@ -305,21 +269,21 @@ mod tests {
         let ctx = egui::Context::default();
         let id = Id::new("t");
         let tr = Transition::linear(0.2);
-        assert_eq!(at(&ctx, 0.0, |c| animate_f32(c, id, 0.0, tr)).0, 0.0);
-        let (v, active) = at(&ctx, 1.0, |c| animate_f32(c, id, 1.0, tr));
+        assert_eq!(at(&ctx, 0.0, |c| animate(c, id, 0.0f32, tr)).0, 0.0);
+        let (v, active) = at(&ctx, 1.0, |c| animate(c, id, 1.0f32, tr));
         assert_eq!(v, 0.0);
         assert!(active);
-        let (v, _) = at(&ctx, 1.1, |c| animate_f32(c, id, 1.0, tr));
+        let (v, _) = at(&ctx, 1.1, |c| animate(c, id, 1.0f32, tr));
         assert!((v - 0.5).abs() < 1e-5);
         // Interrupt at 1.15 (displayed 0.75): back to 0 over 0.2 s.
-        let (v, _) = at(&ctx, 1.15, |c| animate_f32(c, id, 0.0, tr));
+        let (v, _) = at(&ctx, 1.15, |c| animate(c, id, 0.0f32, tr));
         assert!((v - 0.75).abs() < 1e-5);
-        let (v, _) = at(&ctx, 1.25, |c| animate_f32(c, id, 0.0, tr));
+        let (v, _) = at(&ctx, 1.25, |c| animate(c, id, 0.0f32, tr));
         assert!((v - 0.375).abs() < 1e-5);
-        let (v, _) = at(&ctx, 1.36, |c| animate_f32(c, id, 0.0, tr));
+        let (v, _) = at(&ctx, 1.36, |c| animate(c, id, 0.0f32, tr));
         assert_eq!(v, 0.0);
         // egui repaints once more after the last request_repaint, then goes idle.
-        let (v, active) = at(&ctx, 1.4, |c| animate_f32(c, id, 0.0, tr));
+        let (v, active) = at(&ctx, 1.4, |c| animate(c, id, 0.0f32, tr));
         assert_eq!((v, active), (0.0, false));
     }
 
@@ -329,14 +293,14 @@ mod tests {
         let id = Id::new("p");
         let tr = Transition::linear(0.2);
         assert_eq!(at(&ctx, 0.0, |c| stop::<f32>(c, id)).0, None);
-        at(&ctx, 0.0, |c| animate_f32(c, id, 0.0, tr));
-        at(&ctx, 1.0, |c| animate_f32(c, id, 1.0, tr));
+        at(&ctx, 0.0, |c| animate(c, id, 0.0f32, tr));
+        at(&ctx, 1.0, |c| animate(c, id, 1.0f32, tr));
         let (v, _) = at(&ctx, 1.1, |c| stop::<f32>(c, id));
         assert!((v.unwrap() - 0.5).abs() < 1e-5);
         // Frozen: still 0.5 later; a new target starts from there.
-        assert!((at(&ctx, 5.0, |c| animate_f32(c, id, 0.5, tr)).0 - 0.5).abs() < 1e-5);
-        at(&ctx, 6.0, |c| animate_f32(c, id, 1.0, tr));
-        assert!((at(&ctx, 6.1, |c| animate_f32(c, id, 1.0, tr)).0 - 0.75).abs() < 1e-5);
+        assert!((at(&ctx, 5.0, |c| animate(c, id, 0.5f32, tr)).0 - 0.5).abs() < 1e-5);
+        at(&ctx, 6.0, |c| animate(c, id, 1.0f32, tr));
+        assert!((at(&ctx, 6.1, |c| animate(c, id, 1.0f32, tr)).0 - 0.75).abs() < 1e-5);
     }
 
     #[test]
@@ -344,11 +308,11 @@ mod tests {
         let ctx = egui::Context::default();
         let id = Id::new("c");
         let tr = Transition::linear(0.15);
-        at(&ctx, 0.0, |c| animate_color(c, id, Color32::WHITE, tr));
+        at(&ctx, 0.0, |c| animate(c, id, Color32::WHITE, tr));
         reset_animations(&ctx);
-        let (v, _) = at(&ctx, 0.5, |c| animate_color(c, id, Color32::BLACK, tr));
+        let (v, _) = at(&ctx, 0.5, |c| animate(c, id, Color32::BLACK, tr));
         assert_eq!(v, Color32::BLACK);
-        let (v, _) = at(&ctx, 0.6, |c| animate_color(c, id, Color32::WHITE, Transition::INSTANT));
+        let (v, _) = at(&ctx, 0.6, |c| animate(c, id, Color32::WHITE, Transition::INSTANT));
         assert_eq!(v, Color32::WHITE);
     }
 }

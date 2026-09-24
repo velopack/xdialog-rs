@@ -190,18 +190,23 @@ dialog function, including `show_message*`.
 
 ## Development
 
+The egui backends share one core (`src/backends/egui_core/`: event loops, windows, input, fonts,
+software presenter) and each look is a small theme built from egui's own layout, painting, text and
+animation, driven by design tokens (colours, sizes, spacing, radii, timings).
+
 - `cargo test` runs the unit and integration tests; `--features fluent-egui`, `linux-direct`,
   `_test-hooks` enable more. On Windows set `XDIALOG_TEST_NO_ACTIVATE=1` and
   `XDIALOG_TEST_POS=offscreen` so test windows never take focus.
 - `cargo test --release --features _test-hooks,linux-egui,fluent-egui --test egui_offscreen` checks
   the deterministic offscreen renders in `tests/visual_references/egui/`
-  (`XDIALOG_VISUAL_SEED=1` re-seeds them; the Fluent ones apply only with the exact Segoe UI
-  Variable they were seeded with).
-- `cargo run --release --example egui_gallery --features _test-hooks,fluent-egui,linux-egui -- --help`
-  renders every dialog variant of both looks.
+  (`XDIALOG_VISUAL_SEED=1` re-seeds them; the Fluent ones apply only when the local Segoe UI
+  Variable has the byte length recorded in `tests/visual_references/egui/fluent/FONT_ID`).
+- `cargo run --release --example egui_gallery --features _test-hooks,fluent-egui,linux-egui -- --theme all`
+  renders every dialog variant of both looks to `target/egui_gallery/<theme>/` plus a contact
+  sheet (`--out <dir>`, `--filter <substr>`, `--list`).
 - `tests/image_seed.sh` re-seeds the screenshot references of `tests/visual_regression.rs`.
 - Hidden environment variables (testing only): `XDIALOG_BACKEND=win32|fluent|linux` picks among the
   compiled builder backends; `XDIALOG_TEST_NO_ACTIVATE`, and in debug builds `XDIALOG_TEST_POS` and
-  `XDIALOG_TEST_ACCENT` / `XDIALOG_TEST_ACCENT_PALETTE`.
+  `XDIALOG_TEST_ACCENT`.
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed in 4.0.
