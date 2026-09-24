@@ -196,11 +196,6 @@ impl WindowKey {
     pub(crate) const fn from_raw(raw: u64) -> Self {
         WindowKey(raw)
     }
-    /// Crate-internal raw value.
-    #[allow(dead_code)]
-    pub(crate) const fn raw(self) -> u64 {
-        self.0
-    }
 }
 
 /// Parameters for a window xdialog needs. Sizes are logical pixels.

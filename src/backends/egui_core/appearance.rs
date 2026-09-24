@@ -2,13 +2,12 @@
 //!
 //! - **Linux:** the XDG desktop portal (`org.freedesktop.appearance` `color-scheme` and
 //!   `accent-color`), read on a background thread `xdialog-portal` that keeps one session-bus
-//!   connection, subscribes to `SettingChanged` and updates a cache (moved from the former
-//!   `skia/desktop.rs`). The UI thread never talks to D-Bus: it reads the cache, waiting at most
-//!   150 ms for the very first read.
+//!   connection, subscribes to `SettingChanged` and updates a cache. The UI thread never talks to
+//!   D-Bus: it reads the cache, waiting at most 150 ms for the very first read.
 //! - **Windows:** `AppsUseLightTheme` and `Explorer\Accent\AccentPalette` from the registry, read
 //!   inline on each dialog open (microseconds). No WinRT.
-//! - Test builds (`debug_assertions` or `_test-hooks`): `XDIALOG_TEST_ACCENT=RRGGBB|none` and
-//!   `XDIALOG_TEST_ACCENT_PALETTE=L3,L2,L1,A,D1,D2,D3` override the accent (`AccentSource::Test`).
+//! - Test builds (`debug_assertions` or `_test-hooks`): `XDIALOG_TEST_ACCENT=RRGGBB|none` overrides
+//!   the accent (`AccentSource::Test`).
 
 use egui::Color32;
 
@@ -76,24 +75,14 @@ pub(crate) fn watch(waker: super::fonts::Waker) {
     platform::watch(waker);
 }
 
-/// Apply `XDIALOG_TEST_ACCENT` / `XDIALOG_TEST_ACCENT_PALETTE` (read through `var`).
+/// Apply `XDIALOG_TEST_ACCENT` (read through `var`).
 fn apply_test_env(a: &mut Appearance, var: impl Fn(&str) -> Option<String>) {
-    let palette = var("XDIALOG_TEST_ACCENT_PALETTE").and_then(|s| parse_palette(&s));
-    let accent = var("XDIALOG_TEST_ACCENT");
-    if accent.as_deref().is_some_and(|s| s.trim().eq_ignore_ascii_case("none")) {
+    let Some(accent) = var("XDIALOG_TEST_ACCENT") else { return };
+    if accent.trim().eq_ignore_ascii_case("none") {
         a.accent = None;
-        return;
+    } else if let Some(base) = parse_hex(&accent) {
+        a.accent = Some(Accent { base, win_palette: None, source: AccentSource::Test });
     }
-    let base = accent.as_deref().and_then(parse_hex).or(palette.map(|p| p[3]));
-    if let Some(base) = base {
-        a.accent = Some(Accent { base, win_palette: palette, source: AccentSource::Test });
-    }
-}
-
-/// `L3,L2,L1,A,D1,D2,D3` hex colours.
-fn parse_palette(s: &str) -> Option<[Color32; 7]> {
-    let v: Vec<Color32> = s.split(',').map(parse_hex).collect::<Option<Vec<_>>>()?;
-    v.try_into().ok()
 }
 
 /// Parse the 32-byte `AccentPalette` REG_BINARY (8 x RGBA; entries 0..7 are
@@ -352,20 +341,13 @@ mod tests {
         apply_test_env(&mut a, |k| (k == "XDIALOG_TEST_ACCENT").then(|| "#A94DC1".to_string()));
         assert_eq!(a.accent.map(|x| (x.base, x.source)), Some((rgb(0xA94DC1), AccentSource::Test)));
 
-        let mut a = Appearance::default();
-        let pal = "111111,222222,333333,444444,555555,666666,777777";
-        apply_test_env(&mut a, |k| (k == "XDIALOG_TEST_ACCENT_PALETTE").then(|| pal.to_string()));
-        let acc = a.accent.unwrap();
-        assert_eq!(acc.base, rgb(0x444444));
-        assert_eq!(acc.win_palette.unwrap()[6], rgb(0x777777));
-
         let mut a = Appearance { dark: true, accent: Some(Accent { base: rgb(1), win_palette: None, source: AccentSource::Portal }) };
         apply_test_env(&mut a, |k| (k == "XDIALOG_TEST_ACCENT").then(|| "none".to_string()));
         assert_eq!(a, Appearance { dark: true, accent: None });
 
         // Malformed values are ignored.
         let mut a = Appearance::default();
-        apply_test_env(&mut a, |k| (k == "XDIALOG_TEST_ACCENT_PALETTE").then(|| "zz,1".to_string()));
+        apply_test_env(&mut a, |k| (k == "XDIALOG_TEST_ACCENT").then(|| "zz".to_string()));
         assert_eq!(a, Appearance::default());
     }
 

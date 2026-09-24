@@ -22,7 +22,7 @@ pub(crate) struct RenderFrame<'a> {
     pub textures: &'a mut egui::TexturesDelta,
     pub size_px: [u32; 2],
     pub ppp: f32,
-    /// Buffer clear colour (`WindowStyle::clear`).
+    /// Buffer clear colour (the theme style's `visuals.panel_fill`).
     pub clear: Color32,
 }
 

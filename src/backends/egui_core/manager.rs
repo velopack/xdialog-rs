@@ -28,8 +28,6 @@ use crate::{ProgressButtonCallback, XDialogError};
 
 /// Height cap when the window system doesn't know the monitor (host mode), logical px.
 const DEFAULT_MAX_HEIGHT: f32 = 800.0;
-/// Width cap when unknown, logical px (themes have their own, smaller width rules).
-const DEFAULT_MAX_WIDTH: f32 = 4096.0;
 
 struct Entry<T: Theme, W> {
     dialog: Dialog<T>,
@@ -148,8 +146,7 @@ impl<T: Theme, W> Manager<T, W> {
         let theme = &self.theme;
         let xtheme = self.xtheme.clone();
         let ppp = ws.expected_ppp();
-        let limits = SizeLimits { max_height: ws.max_client_height().filter(|h| h.is_finite() && *h > 0.0).unwrap_or(DEFAULT_MAX_HEIGHT),
-                                  max_width: ws.max_client_width().filter(|w| w.is_finite() && *w > 0.0).unwrap_or(DEFAULT_MAX_WIDTH) };
+        let limits = SizeLimits { max_height: ws.max_client_height().filter(|h| h.is_finite() && *h > 0.0).unwrap_or(DEFAULT_MAX_HEIGHT) };
         let built = catch_unwind(AssertUnwindSafe(|| {
                                      let params = DialogParams { id,
                                                                  content: DialogContent::new(kind, options),
@@ -173,7 +170,7 @@ impl<T: Theme, W> Manager<T, W> {
         let size = dialog.desired_size();
         let spec = WindowSpec { title: dialog.title(),
                                 inner_size: size,
-                                dark_titlebar: dialog.window_style().dark_titlebar,
+                                dark_titlebar: dialog.dark_titlebar(),
                                 follow_system: self.xtheme == XDialogTheme::SystemDefault,
                                 active: !no_activate(),
                                 position: test_position(ws, dialog.physical_size(ppp)) };
@@ -288,13 +285,6 @@ impl<T: Theme, W> Manager<T, W> {
         }
     }
 
-    /// Test hooks: freeze/unfreeze a dialog clock.
-    pub(crate) fn freeze_clock(&mut self, id: usize, t: Option<f64>) {
-        if let Some(e) = self.dialogs.get_mut(&id) {
-            e.dialog.freeze_clock(t);
-        }
-    }
-
     /// Post-processing after anything touched dialog `id`: remove a closed dialog (hide, drop the
     /// presenter, destroy the window), forward resize / title-bar requests.
     fn after<WS: WindowSystem<Win = W>>(&mut self, ws: &mut WS, id: usize) {
@@ -350,7 +340,7 @@ fn test_position<WS: WindowSystem>(ws: &WS, size_px: [u32; 2]) -> Option<[i32; 2
 }
 
 // -------------------------------------------------------------------------------------------------
-// Test hooks: live-dialog registry (`xdialog::__test::{live_dialogs, inject, freeze_clock}`)
+// Test hooks: live-dialog registry (`xdialog::__test::{live_dialogs, inject}`)
 // -------------------------------------------------------------------------------------------------
 
 #[cfg(xd_test_hooks)]
@@ -363,20 +353,15 @@ impl<T: Theme, W> Manager<T, W> {
 
     /// Apply a test-hook command on the loop thread.
     pub(crate) fn handle_remote<WS: WindowSystem<Win = W>>(&mut self, ws: &mut WS, cmd: live::RemoteCmd) {
-        match cmd {
-            live::RemoteCmd::Inject(id, ev) => self.handle_event(ws, id, ev),
-            live::RemoteCmd::FreezeClock(id, t) => {
-                self.freeze_clock(id, t);
-                self.after(ws, id);
-            }
-        }
+        let live::RemoteCmd::Inject(id, ev) = cmd;
+        self.handle_event(ws, id, ev);
     }
 
     fn publish<WS: WindowSystem<Win = W>>(&self, ws: &WS, id: usize) {
         let (Some(e), Some(remote)) = (self.dialogs.get(&id), self.remote.as_ref()) else { return };
         let d = &e.dialog;
         let ppp = d.ppp();
-        let info = live::LiveInfo { id,
+        let info = live::LiveDialog { id,
                                     title: d.title().to_owned(),
                                     raw_window: ws.raw_window_id(&e.win),
                                     size_px: (d.size_px()[0], d.size_px()[1]),
@@ -401,31 +386,27 @@ pub(crate) mod live {
     #[derive(Clone, Debug)]
     pub(crate) enum RemoteCmd {
         Inject(usize, HostEvent),
-        FreezeClock(usize, Option<f64>),
+    }
+
+    impl RemoteCmd {
+        /// The dialog the command is for.
+        pub(crate) fn id(&self) -> usize {
+            let RemoteCmd::Inject(id, _) = self;
+            *id
+        }
     }
 
     /// Delivers a command to the owning loop (wakes it).
     pub(crate) type Remote = Arc<dyn Fn(RemoteCmd) + Send + Sync>;
 
-    /// Snapshot of a live dialog (mirrors `__test::LiveDialog`).
-    #[derive(Clone, Debug)]
-    pub(crate) struct LiveInfo {
-        pub id: usize,
-        pub title: String,
-        pub raw_window: isize,
-        pub size_px: (u32, u32),
-        pub ppp: f32,
-        /// Physical px `[x, y, w, h]` by API index.
-        pub button_rects_px: Vec<[f32; 4]>,
-        pub frames: u64,
-    }
+    pub(crate) use crate::backends::egui_core::testhooks::api::LiveDialog;
 
-    fn reg() -> &'static Mutex<BTreeMap<usize, (LiveInfo, Remote)>> {
-        static R: OnceLock<Mutex<BTreeMap<usize, (LiveInfo, Remote)>>> = OnceLock::new();
+    fn reg() -> &'static Mutex<BTreeMap<usize, (LiveDialog, Remote)>> {
+        static R: OnceLock<Mutex<BTreeMap<usize, (LiveDialog, Remote)>>> = OnceLock::new();
         R.get_or_init(|| Mutex::new(BTreeMap::new()))
     }
 
-    pub(super) fn publish(info: LiveInfo, remote: Remote) {
+    pub(super) fn publish(info: LiveDialog, remote: Remote) {
         reg().lock().unwrap_or_else(|e| e.into_inner()).insert(info.id, (info, remote));
     }
 
@@ -434,15 +415,13 @@ pub(crate) mod live {
     }
 
     /// All live dialogs.
-    pub(crate) fn snapshot() -> Vec<LiveInfo> {
+    pub(crate) fn snapshot() -> Vec<LiveDialog> {
         reg().lock().unwrap_or_else(|e| e.into_inner()).values().map(|(i, _)| i.clone()).collect()
     }
 
     /// Send a command to the loop owning dialog `id`. `false` if no such live dialog.
     pub(crate) fn send(cmd: RemoteCmd) -> bool {
-        let id = match &cmd {
-            RemoteCmd::Inject(id, _) | RemoteCmd::FreezeClock(id, _) => *id,
-        };
+        let id = cmd.id();
         let remote = reg().lock().unwrap_or_else(|e| e.into_inner()).get(&id).map(|(_, r)| r.clone());
         match remote {
             Some(r) => {

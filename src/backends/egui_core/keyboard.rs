@@ -3,14 +3,14 @@
 //! activation and Escape, and tells widgets what they need through `FrameInfo` (focus-visible
 //! modality, the keyboard-pressed button, keyboard scroll requests).
 //!
-//! It works on the previous pass's `DialogUiOutput` (Tab order, arrow order/axis, default button),
+//! It works on the previous pass's `DialogUiOutput` (Tab order, arrow order, default button),
 //! and is driven event by event, before the next pass, by `dialog.rs`.
 
 use super::input::CoreInput;
-use super::theme::{button_id, ArrowAxis, ArrowNav, DialogUiOutput, FocusVisibility, KeyboardPolicy, SpaceKey};
+use super::theme::{button_id, ArrowNav, DialogUiOutput, FocusVisibility, FrameInfo, KeyboardPolicy, SpaceKey};
 use crate::backends::host_types::{Key, MouseButton};
 
-/// What a key (or the end of an activation flash) asks the dialog to do.
+/// What a key asks the dialog to do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum KeyAction {
     None,
@@ -34,8 +34,6 @@ pub(crate) struct KeyboardState {
     focus_visible: bool,
     /// Space pressed on this button (`SpaceKey::ActivateOnRelease`), not released yet.
     space_down: Option<usize>,
-    /// Keyboard activation flash: (button, clock time when the activation is delivered).
-    flash: Option<(usize, f64)>,
     shift: bool,
     /// Accumulated keyboard scroll for the next pass.
     scroll: f32,
@@ -43,234 +41,114 @@ pub(crate) struct KeyboardState {
 
 impl KeyboardState {
     pub(crate) fn new(policy: KeyboardPolicy) -> Self {
-        KeyboardState { policy, focus_visible: false, space_down: None, flash: None, shift: false, scroll: 0.0 }
+        KeyboardState { policy, focus_visible: false, space_down: None, shift: false, scroll: 0.0 }
     }
 
-    /// The on-open step, after the measure pass: focus the default button (unless disabled) and
-    /// set the initial focus visibility.
-    pub(crate) fn on_open(&mut self, ctx: &egui::Context, out: &DialogUiOutput, disabled: &[bool]) {
-        if self.policy.focus_on_open {
-            if let Some(b) = out.default_button.filter(|&b| !is_disabled(disabled, b) && out.buttons.iter().any(|x| x.index == b)) {
-                ctx.memory_mut(|m| m.request_focus(button_id(b)));
-            }
+    /// The on-open step, after the measure pass: focus the default button, focus visible.
+    pub(crate) fn on_open(&mut self, ctx: &egui::Context, out: &DialogUiOutput) {
+        if let Some(b) = out.default_button.filter(|&b| out.buttons.iter().any(|x| x.index == b)) {
+            ctx.memory_mut(|m| m.request_focus(button_id(b)));
         }
-        self.focus_visible = match self.policy.focus_visibility {
-            FocusVisibility::Always => true,
-            FocusVisibility::KeyboardOnly { on_open } => on_open,
-        };
+        self.focus_visible = true;
     }
 
     /// Process one core input event (before the next pass). `out` is the last pass's output,
-    /// `now` the dialog clock, `client_h` the client height in logical px (page scrolling).
-    pub(crate) fn on_input(&mut self,
-                           ctx: &egui::Context,
-                           ev: &CoreInput,
-                           out: &DialogUiOutput,
-                           disabled: &[bool],
-                           now: f64,
-                           client_h: f32)
-                           -> KeyAction {
+    /// `client_h` the client height in logical px (page scrolling).
+    pub(crate) fn on_input(&mut self, ctx: &egui::Context, ev: &CoreInput, out: &DialogUiOutput, client_h: f32) -> KeyAction {
         match *ev {
-            CoreInput::Modifiers(m) => {
-                self.shift = m.shift();
-                KeyAction::None
-            }
-            CoreInput::Focused(false) | CoreInput::PointerCancel => {
-                if matches!(ev, CoreInput::Focused(false)) {
-                    self.space_down = None;
-                    self.flash = None;
-                    self.shift = false;
-                }
-                KeyAction::None
+            CoreInput::Modifiers(m) => self.shift = m.shift(),
+            CoreInput::Focused(false) => {
+                self.space_down = None;
+                self.shift = false;
             }
             CoreInput::PointerButton { button: MouseButton::Primary, pressed: true } => {
-                if matches!(self.policy.focus_visibility, FocusVisibility::KeyboardOnly { .. }) {
+                if self.policy.focus_visibility == FocusVisibility::KeyboardOnly {
                     self.focus_visible = false;
                 }
-                KeyAction::None
             }
-            CoreInput::Key { key, pressed, repeat } => self.on_key(ctx, key, pressed, repeat, out, disabled, now, client_h),
-            _ => KeyAction::None,
+            CoreInput::Key { key, pressed, repeat } => return self.on_key(ctx, key, pressed, repeat, out, client_h),
+            _ => {}
         }
+        KeyAction::None
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn on_key(&mut self,
-              ctx: &egui::Context,
-              key: Key,
-              pressed: bool,
-              repeat: bool,
-              out: &DialogUiOutput,
-              disabled: &[bool],
-              now: f64,
-              client_h: f32)
-              -> KeyAction {
+    fn on_key(&mut self, ctx: &egui::Context, key: Key, pressed: bool, repeat: bool, out: &DialogUiOutput, client_h: f32) -> KeyAction {
         let p = self.policy;
+        let focused = focused_button(ctx, out);
         if !pressed {
             // Only Space-release matters.
             if key == Key::Space && p.space == SpaceKey::ActivateOnRelease {
-                if let Some(b) = self.space_down.take() {
-                    if focused_button(ctx, out) == Some(b) && !is_disabled(disabled, b) {
-                        return self.activate(b, now);
-                    }
+                if let Some(b) = self.space_down.take().filter(|&b| focused == Some(b)) {
+                    return KeyAction::Activate(b);
                 }
             }
             return KeyAction::None;
         }
-        let nav_ok = !repeat || p.nav_repeat;
         match key {
-            Key::Escape => {
-                if repeat || !p.escape_closes {
-                    return KeyAction::None;
-                }
+            Key::Escape if !repeat => {
                 self.space_down = None;
-                self.flash = None;
-                KeyAction::Close
+                return KeyAction::Close;
             }
             Key::Tab => {
-                if p.tab && nav_ok {
-                    let order: Vec<usize> = out.buttons.iter().map(|b| b.index).collect();
-                    let dir = if self.shift { -1 } else { 1 };
-                    if let Some(b) = step(&order, focused_button(ctx, out), dir, true, disabled) {
-                        self.focus(ctx, b);
+                let order: Vec<usize> = out.buttons.iter().map(|b| b.index).collect();
+                self.step(ctx, &order, focused, if self.shift { -1 } else { 1 }, true);
+            }
+            Key::ArrowLeft | Key::ArrowRight => {
+                let dir = if key == Key::ArrowRight { 1 } else { -1 };
+                self.step(ctx, &out.arrow_order, focused, dir, p.arrows == ArrowNav::Wrap);
+            }
+            Key::ArrowUp | Key::ArrowDown if p.scroll_keys => {
+                self.scroll += if key == Key::ArrowDown { LINE_SCROLL } else { -LINE_SCROLL };
+            }
+            Key::Home | Key::End if p.scroll_keys => {
+                self.scroll = if key == Key::Home { -END_SCROLL } else { END_SCROLL };
+            }
+            Key::PageUp | Key::PageDown if p.scroll_keys => {
+                let page = PAGE_FRACTION * client_h.max(0.0);
+                self.scroll += if key == Key::PageDown { page } else { -page };
+            }
+            Key::Enter if !repeat => {
+                let fallback = p.enter_falls_back_to_default && ctx.memory(|m| m.focused()).is_none();
+                if let Some(b) = focused.or(out.default_button.filter(|_| fallback)) {
+                    return KeyAction::Activate(b);
+                }
+            }
+            Key::Space if !repeat => match p.space {
+                SpaceKey::ActivateOnPress => {
+                    if let Some(b) = focused {
+                        return KeyAction::Activate(b);
                     }
                 }
-                KeyAction::None
-            }
-            Key::ArrowLeft | Key::ArrowRight | Key::ArrowUp | Key::ArrowDown => {
-                let horizontal = matches!(key, Key::ArrowLeft | Key::ArrowRight);
-                let along = match out.arrow_axis {
-                    ArrowAxis::Horizontal => horizontal,
-                    ArrowAxis::Vertical => !horizontal,
-                };
-                let forward = matches!(key, Key::ArrowRight | Key::ArrowDown);
-                if along && p.arrows != ArrowNav::Off && !out.buttons.is_empty() {
-                    if nav_ok {
-                        let wrap = p.arrows == ArrowNav::Wrap;
-                        if let Some(b) = step(&out.arrow_order, focused_button(ctx, out), if forward { 1 } else { -1 }, wrap, disabled) {
-                            self.focus(ctx, b);
-                        }
-                    }
-                } else if !horizontal && p.scroll_keys {
-                    // Up/Down that don't navigate (no buttons, or a horizontal button row) scroll.
-                    self.scroll += if forward { LINE_SCROLL } else { -LINE_SCROLL };
-                }
-                KeyAction::None
-            }
-            Key::Home | Key::End => {
-                let first = key == Key::Home;
-                if p.home_end && !out.arrow_order.is_empty() {
-                    if nav_ok {
-                        let enabled = |b: &&usize| !is_disabled(disabled, **b);
-                        let pick = if first { out.arrow_order.iter().find(enabled) } else { out.arrow_order.iter().rev().find(enabled) };
-                        if let Some(&b) = pick {
-                            self.focus(ctx, b);
-                        }
-                    }
-                } else if p.scroll_keys {
-                    self.scroll = if first { -END_SCROLL } else { END_SCROLL };
-                }
-                KeyAction::None
-            }
-            Key::PageUp | Key::PageDown => {
-                if p.scroll_keys {
-                    let page = PAGE_FRACTION * client_h.max(0.0);
-                    self.scroll += if key == Key::PageDown { page } else { -page };
-                }
-                KeyAction::None
-            }
-            Key::Enter => {
-                if repeat || !p.enter {
-                    return KeyAction::None;
-                }
-                let target = focused_button(ctx, out).or_else(|| {
-                                                         if p.enter_falls_back_to_default && ctx.memory(|m| m.focused()).is_none() {
-                                                             out.default_button
-                                                         } else {
-                                                             None
-                                                         }
-                                                     });
-                match target {
-                    Some(b) if !is_disabled(disabled, b) => self.activate(b, now),
-                    _ => KeyAction::None,
-                }
-            }
-            Key::Space => {
-                if repeat {
-                    return KeyAction::None;
-                }
-                match p.space {
-                    SpaceKey::Ignore => KeyAction::None,
-                    SpaceKey::ActivateOnPress => match focused_button(ctx, out) {
-                        Some(b) if !is_disabled(disabled, b) => self.activate(b, now),
-                        _ => KeyAction::None,
-                    },
-                    SpaceKey::ActivateOnRelease => {
-                        self.space_down = focused_button(ctx, out).filter(|&b| !is_disabled(disabled, b));
-                        KeyAction::None
-                    }
-                }
-            }
+                SpaceKey::ActivateOnRelease => self.space_down = focused,
+            },
+            _ => {}
         }
+        KeyAction::None
     }
 
-    /// Move egui focus to button `b` (keyboard navigation): focus becomes visible, Space-held is
-    /// cancelled.
-    fn focus(&mut self, ctx: &egui::Context, b: usize) {
-        ctx.memory_mut(|m| m.request_focus(button_id(b)));
-        self.focus_visible = true;
-        self.space_down = None;
-    }
-
-    fn activate(&mut self, b: usize, now: f64) -> KeyAction {
-        if self.flash.is_some() {
-            return KeyAction::None; // one activation at a time
-        }
-        match self.policy.activate_flash {
-            Some(d) if !d.is_zero() => {
-                self.flash = Some((b, now + d.as_secs_f64()));
-                KeyAction::None
-            }
-            _ => KeyAction::Activate(b),
-        }
-    }
-
-    /// Deliver a pending flash activation whose time has come.
-    pub(crate) fn poll(&mut self, now: f64) -> KeyAction {
-        match self.flash {
-            Some((b, until)) if now >= until => {
-                self.flash = None;
-                KeyAction::Activate(b)
-            }
-            _ => KeyAction::None,
-        }
-    }
-
-    /// `(focus_visible, key_pressed, scroll_request)` for this pass's `FrameInfo`; the scroll
-    /// request is taken (it applies to one pass).
-    pub(crate) fn frame_info_parts(&mut self, ctx: &egui::Context, out: &DialogUiOutput) -> (bool, Option<usize>, f32) {
-        let focused = focused_button(ctx, out);
-        // Space-held only shows while the button still has focus (a pointer press may move it).
-        if self.space_down.is_some() && self.space_down != focused {
+    /// Move focus to the next entry of `order` from `cur` in direction `dir` (±1). Nothing
+    /// focused (or `cur` not in `order`): the first (forward) or last (backward) entry. Without
+    /// `wrap`, focus stays put at an end. Focus becomes visible and a held Space is cancelled.
+    fn step(&mut self, ctx: &egui::Context, order: &[usize], cur: Option<usize>, dir: isize, wrap: bool) {
+        if let Some(b) = step(order, cur, dir, wrap) {
+            ctx.memory_mut(|m| m.request_focus(button_id(b)));
+            self.focus_visible = true;
             self.space_down = None;
         }
-        let key_pressed = self.flash.map(|(b, _)| b).or(self.space_down);
-        let scroll = std::mem::take(&mut self.scroll);
-        (self.focus_visible, key_pressed, scroll)
     }
 
-    /// Clock time of the pending flash activation, if any.
-    pub(crate) fn next_deadline(&self) -> Option<f64> {
-        self.flash.map(|(_, until)| until)
+    /// This pass's `FrameInfo`. The measure pass (`sizing`) gets only the focus visibility; a real
+    /// pass takes the scroll request (it applies to one pass).
+    pub(crate) fn frame_info(&mut self, ctx: &egui::Context, out: &DialogUiOutput, sizing: bool) -> FrameInfo {
+        if sizing {
+            return FrameInfo { sizing, focus_visible: self.focus_visible, ..Default::default() };
+        }
+        // Space-held only shows while the button still has focus (a pointer press may move it).
+        if self.space_down.is_some() && self.space_down != focused_button(ctx, out) {
+            self.space_down = None;
+        }
+        FrameInfo { sizing, focus_visible: self.focus_visible, key_pressed: self.space_down, scroll_request: std::mem::take(&mut self.scroll) }
     }
-
-    pub(crate) fn focus_visible(&self) -> bool {
-        self.focus_visible
-    }
-}
-
-fn is_disabled(disabled: &[bool], b: usize) -> bool {
-    disabled.get(b).copied().unwrap_or(false)
 }
 
 /// The API index of the focused button, if egui focus is on one of the last pass's buttons.
@@ -279,72 +157,42 @@ pub(crate) fn focused_button(ctx: &egui::Context, out: &DialogUiOutput) -> Optio
     out.buttons.iter().map(|b| b.index).find(|&i| button_id(i) == f)
 }
 
-/// Next enabled entry of `order` from `cur` in direction `dir` (±1). Nothing focused (or `cur` not
-/// in `order`): the first (forward) or last (backward) enabled entry. `wrap = false` clamps: at an
-/// end, stays put.
-fn step(order: &[usize], cur: Option<usize>, dir: isize, wrap: bool, disabled: &[bool]) -> Option<usize> {
+/// Next entry of `order` from `cur` in direction `dir` (±1); see [`KeyboardState::step`].
+fn step(order: &[usize], cur: Option<usize>, dir: isize, wrap: bool) -> Option<usize> {
     let n = order.len() as isize;
     if n == 0 {
         return None;
     }
-    let enabled = |i: isize| !is_disabled(disabled, order[i as usize]);
-    let start = cur.and_then(|c| order.iter().position(|&x| x == c));
-    let Some(start) = start else {
-        let mut i = if dir > 0 { 0 } else { n - 1 };
-        while (0..n).contains(&i) {
-            if enabled(i) {
-                return Some(order[i as usize]);
-            }
-            i += dir;
-        }
-        return None;
+    let Some(i) = cur.and_then(|c| order.iter().position(|&x| x == c)) else {
+        return Some(order[if dir > 0 { 0 } else { order.len() - 1 }]);
     };
-    let mut i = start as isize;
-    for _ in 0..n {
-        i += dir;
-        if wrap {
-            i = i.rem_euclid(n);
-        } else if !(0..n).contains(&i) {
-            return None;
-        }
-        if enabled(i) {
-            return Some(order[i as usize]);
-        }
-    }
-    None
+    let j = i as isize + dir;
+    let j = if wrap { j.rem_euclid(n) } else { j };
+    (0..n).contains(&j).then(|| order[j as usize])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backends::egui_core::theme::{ButtonInfo, ButtonInteraction, DialogKind, DialogView, FrameInfo, Platform, SizeLimits, ThemeEnv};
+    use crate::backends::egui_core::theme::test_support::view;
+    use crate::backends::egui_core::theme::{ButtonInteraction, DialogView};
     use crate::backends::host_types::Modifiers;
-    use crate::model::XDialogIcon;
     use egui::{Pos2, Rect, Vec2};
-    use std::time::Duration;
 
     fn linux() -> KeyboardPolicy {
-        KeyboardPolicy { focus_on_open: true,
-                         focus_visibility: FocusVisibility::Always,
-                         tab: true,
+        KeyboardPolicy { focus_visibility: FocusVisibility::Always,
                          arrows: ArrowNav::Wrap,
-                         nav_repeat: true,
-                         home_end: false,
-                         enter: true,
                          enter_falls_back_to_default: false,
                          space: SpaceKey::ActivateOnPress,
-                         activate_flash: None,
-                         escape_closes: true,
                          scroll_keys: false }
     }
 
     fn fluent() -> KeyboardPolicy {
-        KeyboardPolicy { focus_visibility: FocusVisibility::KeyboardOnly { on_open: true },
+        KeyboardPolicy { focus_visibility: FocusVisibility::KeyboardOnly,
                          arrows: ArrowNav::Clamp,
                          enter_falls_back_to_default: true,
                          space: SpaceKey::ActivateOnRelease,
-                         scroll_keys: true,
-                         ..linux() }
+                         scroll_keys: true }
     }
 
     /// A stub "theme": `n` buttons in a row, Tab order = API order, arrow order = `arrow`.
@@ -352,71 +200,48 @@ mod tests {
         ctx: egui::Context,
         kb: KeyboardState,
         out: DialogUiOutput,
-        disabled: Vec<bool>,
+        n: usize,
         t: f64,
     }
 
     impl Rig {
-        fn new(policy: KeyboardPolicy, n: usize, arrow: Vec<usize>, axis: ArrowAxis) -> Rig {
+        fn new(policy: KeyboardPolicy, n: usize, arrow: Vec<usize>) -> Rig {
             let ctx = egui::Context::default();
             ctx.options_mut(crate::backends::egui_core::theme::core_options);
             let mut r = Rig { ctx,
                               kb: KeyboardState::new(policy),
-                              out: DialogUiOutput { arrow_order: arrow, arrow_axis: axis, default_button: n.checked_sub(1), ..Default::default() },
-                              disabled: vec![false; n],
+                              out: DialogUiOutput { arrow_order: arrow, default_button: n.checked_sub(1), ..Default::default() },
+                              n,
                               t: 0.0 };
             r.pass(); // "measure pass": registers the buttons
-            r.kb.on_open(&r.ctx.clone(), &r.out.clone(), &r.disabled.clone());
+            r.kb.on_open(&r.ctx.clone(), &r.out.clone());
             r.pass();
             r
         }
 
         /// One real egui pass with the stub buttons (so egui's focus dead-man switch is exercised).
-        fn pass(&mut self) -> (bool, Option<usize>, f32) {
+        fn pass(&mut self) -> FrameInfo {
             self.t += 0.016;
-            let parts = self.kb.frame_info_parts(&self.ctx, &self.out);
-            let env = ThemeEnv { appearance: Default::default(), platform: Platform::current() };
-            let n = self.disabled.len();
-            let labels: Vec<String> = (0..n).map(|i| i.to_string()).collect();
-            let icon = XDialogIcon::None;
-            let view = DialogView { kind: DialogKind::Message,
-                                    title: "",
-                                    heading: "",
-                                    body: "",
-                                    icon: &icon,
-                                    buttons: &labels,
-                                    disabled: &self.disabled,
-                                    progress: None,
-                                    env: &env,
-                                    limits: SizeLimits { max_height: 800.0, max_width: 800.0 },
-                                    frame: FrameInfo { time: self.t,
-                                                       ppp: 1.0,
-                                                       sizing: false,
-                                                       window_focused: true,
-                                                       focus_visible: parts.0,
-                                                       key_pressed: parts.1,
-                                                       scroll_request: parts.2 } };
+            let frame = self.kb.frame_info(&self.ctx, &self.out, false);
+            let labels: Vec<String> = (0..self.n).map(|i| i.to_string()).collect();
+            let view = DialogView { frame, ..view(&labels) };
             let raw = egui::RawInput { time: Some(self.t),
                                        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(400.0, 100.0))),
                                        ..Default::default() };
-            let mut buttons = Vec::new();
+            let mut out = DialogUiOutput::default();
             let mut full = self.ctx.run_ui(raw, |ui| {
-                                       for i in 0..n {
+                                       for i in 0..self.n {
                                            let rect = Rect::from_min_size(Pos2::new(10.0 + 60.0 * i as f32, 10.0), Vec2::new(50.0, 30.0));
-                                           ButtonInteraction::interact(ui, rect, i, &view);
-                                           buttons.push(ButtonInfo { index: i, rect });
+                                           out.push_button(&ButtonInteraction::interact(ui, rect, i, &view));
                                        }
                                    });
             full.textures_delta.clear();
-            self.out.buttons = buttons;
-            parts
+            self.out.buttons = out.buttons;
+            frame
         }
 
         fn key(&mut self, key: Key, pressed: bool, repeat: bool) -> KeyAction {
-            let ev = CoreInput::Key { key, pressed, repeat };
-            let a = self.kb.on_input(&self.ctx, &ev, &self.out, &self.disabled, self.t, 200.0);
-            self.pass();
-            a
+            self.ev(CoreInput::Key { key, pressed, repeat })
         }
 
         fn tap(&mut self, key: Key) -> KeyAction {
@@ -430,9 +255,13 @@ mod tests {
         }
 
         fn ev(&mut self, ev: CoreInput) -> KeyAction {
-            let a = self.kb.on_input(&self.ctx, &ev, &self.out, &self.disabled, self.t, 200.0);
+            let a = self.kb.on_input(&self.ctx, &ev, &self.out, 200.0);
             self.pass();
             a
+        }
+
+        fn scroll(&mut self, key: Key) {
+            self.kb.on_input(&self.ctx, &CoreInput::Key { key, pressed: true, repeat: false }, &self.out, 200.0);
         }
 
         fn focused(&self) -> Option<usize> {
@@ -441,26 +270,17 @@ mod tests {
     }
 
     #[test]
-    fn open_focuses_default_and_visibility_per_policy() {
-        let r = Rig::new(linux(), 3, vec![0, 1, 2], ArrowAxis::Horizontal);
-        assert_eq!(r.focused(), Some(2));
-        assert!(r.kb.focus_visible());
-        let r = Rig::new(fluent(), 3, vec![2, 1, 0], ArrowAxis::Horizontal);
-        assert_eq!(r.focused(), Some(2));
-        assert!(r.kb.focus_visible());
-        let mut p = fluent();
-        p.focus_visibility = FocusVisibility::KeyboardOnly { on_open: false };
-        let r = Rig::new(p, 2, vec![0, 1], ArrowAxis::Horizontal);
-        assert!(!r.kb.focus_visible());
-        let mut p = linux();
-        p.focus_on_open = false;
-        let r = Rig::new(p, 2, vec![0, 1], ArrowAxis::Horizontal);
-        assert_eq!(r.focused(), None);
+    fn open_focuses_default_and_shows_focus() {
+        for (policy, arrow) in [(linux(), vec![0, 1, 2]), (fluent(), vec![2, 1, 0])] {
+            let mut r = Rig::new(policy, 3, arrow);
+            assert_eq!(r.focused(), Some(2));
+            assert!(r.pass().focus_visible);
+        }
     }
 
     #[test]
-    fn tab_wraps_both_ways_and_skips_disabled() {
-        let mut r = Rig::new(linux(), 3, vec![0, 1, 2], ArrowAxis::Horizontal);
+    fn tab_wraps_both_ways() {
+        let mut r = Rig::new(linux(), 3, vec![0, 1, 2]);
         r.tap(Key::Tab);
         assert_eq!(r.focused(), Some(0));
         r.tap(Key::Tab);
@@ -471,26 +291,23 @@ mod tests {
         r.tap(Key::Tab);
         assert_eq!(r.focused(), Some(2));
         r.ev(CoreInput::Modifiers(Modifiers::default()));
-        r.disabled[0] = true;
-        r.tap(Key::Tab);
-        assert_eq!(r.focused(), Some(1));
-        // Repeat navigates too (nav_repeat).
+        // Repeat navigates too.
         r.key(Key::Tab, true, true);
-        assert_eq!(r.focused(), Some(2));
+        assert_eq!(r.focused(), Some(0));
     }
 
     #[test]
     fn arrows_wrap_for_linux_and_clamp_for_fluent() {
-        let mut r = Rig::new(linux(), 3, vec![0, 1, 2], ArrowAxis::Horizontal);
+        let mut r = Rig::new(linux(), 3, vec![0, 1, 2]);
         r.tap(Key::ArrowRight);
         assert_eq!(r.focused(), Some(0), "wraps");
         r.tap(Key::ArrowLeft);
         assert_eq!(r.focused(), Some(2), "wraps back");
         r.tap(Key::ArrowUp);
-        assert_eq!(r.focused(), Some(2), "cross axis ignored");
+        assert_eq!(r.focused(), Some(2), "Up/Down don't navigate");
 
         // Fluent: display order reversed (API 2 leftmost).
-        let mut r = Rig::new(fluent(), 3, vec![2, 1, 0], ArrowAxis::Horizontal);
+        let mut r = Rig::new(fluent(), 3, vec![2, 1, 0]);
         r.tap(Key::ArrowLeft);
         assert_eq!(r.focused(), Some(2), "clamped at the left end");
         r.tap(Key::ArrowRight);
@@ -498,19 +315,12 @@ mod tests {
         r.tap(Key::ArrowRight);
         r.tap(Key::ArrowRight);
         assert_eq!(r.focused(), Some(0), "clamped at the right end");
-
-        // Stacked buttons navigate with Up/Down.
-        let mut r = Rig::new(linux(), 2, vec![1, 0], ArrowAxis::Vertical);
-        r.tap(Key::ArrowDown);
-        assert_eq!(r.focused(), Some(0));
-        r.tap(Key::ArrowRight);
-        assert_eq!(r.focused(), Some(0));
     }
 
     #[test]
     fn enter_and_space_activation() {
         // Linux: Enter / Space activate on press, repeat ignored.
-        let mut r = Rig::new(linux(), 2, vec![0, 1], ArrowAxis::Horizontal);
+        let mut r = Rig::new(linux(), 2, vec![0, 1]);
         assert_eq!(r.key(Key::Enter, true, false), KeyAction::Activate(1));
         assert_eq!(r.key(Key::Enter, true, true), KeyAction::None);
         assert_eq!(r.key(Key::Space, true, false), KeyAction::Activate(1));
@@ -520,11 +330,11 @@ mod tests {
         assert_eq!(r.key(Key::Enter, true, false), KeyAction::None);
 
         // Fluent: Space press shows pressed, release activates; Enter falls back to the default.
-        let mut r = Rig::new(fluent(), 2, vec![1, 0], ArrowAxis::Horizontal);
+        let mut r = Rig::new(fluent(), 2, vec![1, 0]);
         assert_eq!(r.key(Key::Space, true, false), KeyAction::None);
-        assert_eq!(r.pass().1, Some(1), "key_pressed while Space is held");
+        assert_eq!(r.pass().key_pressed, Some(1), "key_pressed while Space is held");
         assert_eq!(r.key(Key::Space, false, false), KeyAction::Activate(1));
-        assert_eq!(r.pass().1, None);
+        assert_eq!(r.pass().key_pressed, None);
         // Focus moves while Space is held: cancelled.
         r.key(Key::Space, true, false);
         r.tap(Key::Tab);
@@ -546,7 +356,7 @@ mod tests {
 
     #[test]
     fn escape_works_without_buttons_and_ignores_repeat() {
-        let mut r = Rig::new(linux(), 0, vec![], ArrowAxis::Horizontal);
+        let mut r = Rig::new(linux(), 0, vec![]);
         assert_eq!(r.key(Key::Escape, true, true), KeyAction::None);
         assert_eq!(r.key(Key::Escape, true, false), KeyAction::Close);
         assert_eq!(r.tap(Key::Tab), KeyAction::None);
@@ -555,56 +365,42 @@ mod tests {
 
     #[test]
     fn focus_visible_modality_for_keyboard_only() {
-        let mut r = Rig::new(fluent(), 2, vec![1, 0], ArrowAxis::Horizontal);
-        assert!(r.pass().0);
+        let mut r = Rig::new(fluent(), 2, vec![1, 0]);
+        assert!(r.pass().focus_visible);
         r.ev(CoreInput::PointerButton { button: MouseButton::Secondary, pressed: true });
-        assert!(r.pass().0, "only primary presses hide the focus visual");
+        assert!(r.pass().focus_visible, "only primary presses hide the focus visual");
         r.ev(CoreInput::PointerButton { button: MouseButton::Primary, pressed: true });
-        assert!(!r.pass().0);
+        assert!(!r.pass().focus_visible);
         r.tap(Key::Tab);
-        assert!(r.pass().0);
+        assert!(r.pass().focus_visible);
         // Linux: always visible.
-        let mut r = Rig::new(linux(), 2, vec![0, 1], ArrowAxis::Horizontal);
+        let mut r = Rig::new(linux(), 2, vec![0, 1]);
         r.ev(CoreInput::PointerButton { button: MouseButton::Primary, pressed: true });
-        assert!(r.pass().0);
+        assert!(r.pass().focus_visible);
     }
 
     #[test]
     fn scroll_keys() {
-        let mut r = Rig::new(fluent(), 0, vec![], ArrowAxis::Horizontal);
-        r.kb.on_input(&r.ctx, &CoreInput::Key { key: Key::PageDown, pressed: true, repeat: false }, &r.out, &[], 0.0, 200.0);
-        r.kb.on_input(&r.ctx, &CoreInput::Key { key: Key::ArrowUp, pressed: true, repeat: false }, &r.out, &[], 0.0, 200.0);
-        assert_eq!(r.kb.frame_info_parts(&r.ctx, &r.out).2, 180.0 - 40.0);
-        assert_eq!(r.kb.frame_info_parts(&r.ctx, &r.out).2, 0.0, "taken");
-        r.kb.on_input(&r.ctx, &CoreInput::Key { key: Key::End, pressed: true, repeat: false }, &r.out, &[], 0.0, 200.0);
-        assert_eq!(r.kb.frame_info_parts(&r.ctx, &r.out).2, 1.0e6);
+        let mut r = Rig::new(fluent(), 0, vec![]);
+        r.scroll(Key::PageDown);
+        r.scroll(Key::ArrowUp);
+        assert_eq!(r.kb.frame_info(&r.ctx, &r.out, false).scroll_request, 180.0 - 40.0);
+        assert_eq!(r.kb.frame_info(&r.ctx, &r.out, false).scroll_request, 0.0, "taken");
+        r.scroll(Key::End);
+        assert_eq!(r.kb.frame_info(&r.ctx, &r.out, false).scroll_request, 1.0e6);
         // Linux: no scroll keys.
-        let mut r = Rig::new(linux(), 0, vec![], ArrowAxis::Horizontal);
-        r.kb.on_input(&r.ctx, &CoreInput::Key { key: Key::PageDown, pressed: true, repeat: false }, &r.out, &[], 0.0, 200.0);
-        assert_eq!(r.kb.frame_info_parts(&r.ctx, &r.out).2, 0.0);
-    }
-
-    #[test]
-    fn activation_flash_delays_delivery() {
-        let mut p = linux();
-        p.activate_flash = Some(Duration::from_millis(250));
-        let mut r = Rig::new(p, 2, vec![0, 1], ArrowAxis::Horizontal);
-        let t0 = r.t;
-        assert_eq!(r.key(Key::Enter, true, false), KeyAction::None);
-        assert_eq!(r.kb.next_deadline(), Some(t0 + 0.25));
-        assert_eq!(r.pass().1, Some(1));
-        assert_eq!(r.kb.poll(t0 + 0.1), KeyAction::None);
-        assert_eq!(r.kb.poll(t0 + 0.25), KeyAction::Activate(1));
-        assert_eq!(r.kb.next_deadline(), None);
+        let mut r = Rig::new(linux(), 0, vec![]);
+        r.scroll(Key::PageDown);
+        assert_eq!(r.kb.frame_info(&r.ctx, &r.out, false).scroll_request, 0.0);
     }
 
     #[test]
     fn step_helper() {
-        assert_eq!(step(&[0, 1, 2], None, 1, true, &[]), Some(0));
-        assert_eq!(step(&[0, 1, 2], None, -1, true, &[]), Some(2));
-        assert_eq!(step(&[0, 1, 2], Some(2), 1, false, &[]), None);
-        assert_eq!(step(&[0, 1, 2], Some(1), 1, false, &[false, false, true]), None);
-        assert_eq!(step(&[0, 1, 2], Some(0), 1, true, &[false, true, false]), Some(2));
-        assert_eq!(step(&[0, 1], Some(0), 1, true, &[true, true]), None);
+        assert_eq!(step(&[0, 1, 2], None, 1, true), Some(0));
+        assert_eq!(step(&[0, 1, 2], None, -1, true), Some(2));
+        assert_eq!(step(&[0, 1, 2], Some(2), 1, false), None);
+        assert_eq!(step(&[0, 1, 2], Some(2), 1, true), Some(0));
+        assert_eq!(step(&[0, 1, 2], Some(0), -1, true), Some(2));
+        assert_eq!(step(&[], None, 1, true), None);
     }
 }

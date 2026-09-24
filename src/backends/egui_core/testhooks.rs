@@ -1,7 +1,7 @@
 //! Test hooks.
 //!
 //! - Environment hooks: `XDIALOG_TEST_NO_ACTIVATE` (all builds); `XDIALOG_TEST_POS` and
-//!   `XDIALOG_TEST_ACCENT*` (only with `debug_assertions` or `_test-hooks`).
+//!   `XDIALOG_TEST_ACCENT` (only with `debug_assertions` or `_test-hooks`).
 //! - `api` (cfg `xd_test_hooks`): the hidden `xdialog::__test` surface.
 //!
 //! Live dialogs are published by the manager of every loop
@@ -12,7 +12,7 @@ pub(crate) fn no_activate() -> bool {
     std::env::var_os("XDIALOG_TEST_NO_ACTIVATE").is_some_and(|v| !v.is_empty() && v != "0")
 }
 
-/// Whether test-only env vars (`XDIALOG_TEST_POS`, `XDIALOG_TEST_ACCENT*`) are honoured.
+/// Whether test-only env vars (`XDIALOG_TEST_POS`, `XDIALOG_TEST_ACCENT`) are honoured.
 pub(crate) const fn test_env_enabled() -> bool {
     cfg!(any(debug_assertions, xd_test_hooks))
 }
@@ -73,19 +73,23 @@ pub mod api {
         pub frames: u64,
     }
 
+    impl LiveDialog {
+        /// Centre of button `i` in physical px, `None` for an unknown index.
+        pub fn button_centre(&self, i: usize) -> Option<(f64, f64)> {
+            self.button_rects_px.get(i).map(|r| rect_centre(*r))
+        }
+    }
+
+    /// Centre of an `[x, y, w, h]` rect.
+    pub(crate) fn rect_centre(r: [f32; 4]) -> (f64, f64) {
+        ((r[0] + r[2] / 2.0) as f64, (r[1] + r[3] / 2.0) as f64)
+    }
+
     /// All live dialogs in this process (own-loop and host-mode windows), by id. A dialog appears
     /// after its first frame was presented and disappears when its window is destroyed; `frames`
-    /// counts presented frames (poll it to wait for the effect of an [`inject`] / [`freeze_clock`]).
+    /// counts presented frames (poll it to wait for the effect of an [`inject`]).
     pub fn live_dialogs() -> Vec<LiveDialog> {
-        live::snapshot().into_iter()
-                        .map(|i| LiveDialog { id: i.id,
-                                              title: i.title,
-                                              raw_window: i.raw_window,
-                                              size_px: i.size_px,
-                                              ppp: i.ppp,
-                                              button_rects_px: i.button_rects_px,
-                                              frames: i.frames })
-                        .collect()
+        live::snapshot()
     }
 
     /// Inject an event (physical px coordinates) into a live dialog, routed through its owning
@@ -94,14 +98,6 @@ pub mod api {
     pub fn inject(dialog_id: usize, ev: HostEvent) {
         if !live::send(RemoteCmd::Inject(dialog_id, ev)) {
             warn!("xdialog::__test::inject: no live dialog {dialog_id}");
-        }
-    }
-
-    /// `Some(t)`: fix the dialog clock at `t` seconds (the dialog repaints at that time);
-    /// `None`: resume real time from the frozen value. Ignored for an unknown dialog.
-    pub fn freeze_clock(dialog_id: usize, t: Option<f64>) {
-        if !live::send(RemoteCmd::FreezeClock(dialog_id, t)) {
-            warn!("xdialog::__test::freeze_clock: no live dialog {dialog_id}");
         }
     }
 }

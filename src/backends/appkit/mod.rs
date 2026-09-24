@@ -11,7 +11,6 @@ use objc2::{msg_send, sel};
 use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSEvent, NSEventMask};
 use objc2_foundation::{NSDate, NSDefaultRunLoopMode};
 
-use crate::backends::XDialogBackendImpl;
 use crate::model::*;
 use crate::{ProgressButtonCallback, ProgressDialogProxy};
 
@@ -118,8 +117,8 @@ impl Drop for UiThreadMark {
     }
 }
 
-impl XDialogBackendImpl for AppKitBackend {
-    fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
+impl AppKitBackend {
+    pub fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
         let _ui_thread = UiThreadMark::set();
         // Headless phase: do not touch AppKit until a dialog is actually requested.
         // Connecting to the window server registers the process with LaunchServices —

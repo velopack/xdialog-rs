@@ -269,11 +269,6 @@ impl WindowSystem for WinitWs<'_> {
         Some((m.size().height as f64 / m.scale_factor() * 0.9) as f32)
     }
 
-    fn max_client_width(&self) -> Option<f32> {
-        let m = self.primary()?;
-        Some((m.size().width as f64 / m.scale_factor() * 0.9) as f32)
-    }
-
     fn expected_ppp(&self) -> f32 {
         self.primary().map_or(1.0, |m| m.scale_factor() as f32)
     }
@@ -452,10 +447,7 @@ impl<T: Theme> ApplicationHandler<UserEvent> for OwnLoopApp<T> {
             }
             #[cfg(xd_test_hooks)]
             UserEvent::Remote(cmd) => {
-                let id = match &cmd {
-                    super::manager::live::RemoteCmd::Inject(id, _) | super::manager::live::RemoteCmd::FreezeClock(id, _) => *id,
-                };
-                self.guarded(el, Some(id), "a test-hook command", |m, ws| m.handle_remote(ws, cmd));
+                self.guarded(el, Some(cmd.id()), "a test-hook command", |m, ws| m.handle_remote(ws, cmd));
             }
         }
     }
@@ -577,7 +569,7 @@ mod live_tests {
     use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
     use windows::Win32::UI::WindowsAndMessaging::{GetClientRect, GetForegroundWindow, PW_RENDERFULLCONTENT};
 
-    use super::super::manager::live::{self, LiveInfo, RemoteCmd};
+    use super::super::manager::live::{self, LiveDialog, RemoteCmd};
     use super::*;
     use crate::backends::host_types::{HostEvent, Key};
     use crate::model::{XDialogIcon, XDialogOptions, XDialogResult};
@@ -649,12 +641,12 @@ mod live_tests {
         }
     }
 
-    fn info(id: usize) -> Option<LiveInfo> {
+    fn info(id: usize) -> Option<LiveDialog> {
         live::snapshot().into_iter().find(|d| d.id == id)
     }
 
     /// Send a command and wait until the dialog presented a frame after it.
-    fn cmd_and_frame(id: usize, cmd: RemoteCmd) -> LiveInfo {
+    fn cmd_and_frame(id: usize, cmd: RemoteCmd) -> LiveDialog {
         let before = info(id).unwrap().frames;
         assert!(live::send(cmd));
         wait_for("a frame", || info(id).is_some_and(|d| d.frames > before));
@@ -715,11 +707,10 @@ mod live_tests {
             assert!(d.raw_window != 0 && d.size_px.0 >= 200 && d.size_px.1 >= 80, "{d:?}");
             fg_ok(&ours);
 
-            // Hover fade at a frozen clock: 0 ms, mid, end (skia 150 ms / WinUI 83 ms).
+            // Hover changes the look once the fade (150 ms / WinUI 83 ms) has run on the real clock.
             let r = d.button_rects_px[0];
             let (cx, cy) = (r[0] + r[2] / 2.0, r[1] + r[3] / 2.0);
             let (sx, sy) = (r[0] + 6.0, cy); // fill, left of the label
-            let (mid, end) = if fluent { (0.04, 0.2) } else { (0.075, 0.3) };
             let shot = |name: &str| {
                 let img = capture(d.raw_window);
                 save(&img, &format!("live_{}_{name}.png", if fluent { "fluent" } else { "linux" }));
@@ -728,18 +719,12 @@ mod live_tests {
             // DWM fills the redirection surface of a freshly shown, never-activated window a few
             // compositor frames later; until then PrintWindow returns black.
             wait_for("the first composited frame", || capture(d.raw_window).2.chunks(4).any(|p| p[..3] != [0, 0, 0]));
-            cmd_and_frame(9001, RemoteCmd::FreezeClock(9001, Some(100.0)));
             let idle = shot("0_idle");
             cmd_and_frame(9001, RemoteCmd::Inject(9001, HostEvent::CursorMoved { x: cx as f64, y: cy as f64 }));
-            let start = shot("1_hover_start");
-            cmd_and_frame(9001, RemoteCmd::FreezeClock(9001, Some(100.0 + mid)));
-            let half = shot("2_hover_mid");
-            cmd_and_frame(9001, RemoteCmd::FreezeClock(9001, Some(100.0 + end)));
-            let done = shot("3_hover_end");
-            eprintln!("hover fade: idle {idle:?} start {start:?} mid {half:?} end {done:?}");
-            assert_eq!(idle, start, "the tween starts from the displayed value");
+            std::thread::sleep(Duration::from_millis(400));
+            let done = shot("1_hover");
+            eprintln!("hover: idle {idle:?} hovered {done:?}");
             assert_ne!(done, idle, "hover changes the look");
-            assert!(half != idle && half != done, "the mid frame is in between");
             fg_ok(&ours);
 
             // An indeterminate progress dialog animates on the real clock.

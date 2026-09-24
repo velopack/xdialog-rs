@@ -84,9 +84,7 @@ font, colours, metrics, animations and keyboard behaviour.
 
 - New offscreen goldens for both egui looks (`tests/egui_offscreen.rs`,
   `tests/visual_references/egui/`); the Fluent ones are local-only (they depend on the installed
-  Segoe UI Variable, recorded in `FONT_SHA256`).
-- `tests/visual_regression.rs` has a `windows_fluent` reference set for `--features fluent-egui`,
-  captured with `PrintWindow` without activating the window (also gated on `FONT_SHA256`).
+  Segoe UI Variable, identified by `FONT_ID`).
 - **The `linux` and `linux_wayland` screenshot references still come from the removed skia
   renderer and must be re-seeded on Linux** (`tests/image_seed.sh`, or the CI failure artifact).
   Until then the Linux visual-regression CI jobs are allowed to fail.

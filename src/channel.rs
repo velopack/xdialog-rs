@@ -23,12 +23,6 @@ pub fn init_handler(handler: Box<dyn DialogRequestHandler>) -> bool {
     true
 }
 
-/// Whether a request handler has been installed.
-#[allow(dead_code)]
-pub fn has_handler() -> bool {
-    REQUEST_HANDLER.get().is_some()
-}
-
 pub struct ChannelHandler {
     pub sender: Sender<DialogMessageRequest>,
 }

@@ -116,8 +116,6 @@ windows = { version = "0.62", features = [
     "Win32_UI_HiDpi",
     "Win32_Globalization",
     "Win32_Graphics_Gdi",
-    "Win32_Storage_Xps",
-    "Win32_Graphics_Dwm",
 ] }
 widestring = "1.2"
 egui = { version = "0.36.2", default-features = false, optional = true }
@@ -143,10 +141,6 @@ required-features = ["linux-direct"]
 [[example]]
 name = "egui_gallery"
 path = "examples/egui_gallery/main.rs"
-required-features = ["_test-hooks", "fluent-egui", "linux-egui"]
-
-[[example]]
-name = "egui_live"
 required-features = ["_test-hooks", "fluent-egui", "linux-egui"]
 
 [[test]]
@@ -186,8 +180,6 @@ windows = { version = "=0.62.2", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
-    "Win32_Storage_Xps",
-    "Win32_Graphics_Dwm",
 ] }
 
 [package.metadata.docs.rs]

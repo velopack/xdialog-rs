@@ -1,41 +1,41 @@
-//! Colours and metrics of the skia look (skia `theme.rs`).
+//! Design tokens of the Linux theme: metrics (logical px) and the light / dark colours, with the
+//! desktop accent colour applied to the progress bar and the hover / pressed / focused buttons.
 
 use egui::Color32;
 
-use crate::backends::egui_core::appearance::AccentSource;
-use crate::backends::egui_core::color::{luma601, mix, rgb, scale_rgb};
-use crate::backends::egui_core::theme::ThemeEnv;
+use crate::backends::egui_core::appearance::{AccentSource, Appearance};
+use crate::backends::egui_core::color::rgb;
 
-/// Outer padding, vertical gap between stacked items and icon/text gap (`default_content_margin`).
+/// Outer padding, vertical gap between stacked items and icon/text gap.
 pub(super) const MARGIN: f32 = 16.0;
-/// `main_icon_size`.
+/// Icon size.
 pub(super) const ICON_SIZE: f32 = 48.0;
-/// `button_panel_height` (footer strip).
+/// Footer strip height.
 pub(super) const FOOTER_H: f32 = 48.0;
-/// `button_panel_margin`: button inset from the footer top/bottom and the right edge.
+/// Button inset from the footer top/bottom and the right edge.
 pub(super) const FOOTER_MARGIN: f32 = 7.0;
-/// `button_panel_spacing`: gap between buttons.
+/// Gap between buttons.
 pub(super) const BUTTON_GAP: f32 = 7.0;
-/// `button_text_padding`: horizontal label padding on each side.
+/// Horizontal label padding on each side.
 pub(super) const BUTTON_PAD_X: f32 = 24.0;
 /// Button height (`48 - 2 * 7`).
 pub(super) const BUTTON_H: f32 = FOOTER_H - 2.0 * FOOTER_MARGIN;
 pub(super) const BUTTON_RADIUS: f32 = 6.0;
 pub(super) const BUTTON_BORDER: f32 = 2.0;
-/// `PROGRESS_HEIGHT`.
+/// Progress bar height.
 pub(super) const PROGRESS_H: f32 = 6.0;
 /// Determinate track/bar corner radius (logical; not a pill).
 pub(super) const PROGRESS_RADIUS: f32 = 2.0;
-/// Window width bounds (`dialog.rs` MIN_WIDTH / MAX_WIDTH).
+/// Window width bounds.
 pub(super) const MIN_WIDTH: f32 = 350.0;
 pub(super) const MAX_WIDTH: f32 = 600.0;
 /// Title (main instruction): Ubuntu Bold 18. Body and button labels: Ubuntu Regular 14.
 pub(super) const TITLE_SIZE: f32 = 18.0;
 pub(super) const BODY_SIZE: f32 = 14.0;
-/// cosmic-text line height as a multiple of the font size (`LINE_HEIGHT_SCALE`).
+/// Line height as a multiple of the font size.
 pub(super) const LINE_HEIGHT_SCALE: f32 = 1.2;
 
-/// Button colours of one state (skia `ButtonStyle` minus the constant radius/width).
+/// Button colours of one state.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ButtonLook {
     pub border: Color32,
@@ -43,11 +43,10 @@ pub(crate) struct ButtonLook {
     pub text: Color32,
 }
 
-/// Resolved skia theme (`ubuntu_light` / `ubuntu_dark`, plus `apply_accent`).
+/// Resolved colours for one appearance.
 #[derive(Clone, Debug)]
 pub(crate) struct LinuxTokens {
-    pub dark: bool,
-    /// `color_background` (window).
+    /// Window background.
     pub bg: Color32,
     pub title_text: Color32,
     pub body_text: Color32,
@@ -64,13 +63,11 @@ const fn look(border: u32, fill: u32, text: u32) -> ButtonLook {
 }
 
 impl LinuxTokens {
-    /// skia `get_theme` + `apply_accent`. The accent is honoured only when it comes from the
-    /// desktop portal (skia's only source; a no-op off Linux) or a test override.
-    pub(crate) fn resolve(env: &ThemeEnv) -> LinuxTokens {
-        let dark = env.appearance.dark;
-        let mut tk = if dark {
-            LinuxTokens { dark,
-                          bg: rgb(0x2D2D2D),
+    /// Light or dark palette plus the accent. The accent is honoured only when it comes from the
+    /// desktop portal (a no-op off Linux) or a test override.
+    pub(crate) fn resolve(appearance: &Appearance) -> LinuxTokens {
+        let mut tk = if appearance.dark {
+            LinuxTokens { bg: rgb(0x2D2D2D),
                           title_text: rgb(0xFFFFFF),
                           body_text: rgb(0xEEEEEE),
                           progress_bg: rgb(0x4A4A4A),
@@ -80,8 +77,7 @@ impl LinuxTokens {
                           pressed: look(0x1E5FAF, 0x1E5FAF, 0xFFFFFF),
                           focused: look(0x2A7DE3, 0x3B3B3B, 0xEEEEEE) }
         } else {
-            LinuxTokens { dark,
-                          bg: rgb(0xFAFAFA),
+            LinuxTokens { bg: rgb(0xFAFAFA),
                           title_text: rgb(0x3D3D3D),
                           body_text: rgb(0x3D3D3D),
                           progress_bg: rgb(0xADCEF7),
@@ -91,51 +87,43 @@ impl LinuxTokens {
                           pressed: look(0x1E5FAF, 0x1E5FAF, 0xFFFFFF),
                           focused: look(0x2A7DE3, 0xFFFFFF, 0x3D3D3D) }
         };
-        if let Some(accent) = env.appearance.accent.filter(|a| matches!(a.source, AccentSource::Portal | AccentSource::Test)) {
+        if let Some(accent) = appearance.accent.filter(|a| matches!(a.source, AccentSource::Portal | AccentSource::Test)) {
             tk.apply_accent(accent.base);
         }
         tk
     }
 
-    /// skia `apply_accent` (theme.rs:161-179).
+    /// Accent overlay: progress, hover / pressed buttons and the focus border.
     fn apply_accent(&mut self, accent: Color32) {
         let accent = Color32::from_rgb(accent.r(), accent.g(), accent.b());
-        let pressed = scale_rgb(accent, 0.75);
+        let pressed = accent.lerp_to_gamma(Color32::BLACK, 0.25);
         self.progress_fg = accent;
         // blend(accent, bg, 0.65): 35% accent + 65% background.
-        self.progress_bg = mix(accent, self.bg, 0.65);
+        self.progress_bg = accent.lerp_to_gamma(self.bg, 0.65);
         self.hover = ButtonLook { border: accent, fill: accent, text: contrasting_text(accent) };
         self.pressed = ButtonLook { border: pressed, fill: pressed, text: contrasting_text(pressed) };
         self.focused.border = accent;
     }
 }
 
-/// skia `contrasting_text`: Rec. 601 luma > 150 -> `#1A1A1A`, else white.
+/// Text colour on an accent fill: Rec. 601 luma > 150 -> `#1A1A1A`, else white.
 fn contrasting_text(c: Color32) -> Color32 {
-    if luma601(c) > 150.0 {
+    if c.intensity() * 255.0 > 150.0 {
         rgb(0x1A1A1A)
     } else {
         Color32::WHITE
     }
 }
 
-/// skia `clamp_window_width(natural)` then clamped to `MIN_WIDTH..=MAX_WIDTH` (dialog.rs:649-658).
+/// Window width for the natural text width: 300 up to 600, growing linearly to 600 at 4000,
+/// clamped to `MIN_WIDTH..=MAX_WIDTH`.
 pub(super) fn window_width(natural: f32) -> f32 {
-    let w = if natural <= 600.0 {
-        300.0
-    } else if natural >= 4000.0 {
-        600.0
-    } else {
-        300.0 + (natural - 600.0) / 3400.0 * 300.0
-    };
-    w.clamp(MIN_WIDTH, MAX_WIDTH)
+    (300.0 + (natural - 600.0).max(0.0) * (300.0 / 3400.0)).clamp(MIN_WIDTH, MAX_WIDTH)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::backends::egui_core::appearance::Appearance;
-    use crate::backends::egui_core::theme::Platform;
 
     #[test]
     fn width_rule() {
@@ -148,8 +136,7 @@ mod tests {
 
     #[test]
     fn accent_overlay() {
-        let env = ThemeEnv { appearance: Appearance::test(false, Some([0xE9, 0x54, 0x20]), None), platform: Platform::Linux };
-        let tk = LinuxTokens::resolve(&env);
+        let tk = LinuxTokens::resolve(&Appearance::test(false, Some([0xE9, 0x54, 0x20]), None));
         assert_eq!(tk.progress_fg, rgb(0xE95420));
         assert_eq!(tk.pressed.fill, Color32::from_rgb(0xAF, 0x3F, 0x18));
         assert_eq!(tk.progress_bg, Color32::from_rgb(((0xE9 as f32) * 0.35 + 250.0 * 0.65).round() as u8,
@@ -157,7 +144,7 @@ mod tests {
                                                      ((0x20 as f32) * 0.35 + 250.0 * 0.65).round() as u8));
         assert_eq!(tk.hover.text, Color32::WHITE);
         assert_eq!(tk.focused.fill, rgb(0xFFFFFF));
-        let base = LinuxTokens::resolve(&ThemeEnv { appearance: Appearance::default(), platform: Platform::Linux });
+        let base = LinuxTokens::resolve(&Appearance::default());
         assert_eq!(base.progress_fg, rgb(0x2A7DE3));
     }
 }

@@ -63,11 +63,6 @@ pub(crate) trait WindowSystem {
         None
     }
 
-    /// Logical max client width (work area * 0.9); `None` when unknown.
-    fn max_client_width(&self) -> Option<f32> {
-        None
-    }
-
     /// Left edge of the whole virtual desktop in physical px (`XDIALOG_TEST_POS=offscreen`).
     fn virtual_screen_left(&self) -> i32 {
         0

@@ -61,8 +61,8 @@ fn bench(c: &mut Criterion) {
         // Hover fade: alternate hover on/off every 10 frames so tweens are always running.
         let mut d = dialog(theme, 1.0, TestKind::Message);
         d.render_at(0.5);
-        let r = d.button_rects()[0];
-        let centre = HostEvent::CursorMoved { x: (r[0] + r[2] / 2.0) as f64, y: (r[1] + r[3] / 2.0) as f64 };
+        let (x, y) = d.button_centre_px(0).expect("button");
+        let centre = HostEvent::CursorMoved { x, y };
         let away = HostEvent::CursorMoved { x: 2.0, y: 2.0 };
         let (mut t, mut n) = (1.0, 0u64);
         g.bench_function(BenchmarkId::new("hover_fade", "1x"), |b| {

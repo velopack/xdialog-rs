@@ -1,6 +1,9 @@
-//! Font registry: theme primary faces, per-char fallback discovery, `&'static` font bytes
-//!.
+//! Fonts: the theme's two faces bound to egui families, per-char fallback discovery,
+//! `&'static` font bytes.
 //!
+//! - A theme provides a regular and a bold face ([`ThemeFonts`]); [`font_definitions`] binds
+//!   `Proportional` and `Monospace` to the regular face and [`bold_family`] to the bold one, and
+//!   appends every fallback face found so far (bold chains get the fallback family's bold face).
 //! - Font files are read **once per process** and leaked into `&'static [u8]` (epaint's `FontData`
 //!   is `Cow<'static, [u8]>`, so an owned buffer would be copied into every dialog's context).
 //! - Every face read from disk is validated with skrifa (parses, has outlines) before it can reach
@@ -18,6 +21,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 #[cfg(target_os = "linux")]
 use std::time::Duration;
 
+use egui::epaint::text::VariationCoords;
 use skrifa::{FontRef, MetadataProvider};
 
 /// A font face: file bytes (leaked once per process, or `include_bytes!`) + face index (TTC).
@@ -49,22 +53,80 @@ impl FaceRef {
     }
 }
 
-/// A face's vertical metrics in ems, as epaint reads them (skrifa, unscaled, default location):
-/// `(ascent, row height = ascent - descent + line gap)`. `None` if the face doesn't parse.
-pub(crate) fn em_vertical_metrics(bytes: &[u8], index: u32) -> Option<(f32, f32)> {
-    let f = FontRef::from_index(bytes, index).ok()?;
-    let m = f.metrics(skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default());
-    let upem = m.units_per_em as f32;
-    (upem > 0.0).then(|| (m.ascent / upem, (m.ascent - m.descent + m.leading) / upem))
+/// A theme face: a [`FaceRef`] plus the variation coordinates it is rendered at (variable fonts).
+#[derive(Clone, Debug)]
+pub(crate) struct ThemeFace {
+    pub face: FaceRef,
+    pub coords: VariationCoords,
 }
 
-/// Fonts bundled with the crate (shared by both themes; the Linux theme's primary faces and the
-/// Fluent theme's last-resort fallback).
+impl From<FaceRef> for ThemeFace {
+    fn from(face: FaceRef) -> Self {
+        ThemeFace { face, coords: VariationCoords::default() }
+    }
+}
+
+impl ThemeFace {
+    fn font_data(&self) -> egui::FontData {
+        let mut data = self.face.font_data();
+        data.tweak.coords = self.coords.clone();
+        data
+    }
+}
+
+/// The two faces a theme renders with (`Theme::fonts`).
+#[derive(Clone, Debug)]
+pub(crate) struct ThemeFonts {
+    pub regular: ThemeFace,
+    pub bold: ThemeFace,
+}
+
+impl ThemeFonts {
+    /// Faces without variation coordinates.
+    pub(crate) fn new(regular: FaceRef, bold: FaceRef) -> Self {
+        ThemeFonts { regular: regular.into(), bold: bold.into() }
+    }
+}
+
+const REGULAR: &str = "xdialog.regular";
+const BOLD: &str = "xdialog.bold";
+
+/// The egui family of bold text (titles).
+pub(crate) fn bold_family() -> egui::FontFamily {
+    egui::FontFamily::Name(BOLD.into())
+}
+
+/// The theme's faces bound to `Proportional`, `Monospace` and [`bold_family`], plus every
+/// fallback face appended to each chain (bold chains: the fallback's bold face first, its regular
+/// face for glyphs the bold lacks).
+pub(crate) fn font_definitions(fonts: &ThemeFonts, fallbacks: &[Fallback]) -> egui::FontDefinitions {
+    let mut defs = egui::FontDefinitions::empty();
+    defs.font_data.insert(REGULAR.into(), Arc::new(fonts.regular.font_data()));
+    defs.font_data.insert(BOLD.into(), Arc::new(fonts.bold.font_data()));
+    defs.families.insert(egui::FontFamily::Proportional, vec![REGULAR.into()]);
+    defs.families.insert(egui::FontFamily::Monospace, vec![REGULAR.into()]);
+    defs.families.insert(bold_family(), vec![BOLD.into()]);
+    for fb in fallbacks {
+        defs.font_data.insert(fb.name.clone(), Arc::new(fb.face.font_data()));
+        if let Some(bold) = fb.bold {
+            defs.font_data.insert(fb.bold_name(), Arc::new(bold.font_data()));
+        }
+        for (family, chain) in &mut defs.families {
+            if fb.bold.is_some() && *family == bold_family() {
+                chain.push(fb.bold_name());
+            }
+            chain.push(fb.name.clone());
+        }
+    }
+    defs
+}
+
+/// Fonts bundled with the crate (the Linux theme's faces and the Fluent theme's last resort).
 pub(crate) mod bundled {
     use super::FaceRef;
 
-    pub(crate) static UBUNTU_REGULAR: &[u8] = include_bytes!("../linux_egui/fonts/Ubuntu-Regular.ttf");
-    pub(crate) static UBUNTU_BOLD: &[u8] = include_bytes!("../linux_egui/fonts/Ubuntu-Bold.ttf");
+    pub(crate) static UBUNTU_REGULAR: &[u8] = include_bytes!("fonts/Ubuntu-Regular.ttf");
+    pub(crate) static UBUNTU_BOLD: &[u8] = include_bytes!("fonts/Ubuntu-Bold.ttf");
 
     pub(crate) const fn ubuntu_regular() -> FaceRef {
         FaceRef::new(UBUNTU_REGULAR, 0)
@@ -79,8 +141,8 @@ pub(crate) mod bundled {
 pub(crate) struct Fallback {
     pub name: String,
     pub face: FaceRef,
-    /// The same family's bold face (weight nearest 700, at least 600) for the themes' bold text
-    /// families ([`super::theme::Theme::bold_families`]); `None` when the family has none.
+    /// The same family's bold face (weight nearest 700, at least 600) for [`bold_family`]; `None`
+    /// when the family has none.
     pub bold: Option<FaceRef>,
 }
 
@@ -89,15 +151,6 @@ impl Fallback {
     pub(crate) fn bold_name(&self) -> String {
         format!("{}:bold", self.name)
     }
-}
-
-/// Result of [`FontRegistry::ensure_coverage`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Coverage {
-    /// Every visible character is covered, or known to be uncoverable. `false` while a Linux
-    /// system-font scan that could still resolve a miss is running: retry when
-    /// [`FontRegistry::generation`] changes.
-    pub complete: bool,
 }
 
 /// A callback that wakes an event loop (the loop then re-checks fonts and appearance).
@@ -168,7 +221,7 @@ impl FontRegistry {
         self.lock().fallbacks.clone()
     }
 
-    /// Changes when a background discovery step finished (see [`Coverage::complete`]).
+    /// Changes when a background discovery step finished (see [`FontRegistry::ensure_coverage`]).
     pub(crate) fn generation(&self) -> u64 {
         self.generation.load(Ordering::Acquire)
     }
@@ -194,11 +247,14 @@ impl FontRegistry {
         self.scan.start(move || self.bump_generation());
     }
 
-    /// Make sure every visible character of `texts` is covered by `primary` or a registered
-    /// fallback, discovering and registering new fallbacks as needed. `wait`: on a miss, wait up to
-    /// 300 ms for the Linux system-font scan (never on later retries).
-    pub(crate) fn ensure_coverage(&self, primary: &[FaceRef], texts: &[&str], wait: bool) -> Coverage {
-        let mut faces: Vec<FontRef<'static>> = primary.iter().filter_map(FaceRef::font_ref).collect();
+    /// Make sure every visible character of `texts` is covered by the theme's faces or a
+    /// registered fallback, discovering and registering new fallbacks as needed. `wait`: on a
+    /// miss, wait up to 300 ms for the Linux system-font scan (never on later retries). Returns
+    /// whether every character is covered or known to be uncoverable (`false` while a Linux scan
+    /// that could still resolve a miss is running: retry when [`FontRegistry::generation`]
+    /// changes).
+    pub(crate) fn ensure_coverage(&self, fonts: &ThemeFonts, texts: &[&str], wait: bool) -> bool {
+        let mut faces: Vec<FontRef<'static>> = [fonts.regular.face, fonts.bold.face].iter().filter_map(FaceRef::font_ref).collect();
         let (fallbacks, uncoverable) = {
             let inner = self.lock();
             (inner.fallbacks.clone(), inner.uncoverable.clone())
@@ -216,7 +272,7 @@ impl FontRegistry {
             }
         }
         if misses.is_empty() {
-            return Coverage { complete: true };
+            return true;
         }
 
         let mut complete = true;
@@ -241,7 +297,7 @@ impl FontRegistry {
                 Discovered::NotYet => complete = false,
             }
         }
-        Coverage { complete }
+        complete
     }
 }
 
@@ -355,7 +411,7 @@ fn windows_candidates(c: char, locale: &str) -> Vec<(&'static str, u32)> {
     let cjk = |hangul: bool| -> Vec<(&'static str, u32)> {
         let sc = ("msyh.ttc", 0);
         let tc = ("msjh.ttc", 0);
-        // Yu Gothic Regular first: a weight-400 "Yu Gothic" lookup (DirectWrite, cosmic-text)
+        // Yu Gothic Regular first: a weight-400 "Yu Gothic" lookup (as the system font lookup does)
         // resolves to Regular, not Medium; Medium is the fallback for systems without it.
         let jp = [("YuGothR.ttc", 0), ("YuGothM.ttc", 0), ("meiryo.ttc", 0)];
         let kr = ("malgun.ttf", 0);
@@ -625,6 +681,10 @@ mod linux {
 mod tests {
     use super::*;
 
+    fn ubuntu() -> ThemeFonts {
+        ThemeFonts::new(bundled::ubuntu_regular(), bundled::ubuntu_bold())
+    }
+
     #[test]
     fn ignorable_chars() {
         for c in ['\n', ' ', '\u{200D}', '\u{FE0F}', '\u{200F}', '\u{00AD}', '\u{2066}', '\u{E0001}'] {
@@ -643,7 +703,7 @@ mod tests {
         assert!(!r.covers('中'));
         let reg = FontRegistry::global();
         // Latin-only text needs nothing.
-        assert!(reg.ensure_coverage(&[r], &["Hello, world!\n\u{200D}"], false).complete);
+        assert!(reg.ensure_coverage(&ubuntu(), &["Hello, world!\n\u{200D}"], false));
     }
 
     #[test]
@@ -681,8 +741,7 @@ mod tests {
         if reg.windows_font("msyh.ttc", 0).is_none() && reg.windows_font("YuGothM.ttc", 0).is_none() {
             return; // no CJK fonts installed
         }
-        let cov = reg.ensure_coverage(&[bundled::ubuntu_regular()], &["你好"], false);
-        assert!(cov.complete);
+        assert!(reg.ensure_coverage(&ubuntu(), &["你好"], false));
         let fb = reg.fallbacks().into_iter().find(|f| f.face.covers('你')).unwrap();
         // The bold chain gets the family's bold face (msyhbd / YuGothB / ...).
         let bold = fb.bold.expect("CJK fallback has a bold face");

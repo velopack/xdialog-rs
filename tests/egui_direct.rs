@@ -111,8 +111,7 @@ mod hooks {
 
     /// Click button `index` of a live dialog through the injection hook.
     fn click(d: &LiveDialog, index: usize) {
-        let r = d.button_rects_px[index];
-        let (x, y) = ((r[0] + r[2] / 2.0) as f64, (r[1] + r[3] / 2.0) as f64);
+        let (x, y) = d.button_centre(index).expect("button");
         inject(d.id, HostEvent::CursorMoved { x, y });
         inject(d.id, HostEvent::MouseButton { button: MouseButton::Primary, pressed: true });
         inject(d.id, HostEvent::MouseButton { button: MouseButton::Primary, pressed: false });

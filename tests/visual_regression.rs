@@ -21,9 +21,11 @@ const PIXEL_THRESHOLD: u8 = 10;
 const DIFF_PERCENT_THRESHOLD: f64 = 0.05; // 5%
 
 // --- Platform-specific window capture ---
+// Each module exposes `try_capture(title)`: one attempt at capturing the window with that exact
+// title (`None`: not found yet or the capture failed).
 
-/// Win32 TaskDialog (default Windows builder backend): screen-DC capture of the whole window.
-#[cfg(all(windows, not(feature = "fluent-egui")))]
+/// Win32 TaskDialog: screen-DC capture of the whole window.
+#[cfg(windows)]
 mod capture {
     use super::*;
     use windows::Win32::Foundation::*;
@@ -31,7 +33,7 @@ mod capture {
     use windows::Win32::UI::WindowsAndMessaging::*;
 
     /// Captures a window by exact title using the screen DC (works with DWM compositing).
-    fn try_capture(title: &str) -> Option<RgbaImage> {
+    pub fn try_capture(title: &str) -> Option<RgbaImage> {
         let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
 
         unsafe {
@@ -106,329 +108,59 @@ mod capture {
             RgbaImage::from_raw(width, height, pixels)
         }
     }
-
-    /// Finds a window by exact title and captures it to a PNG file.
-    /// Retries several times to handle timing where the dialog hasn't appeared yet.
-    pub fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
-        const MAX_ATTEMPTS: u32 = 20;
-        const RETRY_DELAY_MS: u64 = 500;
-
-        for attempt in 1..=MAX_ATTEMPTS {
-            match try_capture(title) {
-                Some(img) => {
-                    if let Some(parent) = output_path.parent() {
-                        std::fs::create_dir_all(parent).ok();
-                    }
-                    match img.save(output_path) {
-                        Ok(_) => {
-                            eprintln!(
-                                "Captured '{}' ({}x{}) on attempt {}",
-                                title,
-                                img.width(),
-                                img.height(),
-                                attempt
-                            );
-                            return true;
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to save screenshot: {}", e);
-                            return false;
-                        }
-                    }
-                }
-                None => {
-                    if attempt < MAX_ATTEMPTS {
-                        if attempt == 1 {
-                            eprintln!("Window '{}' not found yet, retrying...", title);
-                        }
-                        thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
-                    } else {
-                        eprintln!(
-                            "Window '{}' not found after {} attempts ({:.1}s)",
-                            title,
-                            MAX_ATTEMPTS,
-                            MAX_ATTEMPTS as f64 * RETRY_DELAY_MS as f64 / 1000.0
-                        );
-                    }
-                }
-            }
-        }
-
-        false
-    }
 }
-
-/// Fluent (egui) builder backend (`--features fluent-egui`, references in `windows_fluent/`):
-/// `PrintWindow(PW_RENDERFULLCONTENT)` of the client area. The window is created with
-/// `XDIALOG_TEST_NO_ACTIVATE=1` (see `main`) and is never brought to the foreground, so the test
-/// doesn't take focus from whoever uses the machine, and the capture doesn't depend on
-/// activation or on what is on screen above the window.
-#[cfg(all(windows, feature = "fluent-egui"))]
-mod capture {
-    use super::*;
-    use windows::Win32::Foundation::*;
-    use windows::Win32::Graphics::Gdi::*;
-    use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
-    use windows::Win32::UI::WindowsAndMessaging::*;
-
-    /// `PW_CLIENTONLY`: the client area only (the title bar varies between Windows builds).
-    const PW_CLIENTONLY: u32 = 1;
-
-    fn try_capture(title: &str) -> Option<RgbaImage> {
-        let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
-        // SAFETY: plain GDI calls on a window of this process; every GDI object is released.
-        unsafe {
-            let hwnd = FindWindowW(None, windows::core::PCWSTR(title_wide.as_ptr())).ok()?;
-            if hwnd.is_invalid() || !IsWindowVisible(hwnd).as_bool() {
-                return None;
-            }
-            let mut rect = RECT::default();
-            GetClientRect(hwnd, &mut rect).ok()?;
-            let (width, height) = ((rect.right - rect.left) as u32, (rect.bottom - rect.top) as u32);
-            if width == 0 || height == 0 {
-                return None;
-            }
-            let hdc_screen = GetDC(None);
-            let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
-            let hbitmap = CreateCompatibleBitmap(hdc_screen, width as i32, height as i32);
-            let old_bitmap = SelectObject(hdc_mem, hbitmap.into());
-            let ok = PrintWindow(hwnd, hdc_mem, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT | PW_CLIENTONLY)).as_bool();
-            let mut bmi = BITMAPINFO { bmiHeader: BITMAPINFOHEADER { biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                                                                     biWidth: width as i32,
-                                                                     biHeight: -(height as i32), // top-down
-                                                                     biPlanes: 1,
-                                                                     biBitCount: 32,
-                                                                     biCompression: 0, // BI_RGB
-                                                                     ..Default::default() },
-                                       ..Default::default() };
-            let mut pixels = vec![0u8; (width * height * 4) as usize];
-            SelectObject(hdc_mem, old_bitmap);
-            GetDIBits(hdc_mem, hbitmap, 0, height, Some(pixels.as_mut_ptr() as *mut _), &mut bmi, DIB_RGB_COLORS);
-            let _ = DeleteObject(hbitmap.into());
-            let _ = DeleteDC(hdc_mem);
-            ReleaseDC(None, hdc_screen);
-            if !ok {
-                return None;
-            }
-            // BGRA -> RGBA, opaque.
-            for chunk in pixels.as_chunks_mut::<4>().0 {
-                chunk.swap(0, 2);
-                chunk[3] = 255;
-            }
-            RgbaImage::from_raw(width, height, pixels)
-        }
-    }
-
-    pub fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
-        const MAX_ATTEMPTS: u32 = 20;
-        const RETRY_DELAY_MS: u64 = 500;
-        for attempt in 1..=MAX_ATTEMPTS {
-            if let Some(img) = try_capture(title) {
-                if let Some(parent) = output_path.parent() {
-                    std::fs::create_dir_all(parent).ok();
-                }
-                return match img.save(output_path) {
-                    Ok(_) => {
-                        eprintln!("Captured '{}' ({}x{}) on attempt {}", title, img.width(), img.height(), attempt);
-                        true
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to save screenshot: {}", e);
-                        false
-                    }
-                };
-            }
-            if attempt == 1 {
-                eprintln!("Window '{}' not found yet, retrying...", title);
-            }
-            thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
-        }
-        eprintln!("Window '{}' not found after {} attempts", title, MAX_ATTEMPTS);
-        false
-    }
-
-    /// Show the test windows without activating them, fully on the primary monitor (PrintWindow
-    /// can't read a window that is off every monitor: softbuffer blits to the clipped window DC).
-    /// `XDIALOG_TEST_POS` / `XDIALOG_TEST_ACCENT` are honoured by test (debug) builds only.
-    pub fn prepare() {
-        // SAFETY: plain metrics queries.
-        let (sw, sh) = unsafe { (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)) };
-        std::env::set_var("XDIALOG_TEST_NO_ACTIVATE", "1");
-        // The theme's default accent instead of the machine's (the builder also forces Light).
-        std::env::set_var("XDIALOG_TEST_ACCENT", "none");
-        std::env::set_var("XDIALOG_TEST_POS", format!("{},{}", (sw - 640).max(0), (sh - 600).max(0)));
-    }
-
-    /// The Fluent look depends on the local Segoe UI Variable version (GitHub's Windows runners
-    /// don't ship it). References are compared only when its SHA-256 matches the one recorded
-    /// when they were seeded (`windows_fluent/FONT_SHA256`, written in seed mode).
-    pub fn references_apply(ref_dir: &Path, seeding: bool) -> bool {
-        let Ok(bytes) = std::fs::read(r"C:\Windows\Fonts\SegUIVar.ttf") else {
-            eprintln!("Segoe UI Variable is not installed: the windows_fluent references don't apply, skipping the comparison");
-            return false;
-        };
-        let hash = super::sha256::sha256_hex(&bytes);
-        let record = ref_dir.join("FONT_SHA256");
-        if seeding {
-            std::fs::create_dir_all(ref_dir).unwrap();
-            std::fs::write(&record, format!("{hash}\n")).unwrap();
-            return true;
-        }
-        let ok = std::fs::read_to_string(&record).map(|s| s.trim().to_owned()).ok().as_deref() == Some(hash.as_str());
-        if !ok {
-            eprintln!("Segoe UI Variable differs from the one the windows_fluent references were seeded with: skipping the comparison");
-        }
-        ok
-    }
-}
-
-#[cfg(all(windows, feature = "fluent-egui"))]
-#[path = "support/sha256.rs"]
-mod sha256;
 
 #[cfg(target_os = "linux")]
 mod capture {
     use super::*;
 
-    fn is_wayland() -> bool {
-        std::env::var("WAYLAND_DISPLAY").is_ok()
+    /// X11: the window by title. Wayland: the whole compositor output (no per-window capture).
+    pub fn try_capture(title: &str) -> Option<RgbaImage> {
+        if std::env::var("WAYLAND_DISPLAY").is_ok() {
+            try_capture_wayland()
+        } else {
+            try_capture_x11(title)
+        }
     }
 
-    /// Attempts to find a window by exact title and capture it (X11 path).
-    fn try_capture_x11(title: &str, log: bool) -> Option<RgbaImage> {
-        use xcap::Window;
-
-        let windows = match Window::all() {
+    fn try_capture_x11(title: &str) -> Option<RgbaImage> {
+        static LISTED: std::sync::Once = std::sync::Once::new();
+        let windows = match xcap::Window::all() {
             Ok(w) => w,
             Err(e) => {
-                if log {
-                    eprintln!("xcap Window::all() failed: {}", e);
-                }
+                eprintln!("xcap Window::all() failed: {}", e);
                 return None;
             }
         };
-
-        if log {
-            let titles: Vec<_> = windows
-                .iter()
-                .filter_map(|w| w.title().ok())
-                .collect();
+        LISTED.call_once(|| {
+            let titles: Vec<_> = windows.iter().filter_map(|w| w.title().ok()).collect();
             eprintln!("xcap found {} windows: {:?}", titles.len(), titles);
-        }
-
-        let window = windows
-            .iter()
-            .find(|w| w.title().unwrap_or_default() == title)?;
-
+        });
+        let window = windows.iter().find(|w| w.title().unwrap_or_default() == title)?;
         match window.capture_image() {
+            Ok(img) if img.width() > 0 && img.height() > 0 => Some(img),
             Ok(img) => {
-                if img.width() == 0 || img.height() == 0 {
-                    eprintln!("Window found but has zero size: {}x{}", img.width(), img.height());
-                    return None;
-                }
-                Some(img)
+                eprintln!("Window found but has zero size: {}x{}", img.width(), img.height());
+                None
             }
             Err(e) => {
-                if log {
-                    eprintln!("xcap capture_image() failed: {}", e);
-                }
+                eprintln!("xcap capture_image() failed: {}", e);
                 None
             }
         }
     }
 
-    /// Captures the entire compositor output via `grim` (Wayland path).
-    /// Requires a wlroots-based compositor that supports wlr-screencopy.
-    fn try_capture_wayland(log: bool) -> Option<RgbaImage> {
+    /// Captures the entire compositor output via `grim` (needs wlr-screencopy).
+    fn try_capture_wayland() -> Option<RgbaImage> {
         let tmp = std::env::temp_dir().join("xdialog_wayland_capture.png");
-        let output = std::process::Command::new("grim")
-            .arg(&tmp)
-            .output()
-            .ok()?;
-
+        let output = std::process::Command::new("grim").arg(&tmp).output().ok()?;
         if !output.status.success() {
-            if log {
-                eprintln!(
-                    "grim failed: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                );
-            }
+            eprintln!("grim failed: {}", String::from_utf8_lossy(&output.stderr));
             return None;
         }
-
         let img = image::open(&tmp).ok()?.to_rgba8();
         std::fs::remove_file(&tmp).ok();
-
-        if img.width() == 0 || img.height() == 0 {
-            if log {
-                eprintln!("grim capture returned zero size");
-            }
-            return None;
-        }
-
-        Some(img)
-    }
-
-    /// Finds a window by exact title and captures it to a PNG file.
-    /// Retries several times to handle timing where the dialog hasn't appeared yet.
-    /// On Wayland, captures the full monitor output instead of individual windows.
-    pub fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
-        const MAX_ATTEMPTS: u32 = 20;
-        const RETRY_DELAY_MS: u64 = 500;
-
-        let wayland = is_wayland();
-
-        for attempt in 1..=MAX_ATTEMPTS {
-            let log = attempt == 1 || attempt == MAX_ATTEMPTS;
-
-            let img = if wayland {
-                try_capture_wayland(log)
-            } else {
-                try_capture_x11(title, log)
-            };
-
-            match img {
-                Some(img) => {
-                    if let Some(parent) = output_path.parent() {
-                        std::fs::create_dir_all(parent).ok();
-                    }
-                    match img.save(output_path) {
-                        Ok(_) => {
-                            eprintln!(
-                                "Captured '{}' ({}x{}) on attempt {}{}",
-                                title,
-                                img.width(),
-                                img.height(),
-                                attempt,
-                                if wayland { " [wayland monitor]" } else { "" }
-                            );
-                            return true;
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to save screenshot: {}", e);
-                            return false;
-                        }
-                    }
-                }
-                None => {
-                    if attempt < MAX_ATTEMPTS {
-                        if attempt == 1 {
-                            eprintln!("Window '{}' not found yet, retrying...", title);
-                        }
-                        thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
-                    } else {
-                        eprintln!(
-                            "Window '{}' not found after {} attempts ({:.1}s)",
-                            title,
-                            MAX_ATTEMPTS,
-                            MAX_ATTEMPTS as f64 * RETRY_DELAY_MS as f64 / 1000.0
-                        );
-                    }
-                }
-            }
-        }
-
-        false
+        (img.width() > 0 && img.height() > 0).then_some(img)
     }
 }
 
@@ -442,101 +174,65 @@ mod capture {
     /// default-button highlight (blue vs grey) and titlebar shade flip between runs and the diff
     /// drifts across the threshold. References are seeded in the unfocused state.
     #[cfg(target_os = "macos")]
-    fn defocus_dialog() {
-        let _ = std::process::Command::new("osascript")
-            .args(["-e", "tell application \"Finder\" to activate"])
-            .status();
+    pub fn before_capture() {
+        let _ = std::process::Command::new("osascript").args(["-e", "tell application \"Finder\" to activate"]).status();
         thread::sleep(Duration::from_millis(250));
     }
 
-    pub fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
-        #[cfg(target_os = "macos")]
-        {
-            const MAX_ATTEMPTS: u32 = 20;
-            const RETRY_DELAY_MS: u64 = 500;
+    #[cfg(target_os = "macos")]
+    pub fn try_capture(title: &str) -> Option<RgbaImage> {
+        let windows = xcap::Window::all().map_err(|e| eprintln!("Failed to list windows: {}", e)).ok()?;
+        let window = windows.iter().find(|w| w.title().ok().as_deref() == Some(title))?;
+        window.capture_image().map_err(|e| eprintln!("Failed to capture window: {}", e)).ok()
+    }
 
-            // Force the dialog into its unfocused state before capturing, for consistency
-            // across environments (see defocus_dialog).
-            defocus_dialog();
+    #[cfg(not(target_os = "macos"))]
+    pub fn try_capture(_title: &str) -> Option<RgbaImage> {
+        eprintln!("Unsupported platform for window capture");
+        None
+    }
+}
 
-            for attempt in 1..=MAX_ATTEMPTS {
-                let windows = match xcap::Window::all() {
-                    Ok(w) => w,
-                    Err(e) => {
-                        eprintln!("Failed to list windows: {}", e);
-                        if attempt < MAX_ATTEMPTS {
-                            thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
-                            continue;
-                        }
-                        return false;
-                    }
-                };
+/// Finds a window by exact title and captures it to a PNG file.
+/// Retries several times to handle timing where the dialog hasn't appeared yet.
+fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
+    const MAX_ATTEMPTS: u32 = 20;
+    const RETRY_DELAY_MS: u64 = 500;
 
-                if let Some(window) = windows.iter().find(|w| w.title().ok().as_deref() == Some(title)) {
-                    match window.capture_image() {
-                        Ok(img) => {
-                            if let Some(parent) = output_path.parent() {
-                                std::fs::create_dir_all(parent).ok();
-                            }
-                            match img.save(output_path) {
-                                Ok(_) => {
-                                    eprintln!(
-                                        "Captured '{}' ({}x{}) on attempt {}",
-                                        title,
-                                        img.width(),
-                                        img.height(),
-                                        attempt
-                                    );
-                                    return true;
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to save screenshot: {}", e);
-                                    return false;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to capture window: {}", e);
-                            if attempt < MAX_ATTEMPTS {
-                                thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
-                            }
-                        }
-                    }
-                } else {
-                    if attempt == 1 {
-                        eprintln!("Window '{}' not found yet, retrying...", title);
-                    }
-                    if attempt < MAX_ATTEMPTS {
-                        thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
-                    } else {
-                        eprintln!(
-                            "Window '{}' not found after {} attempts ({:.1}s)",
-                            title,
-                            MAX_ATTEMPTS,
-                            MAX_ATTEMPTS as f64 * RETRY_DELAY_MS as f64 / 1000.0
-                        );
-                    }
-                }
+    #[cfg(target_os = "macos")]
+    capture::before_capture();
+
+    for attempt in 1..=MAX_ATTEMPTS {
+        if let Some(img) = capture::try_capture(title) {
+            if let Some(parent) = output_path.parent() {
+                std::fs::create_dir_all(parent).ok();
             }
-
-            false
+            return match img.save(output_path) {
+                Ok(_) => {
+                    eprintln!("Captured '{}' ({}x{}) on attempt {}", title, img.width(), img.height(), attempt);
+                    true
+                }
+                Err(e) => {
+                    eprintln!("Failed to save screenshot: {}", e);
+                    false
+                }
+            };
         }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            eprintln!("Unsupported platform for window capture");
-            return false;
+        if attempt == 1 {
+            eprintln!("Window '{}' not found yet, retrying...", title);
+        }
+        if attempt < MAX_ATTEMPTS {
+            thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
         }
     }
+    eprintln!("Window '{}' not found after {} attempts ({:.1}s)", title, MAX_ATTEMPTS, MAX_ATTEMPTS as f64 * RETRY_DELAY_MS as f64 / 1000.0);
+    false
 }
 
 // --- Helpers ---
 
 fn platform_name() -> &'static str {
-    if cfg!(all(target_os = "windows", feature = "fluent-egui")) {
-        // The Fluent (egui) builder backend replaces Win32 TaskDialog.
-        "windows_fluent"
-    } else if cfg!(target_os = "windows") {
+    if cfg!(target_os = "windows") {
         "windows"
     } else if cfg!(target_os = "linux") {
         if std::env::var("WAYLAND_DISPLAY").is_ok() {
@@ -700,7 +396,7 @@ fn run_all_captures() {
     let output = output_dir().join("message_info.png");
     let handle = thread::spawn(move || {
         thread::sleep(Duration::from_millis(RENDER_WAIT_MS));
-        capture::capture_window_to_file(DIALOG_TITLE, &output);
+        capture_window_to_file(DIALOG_TITLE, &output);
     });
 
     let _ = show_message(
@@ -727,7 +423,7 @@ fn run_all_captures() {
 
     progress.set_value(0.0).unwrap();
     thread::sleep(Duration::from_millis(RENDER_WAIT_MS));
-    capture::capture_window_to_file(DIALOG_TITLE, &output);
+    capture_window_to_file(DIALOG_TITLE, &output);
     progress.close().unwrap();
 }
 
@@ -739,19 +435,11 @@ fn main() {
         return;
     }
 
-    #[cfg(all(windows, feature = "fluent-egui"))]
-    capture::prepare();
+    // The references are Win32 TaskDialog, also when the Fluent backend is compiled in.
+    #[cfg(windows)]
+    std::env::set_var("XDIALOG_BACKEND", "win32");
 
-    let builder = XDialogBuilder::new();
-    // Same appearance on every machine (the Fluent look follows the system theme otherwise).
-    #[cfg(all(windows, feature = "fluent-egui"))]
-    let builder = builder.with_theme(XDialogTheme::Light);
-    builder.run(run_all_captures);
-
-    #[cfg(all(windows, feature = "fluent-egui"))]
-    if !capture::references_apply(&reference_dir(), is_seed_mode()) {
-        return;
-    }
+    XDialogBuilder::new().run(run_all_captures);
     seed_or_compare("message_info");
     seed_or_compare("progress_0");
 }

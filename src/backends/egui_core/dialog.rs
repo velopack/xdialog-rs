@@ -12,7 +12,6 @@
 //! the same code.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use egui::{Pos2, Rect, Vec2, ViewportId};
@@ -20,20 +19,21 @@ use egui::{Pos2, Rect, Vec2, ViewportId};
 use super::anim;
 use super::appearance::{resolve_appearance, Appearance};
 use super::clock::{DialogClock, Schedule, Wants};
-use super::fonts::FontRegistry;
+use super::fonts::{font_definitions, FontRegistry};
 use super::input::{CoreInput, InputTranslator};
 use super::keyboard::{focused_button, KeyAction, KeyboardState};
 use super::render::{Presenter, RenderFrame};
-use super::theme::{
-    button_id, core_options, core_style_overrides, DialogKind, DialogUiOutput, DialogView, FrameInfo, Platform, ProgressView,
-    SizeLimits, Theme, ThemeEnv, WindowStyle,
-};
+use super::theme::{button_id, core_options, install_style, DialogKind, DialogUiOutput, DialogView, ProgressView, SizeLimits, Theme};
 use crate::backends::host_types::HostEvent;
 use crate::model::{XDialogIcon, XDialogOptions, XDialogResult, XDialogTheme};
 use crate::{ProgressButtonCallback, ProgressDialogProxy};
 
 /// Largest font-atlas side the software raster accepts.
 const MAX_TEXTURE_SIDE: usize = 8192;
+
+/// Screen width (logical px) of the measure pass. Wide enough for any dialog: themes apply their
+/// own width rules.
+const MEASURE_WIDTH: f32 = 4096.0;
 
 /// What the dialog shows (API strings, unchanged).
 #[derive(Clone, Debug)]
@@ -44,23 +44,19 @@ pub(crate) struct DialogContent {
     pub body: String,
     pub icon: XDialogIcon,
     pub buttons: Vec<String>,
-    /// Same length as `buttons` (test hooks only).
-    pub disabled: Vec<bool>,
     pub progress: Option<ProgressView>,
 }
 
 impl DialogContent {
     /// Content of a message (`Message`) or progress (`Progress`, starting determinate at 0) dialog.
     pub(crate) fn new(kind: DialogKind, options: XDialogOptions) -> Self {
-        let disabled = vec![false; options.buttons.len()];
         DialogContent { kind,
                         title: options.title,
                         heading: options.main_instruction,
                         body: options.message,
                         icon: options.icon,
                         buttons: options.buttons,
-                        disabled,
-                        progress: (kind == DialogKind::Progress).then_some(ProgressView::Determinate { value: 0.0, prev: 0.0, changed_at: 0.0 }) }
+                        progress: (kind == DialogKind::Progress).then_some(ProgressView::Determinate { value: 0.0 }) }
     }
 
     /// Every string the theme may draw (font coverage check).
@@ -123,12 +119,9 @@ pub(crate) struct Dialog<T: Theme> {
     id: usize,
     ctx: egui::Context,
     tokens: T::Tokens,
-    style: WindowStyle,
-    env: ThemeEnv,
+    appearance: Appearance,
     appearance_source: AppearanceSource,
     content: DialogContent,
-    /// Last determinate target (so `prev` survives indeterminate phases).
-    last_value: f32,
     limits: SizeLimits,
     clock: DialogClock,
     input: InputTranslator,
@@ -164,22 +157,13 @@ pub(crate) struct Dialog<T: Theme> {
 impl<T: Theme> Dialog<T> {
     /// Build the context, install fonts, run the measure pass, focus the default button.
     pub(crate) fn new(theme: &T, p: DialogParams) -> Self {
-        let env = ThemeEnv { appearance: p.appearance, platform: Platform::current() };
-        let tokens = theme.tokens(&env);
-        let style = theme.window_style(&tokens);
         let ppp = sanitize_ppp(p.ppp);
-        let last_value = match p.content.progress {
-            Some(ProgressView::Determinate { value, .. }) => value,
-            _ => 0.0,
-        };
         let mut d = Dialog { id: p.id,
                              ctx: egui::Context::default(),
-                             tokens,
-                             style,
-                             env,
+                             tokens: theme.tokens(&p.appearance),
+                             appearance: p.appearance,
                              appearance_source: p.appearance_source,
                              content: p.content,
-                             last_value,
                              limits: p.limits,
                              clock: p.clock,
                              input: InputTranslator::new(),
@@ -214,12 +198,12 @@ impl<T: Theme> Dialog<T> {
         self.textures.clear();
         self.ctx = egui::Context::default();
         self.ctx.options_mut(core_options);
-        self.apply_style(theme);
+        install_style(&self.ctx, theme, &self.tokens, self.appearance.dark);
         self.fonts = FontState::default();
         self.update_fonts(theme, true);
 
-        // Measure pass: ordinary pass over the root ui at the largest allowed
-        // size, no events; keep the atlas upload, drop the shapes and the repaint request.
+        // Measure pass: ordinary pass over the root ui on a wide screen of the allowed height, no
+        // events; keep the atlas upload, drop the shapes and the repaint request.
         let mut full = self.run_pass(theme, true);
         self.textures.append(std::mem::take(&mut full.textures_delta));
         self.requested = self.out.desired_size;
@@ -227,7 +211,7 @@ impl<T: Theme> Dialog<T> {
         if open {
             let ctx = self.ctx.clone();
             let out = self.out.clone();
-            self.keyboard.on_open(&ctx, &out, &self.content.disabled);
+            self.keyboard.on_open(&ctx, &out);
         } else if let Some(b) = keep_focus {
             self.ctx.memory_mut(|m| m.request_focus(button_id(b)));
         }
@@ -235,41 +219,25 @@ impl<T: Theme> Dialog<T> {
         anim::reset_animations(&self.ctx);
     }
 
-    fn apply_style(&self, theme: &T) {
-        let dark = self.env.appearance.dark;
-        self.ctx.options_mut(|o| o.theme_preference = if dark { egui::ThemePreference::Dark } else { egui::ThemePreference::Light });
-        let tk = &self.tokens;
-        self.ctx.all_styles_mut(|s| {
-                    theme.configure_style(tk, s);
-                    core_style_overrides(s);
-                });
-    }
-
     /// Make sure every visible character is covered (discovering fallback faces if needed) and
     /// (re)install the font definitions when the set of fallbacks changed. Takes effect at the
     /// start of the next pass.
     fn update_fonts(&mut self, theme: &T, wait: bool) {
         let reg = FontRegistry::global();
-        let primary = theme.primary_faces(reg);
-        let cov = reg.ensure_coverage(&primary, &self.content.texts(), wait);
+        let fonts = theme.fonts();
+        self.fonts.complete = reg.ensure_coverage(&fonts, &self.content.texts(), wait);
         let fallbacks = reg.fallbacks();
         if self.fonts.fallbacks != Some(fallbacks.len()) {
-            self.ctx.set_fonts(build_fonts(theme, reg, &fallbacks));
+            self.ctx.set_fonts(font_definitions(&fonts, &fallbacks));
             self.fonts.fallbacks = Some(fallbacks.len());
         }
-        self.fonts.complete = cov.complete;
     }
 
     /// One egui pass (`run_ui` exactly once) building the theme into the root ui.
     fn run_pass(&mut self, theme: &T, sizing: bool) -> egui::FullOutput {
         let now = self.clock.now();
-        let (focus_visible, key_pressed, scroll_request) = if sizing {
-            (self.keyboard.focus_visible(), None, 0.0)
-        } else {
-            let ctx = self.ctx.clone();
-            self.keyboard.frame_info_parts(&ctx, &self.out)
-        };
-        let screen = if sizing { Vec2::new(self.limits.max_width, self.limits.max_height) } else { self.client_logical() };
+        let frame = self.keyboard.frame_info(&self.ctx, &self.out, sizing);
+        let screen = if sizing { Vec2::new(MEASURE_WIDTH, self.limits.max_height) } else { self.client_logical() };
         let mut raw = egui::RawInput { time: Some(now),
                                        predicted_dt: 1.0 / 60.0,
                                        screen_rect: Some(Rect::from_min_size(Pos2::ZERO, screen)),
@@ -281,22 +249,13 @@ impl<T: Theme> Dialog<T> {
 
         let c = &self.content;
         let view = DialogView { kind: c.kind,
-                                title: &c.title,
                                 heading: &c.heading,
                                 body: &c.body,
                                 icon: &c.icon,
                                 buttons: &c.buttons,
-                                disabled: &c.disabled,
                                 progress: c.progress,
-                                env: &self.env,
                                 limits: self.limits,
-                                frame: FrameInfo { time: now,
-                                                   ppp: self.ppp,
-                                                   sizing,
-                                                   window_focused: self.window_focused,
-                                                   focus_visible,
-                                                   key_pressed,
-                                                   scroll_request } };
+                                frame };
         let tokens = &self.tokens;
         let mut out = DialogUiOutput::default();
         let full = self.ctx.run_ui(raw, |ui| out = theme.ui(tokens, &view, ui));
@@ -348,18 +307,11 @@ impl<T: Theme> Dialog<T> {
         std::mem::take(&mut self.present_failed)
     }
 
-    /// Run one frame: keyboard deadlines, one egui pass, pointer activation, resize check,
-    /// tessellate + present, schedule the next frame.
+    /// Run one frame: one egui pass, pointer activation, resize check, tessellate + present,
+    /// schedule the next frame.
     pub(crate) fn frame(&mut self, theme: &T) {
         if self.closed {
             return;
-        }
-        let now = self.clock.now();
-        if let KeyAction::Activate(b) = self.keyboard.poll(now) {
-            self.activate(b);
-            if self.closed {
-                return;
-            }
         }
         let pointer_gone = std::mem::take(&mut self.pointer_gone);
         let mut full = self.run_pass(theme, false);
@@ -380,7 +332,8 @@ impl<T: Theme> Dialog<T> {
 
         if let Some(presenter) = self.presenter.as_mut() {
             let prims = self.ctx.tessellate(std::mem::take(&mut full.shapes), full.pixels_per_point);
-            let frame = RenderFrame { prims: &prims, textures: &mut self.textures, size_px: self.size_px, ppp: full.pixels_per_point, clear: self.style.clear };
+            let clear = self.ctx.global_style().visuals.panel_fill;
+            let frame = RenderFrame { prims: &prims, textures: &mut self.textures, size_px: self.size_px, ppp: full.pixels_per_point, clear };
             if let Err(e) = presenter.present(frame) {
                 warn!("xdialog: present failed: {e}");
                 self.present_failed = true;
@@ -390,11 +343,7 @@ impl<T: Theme> Dialog<T> {
         self.frames += 1;
 
         let delay = full.viewport_output.get(&ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
-        let flash = self.keyboard.next_deadline().map(|t| Duration::from_secs_f64((t - self.clock.now()).max(0.0)));
-        let wants = Wants { immediate: pointer_gone,
-                            animation: delay.is_zero() || flash.is_some() && !self.clock.is_frozen(),
-                            delayed: (!delay.is_zero() && delay < Duration::from_secs(3600)).then_some(delay),
-                            at: flash };
+        let wants = Wants { immediate: pointer_gone, delay: (delay < Duration::from_secs(3600)).then_some(delay) };
         self.schedule.after_frame(Instant::now(), wants);
     }
 
@@ -420,34 +369,18 @@ impl<T: Theme> Dialog<T> {
                     // Same logical size, new physical size.
                     self.resize = Some(self.out.desired_size);
                 }
-                CoreInput::ThemeChanged => {
-                    if let AppearanceSource::System(xt) = &self.appearance_source {
-                        let a = resolve_appearance(xt);
-                        self.set_appearance(theme, a);
-                    }
-                }
+                CoreInput::ThemeChanged => self.refresh_appearance(theme),
                 CoreInput::CloseRequested => self.finish(XDialogResult::WindowClosed),
-                other => {
-                    if let CoreInput::Focused(f) = other {
-                        self.window_focused = f;
-                        // Nothing reports an accent-colour change on Windows (winit has no event
-                        // for it): re-read the system appearance whenever the dialog gains focus.
-                        if f {
-                            if let AppearanceSource::System(xt) = &self.appearance_source {
-                                let a = resolve_appearance(xt);
-                                self.set_appearance(theme, a);
-                            }
-                        }
+                CoreInput::Focused(f) => {
+                    self.window_focused = f;
+                    // Nothing reports an accent-colour change on Windows (winit has no event for
+                    // it): re-read the system appearance whenever the dialog gains focus.
+                    if f {
+                        self.refresh_appearance(theme);
                     }
-                    let ctx = self.ctx.clone();
-                    let client_h = self.client_logical().y;
-                    let action = self.keyboard.on_input(&ctx, &other, &self.out, &self.content.disabled, self.clock.now(), client_h);
-                    match action {
-                        KeyAction::None => {}
-                        KeyAction::Activate(b) => self.activate(b),
-                        KeyAction::Close => self.finish(XDialogResult::WindowClosed),
-                    }
+                    self.keyboard_input(&c);
                 }
+                other => self.keyboard_input(&other),
             }
             if self.closed {
                 return;
@@ -456,11 +389,22 @@ impl<T: Theme> Dialog<T> {
         self.schedule.asap(Instant::now());
     }
 
+    /// Run the keyboard policy for one input and apply its action.
+    fn keyboard_input(&mut self, input: &CoreInput) {
+        let ctx = self.ctx.clone();
+        let client_h = self.client_logical().y;
+        match self.keyboard.on_input(&ctx, input, &self.out, client_h) {
+            KeyAction::None => {}
+            KeyAction::Activate(b) => self.activate(b),
+            KeyAction::Close => self.finish(XDialogResult::WindowClosed),
+        }
+    }
+
     /// Activate button `i` (pointer or keyboard): message -> `ButtonPressed(i)` and close;
     /// progress with a callback -> run it (on this thread, panics caught) and close unless it
     /// returns `true`; progress without a callback -> `ButtonPressed(i)` and close.
     pub(crate) fn activate(&mut self, i: usize) {
-        if self.closed || i >= self.content.buttons.len() || self.content.disabled[i] {
+        if self.closed || i >= self.content.buttons.len() {
             return;
         }
         let keep = match self.sink.callback.as_mut() {
@@ -512,9 +456,7 @@ impl<T: Theme> Dialog<T> {
         if self.content.progress.is_none() {
             return;
         }
-        let prev = self.last_value;
-        self.last_value = value;
-        self.content.progress = Some(ProgressView::Determinate { value, prev, changed_at: self.clock.now() });
+        self.content.progress = Some(ProgressView::Determinate { value });
         self.schedule.asap(Instant::now());
     }
 
@@ -540,14 +482,6 @@ impl<T: Theme> Dialog<T> {
         self.schedule.asap(Instant::now());
     }
 
-    /// Test hooks: force a button's disabled state.
-    pub(crate) fn set_disabled(&mut self, index: usize, disabled: bool) {
-        if let Some(d) = self.content.disabled.get_mut(index) {
-            *d = disabled;
-            self.schedule.asap(Instant::now());
-        }
-    }
-
     /// A background font discovery step finished: retry an incomplete coverage check.
     pub(crate) fn refresh_fonts(&mut self, theme: &T) {
         if !self.fonts.complete || Some(FontRegistry::global().fallbacks().len()) != self.fonts.fallbacks {
@@ -566,16 +500,14 @@ impl<T: Theme> Dialog<T> {
 
     /// Switch appearance: new tokens and styles, tweens snap (no fade between palettes).
     pub(crate) fn set_appearance(&mut self, theme: &T, a: Appearance) {
-        if a == self.env.appearance {
+        if a == self.appearance {
             return;
         }
-        let was_dark = self.style.dark_titlebar;
-        self.env.appearance = a;
-        self.tokens = theme.tokens(&self.env);
-        self.style = theme.window_style(&self.tokens);
-        self.apply_style(theme);
+        self.titlebar_changed |= a.dark != self.appearance.dark;
+        self.appearance = a;
+        self.tokens = theme.tokens(&a);
+        install_style(&self.ctx, theme, &self.tokens, a.dark);
         anim::reset_animations(&self.ctx);
-        self.titlebar_changed |= was_dark != self.style.dark_titlebar;
         self.schedule.asap(Instant::now());
     }
 
@@ -593,9 +525,8 @@ impl<T: Theme> Dialog<T> {
     }
 
     /// `round(desired * ppp)` physical px (at least 1x1): what winit makes of a logical inner size
-    /// (`LogicalSize::to_physical` rounds), so the window, the offscreen harness and the skia
-    /// references (e.g. 350 x 151.2 -> 350 x 151) agree and `attach` doesn't re-request a size
-    /// the window system can never give.
+    /// (`LogicalSize::to_physical` rounds), so the window and the offscreen harness agree and
+    /// `attach` doesn't re-request a size the window system can never give.
     pub(crate) fn physical_size(&self, ppp: f32) -> [u32; 2] {
         let s = self.out.desired_size * sanitize_ppp(ppp);
         [(s.x.round() as u32).max(1), (s.y.round() as u32).max(1)]
@@ -608,11 +539,12 @@ impl<T: Theme> Dialog<T> {
 
     /// The dark-title-bar flag changed since the last call (appearance switch).
     pub(crate) fn take_titlebar_change(&mut self) -> Option<bool> {
-        std::mem::take(&mut self.titlebar_changed).then_some(self.style.dark_titlebar)
+        std::mem::take(&mut self.titlebar_changed).then_some(self.appearance.dark)
     }
 
-    pub(crate) fn window_style(&self) -> WindowStyle {
-        self.style
+    /// Dark title bar (DWMWA_USE_IMMERSIVE_DARK_MODE / winit `with_theme(Dark)`).
+    pub(crate) fn dark_titlebar(&self) -> bool {
+        self.appearance.dark
     }
 
     pub(crate) fn ppp(&self) -> f32 {
@@ -639,8 +571,8 @@ impl<T: Theme> Dialog<T> {
         self.frames
     }
 
-    /// Freeze (`Some(t)`) or unfreeze the dialog clock; repaints.
-    pub(crate) fn freeze_clock(&mut self, t: Option<f64>) {
+    /// Fix the dialog clock at `t` seconds; repaints.
+    pub(crate) fn freeze_clock(&mut self, t: f64) {
         self.clock.freeze(t);
         self.schedule.asap(Instant::now());
     }
@@ -649,22 +581,10 @@ impl<T: Theme> Dialog<T> {
         &mut self.schedule
     }
 
-    #[cfg(test)]
-    pub(crate) fn ctx(&self) -> &egui::Context {
-        &self.ctx
-    }
-
-    /// The last pass's theme output (button rects, focus order).
-    #[cfg(test)]
-    pub(crate) fn ui_output(&self) -> &DialogUiOutput {
-        &self.out
-    }
-
     /// The presenter (offscreen harness reads its pixels).
     pub(crate) fn presenter(&self) -> Option<&dyn Presenter> {
         self.presenter.as_deref()
     }
-
 }
 
 impl<T: Theme> Drop for Dialog<T> {
@@ -687,71 +607,15 @@ fn sanitize_ppp(ppp: f32) -> f32 {
     }
 }
 
-/// The theme's font definitions plus every process fallback appended to each text family.
-fn build_fonts<T: Theme>(theme: &T, reg: &FontRegistry, fallbacks: &[super::fonts::Fallback]) -> egui::FontDefinitions {
-    let mut defs = egui::FontDefinitions::empty();
-    theme.install_fonts(&mut defs, reg);
-    let families = theme.text_families();
-    let bold_families = theme.bold_families();
-    if cfg!(debug_assertions) {
-        let bound = |f: &egui::FontFamily| defs.families.get(f).is_some_and(|v| v.iter().all(|n| defs.font_data.contains_key(n)) && !v.is_empty());
-        for f in [egui::FontFamily::Proportional, egui::FontFamily::Monospace].iter().chain(families.iter()) {
-            debug_assert!(bound(f), "theme {} must bind font family {f:?}", theme.id());
-        }
-    }
-    let primary = defs.families.get(&egui::FontFamily::Proportional).and_then(|v| v.first()).and_then(|n| defs.font_data.get(n)).cloned();
-    for fb in fallbacks {
-        let data = |face: super::fonts::FaceRef| {
-            let mut data = face.font_data();
-            if let Some(p) = &primary {
-                data.tweak.y_offset_factor = shared_baseline_offset(p, face).unwrap_or(0.0);
-            }
-            Arc::new(data)
-        };
-        defs.font_data.insert(fb.name.clone(), data(fb.face));
-        let bold = fb.bold.map(|face| {
-                              defs.font_data.insert(fb.bold_name(), data(face));
-                              fb.bold_name()
-                          });
-        for fam in &families {
-            let chain = defs.families.entry(fam.clone()).or_default();
-            // Bold chains: the family's bold face first, its regular face for glyphs the bold lacks.
-            let bold = bold.as_ref().filter(|_| bold_families.contains(fam));
-            for name in bold.into_iter().chain([&fb.name]) {
-                if !chain.contains(name) {
-                    chain.push(name.clone());
-                }
-            }
-        }
-    }
-    defs
-}
-
-/// `FontTweak::y_offset_factor` that puts a fallback face's baseline on the primary face's.
-///
-/// epaint centres a fallback glyph on the row by font height (`ascent + (primary_height -
-/// face_height) / 2`, epaint 0.36 `text_layout.rs`), so fallback text (CJK, Hebrew, emoji) sits
-/// 1-3 px off. cosmic-text and DirectWrite put every face on one shared baseline; this offset
-/// moves the glyphs there: `primary_ascent - face_ascent - (primary_height - face_height) / 2`
-/// in ems (plus the primary's own offset). Visual only: row heights and layout are unchanged.
-fn shared_baseline_offset(primary: &egui::FontData, face: super::fonts::FaceRef) -> Option<f32> {
-    use super::fonts::em_vertical_metrics;
-    let (pa, ph) = em_vertical_metrics(&primary.font, primary.index)?;
-    let (fa, fh) = em_vertical_metrics(face.bytes, face.index)?;
-    let s = primary.tweak.scale;
-    let off = s * pa + s * primary.tweak.y_offset_factor - fa - 0.5 * (s * ph - fh);
-    off.is_finite().then_some(off)
-}
-
 #[cfg(test)]
 pub(crate) mod tests {
     //! State-machine tests through real egui passes with a stub theme and a memory presenter.
 
     use super::*;
     use crate::backends::egui_core::render::MemoryPresenter;
-    use crate::backends::egui_core::theme::{
-        ArrowAxis, ArrowNav, ButtonInfo, ButtonInteraction, FocusVisibility, KeyboardPolicy, SpaceKey,
-    };
+    use crate::backends::egui_core::fonts::{bundled, ThemeFonts};
+    use crate::backends::egui_core::text::{TextBlockWidget, TextCtx, TextStyle};
+    use crate::backends::egui_core::theme::{ArrowNav, ButtonInteraction, FocusVisibility, KeyboardPolicy, SpaceKey};
     use crate::backends::host_types::{Key, MouseButton};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -762,70 +626,45 @@ pub(crate) mod tests {
 
     impl StubTheme {
         pub(crate) fn linux() -> Self {
-            StubTheme { policy: KeyboardPolicy { focus_on_open: true,
-                                                 focus_visibility: FocusVisibility::Always,
-                                                 tab: true,
+            StubTheme { policy: KeyboardPolicy { focus_visibility: FocusVisibility::Always,
                                                  arrows: ArrowNav::Wrap,
-                                                 nav_repeat: true,
-                                                 home_end: false,
-                                                 enter: true,
                                                  enter_falls_back_to_default: false,
                                                  space: SpaceKey::ActivateOnPress,
-                                                 activate_flash: None,
-                                                 escape_closes: true,
                                                  scroll_keys: false } }
         }
     }
 
     impl Theme for StubTheme {
         type Tokens = bool;
-        fn id(&self) -> &'static str {
-            "stub"
-        }
         fn keyboard_policy(&self) -> KeyboardPolicy {
             self.policy
         }
-        fn tokens(&self, env: &ThemeEnv) -> bool {
-            env.appearance.dark
+        fn tokens(&self, appearance: &Appearance) -> bool {
+            appearance.dark
         }
-        fn window_style(&self, dark: &bool) -> WindowStyle {
-            WindowStyle { clear: if *dark { egui::Color32::BLACK } else { egui::Color32::WHITE }, dark_titlebar: *dark }
+        fn fonts(&self) -> ThemeFonts {
+            ThemeFonts::new(bundled::ubuntu_regular(), bundled::ubuntu_bold())
         }
-        fn install_fonts(&self, defs: &mut egui::FontDefinitions, _reg: &FontRegistry) {
-            use super::super::fonts::bundled;
-            defs.font_data.insert("r".into(), Arc::new(bundled::ubuntu_regular().font_data()));
-            defs.families.insert(egui::FontFamily::Proportional, vec!["r".into()]);
-            defs.families.insert(egui::FontFamily::Monospace, vec!["r".into()]);
-        }
-        fn text_families(&self) -> Vec<egui::FontFamily> {
-            vec![egui::FontFamily::Proportional, egui::FontFamily::Monospace]
-        }
-        fn primary_faces(&self, _reg: &FontRegistry) -> Vec<super::super::fonts::FaceRef> {
-            vec![super::super::fonts::bundled::ubuntu_regular()]
-        }
-        fn configure_style(&self, _tk: &bool, style: &mut egui::Style) {
+        fn configure_style(&self, dark: &bool, style: &mut egui::Style) {
             style.spacing.item_spacing = Vec2::ZERO;
+            style.visuals.panel_fill = if *dark { egui::Color32::BLACK } else { egui::Color32::WHITE };
         }
         fn ui(&self, tk: &bool, view: &DialogView<'_>, ui: &mut egui::Ui) -> DialogUiOutput {
-            use super::super::text::{TextBlockWidget, TextCtx, TextStyle};
             let ctx = ui.ctx().clone();
-            let text = TextCtx::new(&ctx);
-            let style = TextStyle::new(14.0, egui::FontFamily::Proportional, 16.8);
-            let body = text.layout(view.body, &style, 200.0, None);
+            // Whole physical pixels at 1x, 1.5x and 2x, so the layout is the same at every tested scale.
+            let style = TextStyle::regular(14.0, 16.0);
+            let body = TextCtx::new(&ctx).layout(view.body, &style, 200.0, None);
             let color = if *tk { egui::Color32::WHITE } else { egui::Color32::BLACK };
-            ui.put(Rect::from_min_size(Pos2::new(10.0, 10.0), body.size), TextBlockWidget::new(&body, color));
+            ui.put(Rect::from_min_size(Pos2::new(10.0, 10.0), body.size), TextBlockWidget { block: &body, color, width: None });
             let top = 20.0 + body.size.y;
             let n = view.buttons.len();
-            let mut out = DialogUiOutput { arrow_order: (0..n).collect(), arrow_axis: ArrowAxis::Horizontal, default_button: n.checked_sub(1), ..Default::default() };
+            let mut out = DialogUiOutput { arrow_order: (0..n).collect(), default_button: n.checked_sub(1), ..Default::default() };
             for i in 0..n {
                 let rect = Rect::from_min_size(Pos2::new(10.0 + 90.0 * i as f32, top), Vec2::new(80.0, 30.0));
                 let st = ButtonInteraction::interact(ui, rect, i, view);
-                let fill = anim::animate_color(ui.ctx(), st.response.id, if st.hovered { egui::Color32::RED } else { egui::Color32::GRAY }, anim::Transition::linear(0.15));
+                let fill = anim::animate(ui.ctx(), st.response.id, if st.hovered { egui::Color32::RED } else { egui::Color32::GRAY }, anim::Transition::linear(0.15));
                 ui.painter().rect_filled(rect, 0.0, fill);
-                if st.activated {
-                    out.activated = Some(i);
-                }
-                out.buttons.push(ButtonInfo { index: i, rect });
+                out.push_button(&st);
             }
             out.desired_size = Vec2::new(220.0 + 90.0 * n.saturating_sub(2) as f32, top + 40.0);
             out
@@ -852,7 +691,7 @@ pub(crate) mod tests {
                                         appearance: Appearance::default(),
                                         appearance_source: AppearanceSource::Fixed,
                                         ppp: 1.0,
-                                        limits: SizeLimits { max_height: 800.0, max_width: 1000.0 },
+                                        limits: SizeLimits { max_height: 800.0 },
                                         clock: DialogClock::frozen(0.0),
                                         sink: ResultSink { sender: Some(tx), callback } };
             let mut d = Dialog::new(&theme, params);
@@ -862,7 +701,7 @@ pub(crate) mod tests {
         }
 
         pub(crate) fn at(&mut self, t: f64) {
-            self.d.freeze_clock(Some(t));
+            self.d.freeze_clock(t);
             self.d.frame(&self.theme);
         }
 
@@ -900,7 +739,7 @@ pub(crate) mod tests {
         assert!(r.d.presenter().unwrap().read_rgba().is_some());
         assert_eq!(r.d.take_resize(), None);
         // Default (last) button focused on open.
-        assert_eq!(focused_button(r.d.ctx(), r.d.ui_output()), Some(1));
+        assert_eq!(focused_button(&r.d.ctx, &r.d.out), Some(1));
     }
 
     #[test]
@@ -980,14 +819,14 @@ pub(crate) mod tests {
         let mut r = Rig::new(DialogKind::Progress, &[], None);
         r.at(0.0);
         r.d.set_progress_value(0.5);
-        assert_eq!(r.d.content.progress, Some(ProgressView::Determinate { value: 0.5, prev: 0.0, changed_at: 0.0 }));
+        assert_eq!(r.d.content.progress, Some(ProgressView::Determinate { value: 0.5 }));
         r.at(1.0);
         r.d.set_progress_indeterminate();
         r.at(2.0);
         r.d.set_progress_indeterminate();
         assert_eq!(r.d.content.progress, Some(ProgressView::Indeterminate { since: 1.0, restarted_at: 2.0 }));
         r.d.set_progress_value(2.0);
-        assert_eq!(r.d.content.progress, Some(ProgressView::Determinate { value: 1.0, prev: 0.5, changed_at: 2.0 }));
+        assert_eq!(r.d.content.progress, Some(ProgressView::Determinate { value: 1.0 }));
         // A longer body grows the window.
         let h = r.d.desired_size().y;
         r.d.set_text(&r.theme, &"many words ".repeat(40));
@@ -1038,7 +877,7 @@ pub(crate) mod tests {
         r.d.set_text(&r.theme, "你好，世界");
         r.at(0.0);
         let id = egui::FontId::new(14.0, egui::FontFamily::Proportional);
-        assert!(r.d.ctx().fonts_mut(|f| f.has_glyphs(&id, "你好世界确定")));
+        assert!(r.d.ctx.fonts_mut(|f| f.has_glyphs(&id, "你好世界确定")));
     }
 
     #[test]
