@@ -1,4 +1,5 @@
-#![cfg(not(target_os = "macos"))]
+// Needs a builder backend: on Linux that is the egui own loop (`builtin-winit`).
+#![cfg(all(not(target_os = "macos"), any(not(target_os = "linux"), feature = "builtin-winit")))]
 
 use std::time::{Duration, Instant};
 use xdialog::*;

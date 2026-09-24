@@ -22,7 +22,8 @@ const DIFF_PERCENT_THRESHOLD: f64 = 0.05; // 5%
 
 // --- Platform-specific window capture ---
 
-#[cfg(windows)]
+/// Win32 TaskDialog (default Windows builder backend): screen-DC capture of the whole window.
+#[cfg(all(windows, not(feature = "fluent-egui")))]
 mod capture {
     use super::*;
     use windows::Win32::Foundation::*;
@@ -156,6 +157,134 @@ mod capture {
         false
     }
 }
+
+/// Fluent (egui) builder backend (`--features fluent-egui`, references in `windows_fluent/`):
+/// `PrintWindow(PW_RENDERFULLCONTENT)` of the client area. The window is created with
+/// `XDIALOG_TEST_NO_ACTIVATE=1` (see `main`) and is never brought to the foreground, so the test
+/// doesn't take focus from whoever uses the machine, and the capture doesn't depend on
+/// activation or on what is on screen above the window.
+#[cfg(all(windows, feature = "fluent-egui"))]
+mod capture {
+    use super::*;
+    use windows::Win32::Foundation::*;
+    use windows::Win32::Graphics::Gdi::*;
+    use windows::Win32::Storage::Xps::{PrintWindow, PRINT_WINDOW_FLAGS};
+    use windows::Win32::UI::WindowsAndMessaging::*;
+
+    /// `PW_CLIENTONLY`: the client area only (the title bar varies between Windows builds).
+    const PW_CLIENTONLY: u32 = 1;
+
+    fn try_capture(title: &str) -> Option<RgbaImage> {
+        let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
+        // SAFETY: plain GDI calls on a window of this process; every GDI object is released.
+        unsafe {
+            let hwnd = FindWindowW(None, windows::core::PCWSTR(title_wide.as_ptr())).ok()?;
+            if hwnd.is_invalid() || !IsWindowVisible(hwnd).as_bool() {
+                return None;
+            }
+            let mut rect = RECT::default();
+            GetClientRect(hwnd, &mut rect).ok()?;
+            let (width, height) = ((rect.right - rect.left) as u32, (rect.bottom - rect.top) as u32);
+            if width == 0 || height == 0 {
+                return None;
+            }
+            let hdc_screen = GetDC(None);
+            let hdc_mem = CreateCompatibleDC(Some(hdc_screen));
+            let hbitmap = CreateCompatibleBitmap(hdc_screen, width as i32, height as i32);
+            let old_bitmap = SelectObject(hdc_mem, hbitmap.into());
+            let ok = PrintWindow(hwnd, hdc_mem, PRINT_WINDOW_FLAGS(PW_RENDERFULLCONTENT | PW_CLIENTONLY)).as_bool();
+            let mut bmi = BITMAPINFO { bmiHeader: BITMAPINFOHEADER { biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                                                                     biWidth: width as i32,
+                                                                     biHeight: -(height as i32), // top-down
+                                                                     biPlanes: 1,
+                                                                     biBitCount: 32,
+                                                                     biCompression: 0, // BI_RGB
+                                                                     ..Default::default() },
+                                       ..Default::default() };
+            let mut pixels = vec![0u8; (width * height * 4) as usize];
+            SelectObject(hdc_mem, old_bitmap);
+            GetDIBits(hdc_mem, hbitmap, 0, height, Some(pixels.as_mut_ptr() as *mut _), &mut bmi, DIB_RGB_COLORS);
+            let _ = DeleteObject(hbitmap.into());
+            let _ = DeleteDC(hdc_mem);
+            ReleaseDC(None, hdc_screen);
+            if !ok {
+                return None;
+            }
+            // BGRA -> RGBA, opaque.
+            for chunk in pixels.as_chunks_mut::<4>().0 {
+                chunk.swap(0, 2);
+                chunk[3] = 255;
+            }
+            RgbaImage::from_raw(width, height, pixels)
+        }
+    }
+
+    pub fn capture_window_to_file(title: &str, output_path: &Path) -> bool {
+        const MAX_ATTEMPTS: u32 = 20;
+        const RETRY_DELAY_MS: u64 = 500;
+        for attempt in 1..=MAX_ATTEMPTS {
+            if let Some(img) = try_capture(title) {
+                if let Some(parent) = output_path.parent() {
+                    std::fs::create_dir_all(parent).ok();
+                }
+                return match img.save(output_path) {
+                    Ok(_) => {
+                        eprintln!("Captured '{}' ({}x{}) on attempt {}", title, img.width(), img.height(), attempt);
+                        true
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to save screenshot: {}", e);
+                        false
+                    }
+                };
+            }
+            if attempt == 1 {
+                eprintln!("Window '{}' not found yet, retrying...", title);
+            }
+            thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+        }
+        eprintln!("Window '{}' not found after {} attempts", title, MAX_ATTEMPTS);
+        false
+    }
+
+    /// Show the test windows without activating them, fully on the primary monitor (PrintWindow
+    /// can't read a window that is off every monitor: softbuffer blits to the clipped window DC).
+    /// `XDIALOG_TEST_POS` / `XDIALOG_TEST_ACCENT` are honoured by test (debug) builds only.
+    pub fn prepare() {
+        // SAFETY: plain metrics queries.
+        let (sw, sh) = unsafe { (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)) };
+        std::env::set_var("XDIALOG_TEST_NO_ACTIVATE", "1");
+        // The theme's default accent instead of the machine's (the builder also forces Light).
+        std::env::set_var("XDIALOG_TEST_ACCENT", "none");
+        std::env::set_var("XDIALOG_TEST_POS", format!("{},{}", (sw - 640).max(0), (sh - 600).max(0)));
+    }
+
+    /// The Fluent look depends on the local Segoe UI Variable version (GitHub's Windows runners
+    /// don't ship it). References are compared only when its SHA-256 matches the one recorded
+    /// when they were seeded (`windows_fluent/FONT_SHA256`, written in seed mode).
+    pub fn references_apply(ref_dir: &Path, seeding: bool) -> bool {
+        let Ok(bytes) = std::fs::read(r"C:\Windows\Fonts\SegUIVar.ttf") else {
+            eprintln!("Segoe UI Variable is not installed: the windows_fluent references don't apply, skipping the comparison");
+            return false;
+        };
+        let hash = super::sha256::sha256_hex(&bytes);
+        let record = ref_dir.join("FONT_SHA256");
+        if seeding {
+            std::fs::create_dir_all(ref_dir).unwrap();
+            std::fs::write(&record, format!("{hash}\n")).unwrap();
+            return true;
+        }
+        let ok = std::fs::read_to_string(&record).map(|s| s.trim().to_owned()).ok().as_deref() == Some(hash.as_str());
+        if !ok {
+            eprintln!("Segoe UI Variable differs from the one the windows_fluent references were seeded with: skipping the comparison");
+        }
+        ok
+    }
+}
+
+#[cfg(all(windows, feature = "fluent-egui"))]
+#[path = "support/sha256.rs"]
+mod sha256;
 
 #[cfg(target_os = "linux")]
 mod capture {
@@ -404,7 +533,10 @@ mod capture {
 // --- Helpers ---
 
 fn platform_name() -> &'static str {
-    if cfg!(target_os = "windows") {
+    if cfg!(all(target_os = "windows", feature = "fluent-egui")) {
+        // The Fluent (egui) builder backend replaces Win32 TaskDialog.
+        "windows_fluent"
+    } else if cfg!(target_os = "windows") {
         "windows"
     } else if cfg!(target_os = "linux") {
         if std::env::var("WAYLAND_DISPLAY").is_ok() {
@@ -607,7 +739,19 @@ fn main() {
         return;
     }
 
-    XDialogBuilder::new().run(run_all_captures);
+    #[cfg(all(windows, feature = "fluent-egui"))]
+    capture::prepare();
+
+    let builder = XDialogBuilder::new();
+    // Same appearance on every machine (the Fluent look follows the system theme otherwise).
+    #[cfg(all(windows, feature = "fluent-egui"))]
+    let builder = builder.with_theme(XDialogTheme::Light);
+    builder.run(run_all_captures);
+
+    #[cfg(all(windows, feature = "fluent-egui"))]
+    if !capture::references_apply(&reference_dir(), is_seed_mode()) {
+        return;
+    }
     seed_or_compare("message_info");
     seed_or_compare("progress_0");
 }

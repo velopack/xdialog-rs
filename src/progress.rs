@@ -1,3 +1,4 @@
+use crate::channel::is_ui_thread;
 use crate::*;
 
 /// Shows a progress dialog with the specified options and returns a proxy object to control it.
@@ -8,6 +9,11 @@ use crate::*;
 /// This progress dialog has no buttons. On platforms which require a button to be present
 /// (Windows), a default button is shown. See [`show_progress_ex`] to customize the buttons,
 /// or [`show_progress_with_callback`] to also react when a button is clicked.
+///
+/// When called on the xdialog UI thread (from an egui or AppKit progress callback, or on the host
+/// thread in `winit-host` mode), this returns `Ok` immediately; if the window later fails to be created
+/// (for example `NoBackendAvailable`), the error is only logged and the proxy's methods have no
+/// effect.
 ///
 /// ### Example
 /// ```rust,no_run
@@ -59,6 +65,11 @@ pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
 ///
 /// This is useful to relabel the button that Windows always displays on a progress dialog (eg.
 /// to a localized "Hide"), or to offer a "Cancel" button on all platforms.
+///
+/// When called on the xdialog UI thread (from an egui or AppKit progress callback, or on the host
+/// thread in `winit-host` mode), this returns `Ok` immediately; if the window later fails to be created
+/// (for example `NoBackendAvailable`), the error is only logged and the proxy's methods have no
+/// effect.
 pub fn show_progress_ex(options: XDialogOptions) -> Result<ProgressDialogProxy, XDialogError> {
     show_progress_internal(options, None)
 }
@@ -77,6 +88,16 @@ pub fn show_progress_ex(options: XDialogOptions) -> Result<ProgressDialogProxy, 
 /// Note: the callback is never invoked in silent mode. Pair callbacks with a non-empty `buttons`
 /// list — with an empty list only Windows shows a (default) button and its index will not map to
 /// your `buttons` array.
+///
+/// On the egui backends and on macOS (AppKit) the callback runs on xdialog's UI thread: it may
+/// open another progress dialog (see below) but must not call a blocking function such as
+/// `show_message*`, which returns [`XDialogError::BlockingCallOnUiThread`] there. With Win32
+/// TaskDialog the callback runs on the dialog's own thread and may call any dialog function.
+///
+/// When called on the xdialog UI thread (from an egui or AppKit progress callback, or on the host
+/// thread in `winit-host` mode), this returns `Ok` immediately; if the window later fails to be created
+/// (for example `NoBackendAvailable`), the error is only logged and the proxy's methods have no
+/// effect.
 ///
 /// ### Example
 /// ```rust,no_run
@@ -120,6 +141,14 @@ fn show_progress_internal(options: XDialogOptions, on_button: Option<ProgressBut
 
     let (creation_sender, creation_receiver) = oneshot::channel();
     send_request(DialogMessageRequest::ShowProgressWindow(id, options, creation_sender, on_button))?;
+    if is_ui_thread() {
+        // Waiting here would deadlock the loop that creates the window. Requests
+        // are handled in order, so the proxy's later updates apply once the window exists; the
+        // backend's answer into the dropped receiver is harmless. Creation errors are logged by
+        // the backend.
+        drop(creation_receiver);
+        return Ok(ProgressDialogProxy { id, silent: false, owned: true });
+    }
     // Wait for creation confirmation, discard the dialog result receiver
     let _ = creation_receiver.recv().map_err(XDialogError::NoResult)??;
     Ok(ProgressDialogProxy { id, silent: false, owned: true })

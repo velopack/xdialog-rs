@@ -100,8 +100,27 @@ fn create_handler_instance() -> Retained<AnyObject> {
     unsafe { msg_send![cls, new] }
 }
 
+/// Marks the AppKit loop thread as an xdialog UI thread while the loop runs: button callbacks run
+/// on it, so a blocking `show_message*` there fails with `BlockingCallOnUiThread` instead of
+/// deadlocking, and `show_progress*` returns its proxy without waiting for the window.
+struct UiThreadMark;
+
+impl UiThreadMark {
+    fn set() -> Self {
+        crate::channel::mark_ui_thread(true);
+        UiThreadMark
+    }
+}
+
+impl Drop for UiThreadMark {
+    fn drop(&mut self) {
+        crate::channel::mark_ui_thread(false);
+    }
+}
+
 impl XDialogBackendImpl for AppKitBackend {
     fn run_loop(receiver: Receiver<DialogMessageRequest>, _theme: XDialogTheme) {
+        let _ui_thread = UiThreadMark::set();
         // Headless phase: do not touch AppKit until a dialog is actually requested.
         // Connecting to the window server registers the process with LaunchServices —
         // when the executable lives inside another app's bundle (e.g. an updater in

@@ -1,5 +1,6 @@
 use std::{sync::mpsc::channel, thread};
 
+#[allow(unused_imports)]
 use crate::backends::XDialogBackendImpl;
 use crate::channel::{send_request, ChannelHandler};
 use crate::model::*;
@@ -64,20 +65,33 @@ impl XDialogBuilder {
     /// separate thread.
     pub fn run_loop<T: Send + 'static>(self, main: fn() -> T) -> T {
         let (send_message, receive_message) = channel::<DialogMessageRequest>();
-        crate::channel::init_handler(Box::new(ChannelHandler { sender: send_message }));
+        let installed = crate::channel::init_handler(Box::new(ChannelHandler { sender: send_message }));
 
         let result = thread::spawn(move || {
             let result = main();
-            let _ = send_request(DialogMessageRequest::ExitEventLoop);
+            // Only our own backend is stopped: a handler installed earlier (`init_linux_direct`,
+            // `init_winit_host`, ...) belongs to someone else, and `ExitEventLoop` would close its
+            // dialogs (or start linux-direct's UI thread just to handle it).
+            if installed {
+                let _ = send_request(DialogMessageRequest::ExitEventLoop);
+            }
             result
         });
 
-        let backend_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            Self::run_default_backend(receive_message, self.theme);
-        }));
+        if installed {
+            let backend_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                                              Self::run_default_backend(receive_message, self.theme);
+                                                          }));
 
-        if let Err(e) = backend_result {
-            error!("xdialog: backend panicked: {:?}", e);
+            if let Err(e) = backend_result {
+                error!("xdialog: backend panicked: {:?}", e);
+            }
+        } else {
+            // A handler was already installed (init_winit_host / init_linux_direct /
+            // init_win32_direct ran first): requests go to that handler, so no builder backend is
+            // started here (and no `ExitEventLoop` is sent); just wait for `main`.
+            warn!("xdialog: a request handler is already installed; XDialogBuilder runs main without its own backend");
+            drop(receive_message);
         }
 
         match result.join() {
@@ -88,18 +102,46 @@ impl XDialogBuilder {
 }
 
 impl XDialogBuilder {
-    #[cfg(windows)]
     fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
-        crate::backends::win32::Win32Backend::run_loop(receiver, theme);
+        use crate::backends::select::{builder_backend, BackendKind};
+        match builder_backend() {
+            #[cfg(windows)]
+            BackendKind::Win32 => crate::backends::win32::Win32Backend::run_loop(receiver, theme),
+            #[cfg(target_os = "macos")]
+            BackendKind::AppKit => crate::backends::appkit::AppKitBackend::run_loop(receiver, theme),
+            #[cfg(all(xd_own_loop, xd_theme_linux))]
+            BackendKind::LinuxEgui => {
+                let theme_impl = crate::backends::linux_egui::LinuxTheme::new();
+                let result = crate::backends::egui_core::own_loop::run_builder(theme_impl, receiver, theme.clone());
+                Self::egui_fallback(result, theme);
+            }
+            #[cfg(all(xd_own_loop, xd_theme_fluent))]
+            BackendKind::FluentEgui => {
+                let theme_impl = crate::backends::fluent_egui::FluentTheme::new();
+                let result = crate::backends::egui_core::own_loop::run_builder(theme_impl, receiver, theme.clone());
+                Self::egui_fallback(result, theme);
+            }
+            BackendKind::None => {
+                let _ = theme;
+                crate::backends::drain_with_error(receiver, || crate::XDialogError::NoBackendAvailable);
+            }
+        }
     }
 
-    #[cfg(target_os = "macos")]
-    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
-        crate::backends::appkit::AppKitBackend::run_loop(receiver, theme);
-    }
-
-    #[cfg(target_os = "linux")]
-    fn run_default_backend(receiver: std::sync::mpsc::Receiver<DialogMessageRequest>, theme: XDialogTheme) {
-        crate::backends::skia::SkiaBackend::run_loop(receiver, theme);
+    /// The egui own loop could not be built (an `Err` or a panic inside `EventLoop::build`):
+    /// nothing has consumed the receiver yet, so fall back cleanly — Win32 on
+    /// Windows, `NoBackendAvailable` elsewhere.
+    #[cfg(xd_own_loop)]
+    fn egui_fallback(result: Result<(), crate::backends::egui_core::own_loop::BuildFailed>, theme: XDialogTheme) {
+        if let Err(failed) = result {
+            warn!("xdialog: egui backend unavailable ({}), falling back", failed.reason);
+            #[cfg(windows)]
+            crate::backends::win32::Win32Backend::run_loop(failed.receiver, theme);
+            #[cfg(not(windows))]
+            {
+                let _ = theme;
+                crate::backends::drain_with_error(failed.receiver, || crate::XDialogError::NoBackendAvailable);
+            }
+        }
     }
 }

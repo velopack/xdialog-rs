@@ -2,9 +2,15 @@
 /// xdialog functions directly without XDialogBuilder or run_loop.
 ///
 /// Run with: cargo run --example maccf_direct --features maccf-direct
-use std::thread::sleep;
-use std::time::Duration;
+#[cfg(target_os = "macos")]
+use std::{thread::sleep, time::Duration};
 
+#[cfg(not(target_os = "macos"))]
+fn main() {
+    eprintln!("This example only runs on macOS.");
+}
+
+#[cfg(target_os = "macos")]
 fn main() {
     xdialog::init_maccf_direct();
     // No XDialogBuilder needed - just call show functions directly.

@@ -1,6 +1,6 @@
 [package]
 name = "xdialog"
-version = "3.1.9"
+version = "4.0.0"
 edition = "2021"
 license = "MIT"
 description = "A small cross-platform native dialogs library."
@@ -10,18 +10,46 @@ keywords = ["dialog", "message-box", "messagebox", "cross-platform"]
 categories = ["graphics", "gui", "visualization"]
 
 [features]
-default = []
+default = ["builtin-winit"]
 win32-direct = []
 maccf-direct = ["dep:core-foundation", "dep:core-foundation-sys"]
-# Opt-in per-frame render/present timing (plus process CPU/RSS sampling) for the skia backend.
-# Pulls in `sysinfo` only when enabled — the default shipping crate is unaffected. Drives
-# `examples/skia_bench.rs`.
-skia-instrumentation = ["dep:sysinfo"]
+
+# xdialog may own a winit 0.30 event loop: the Linux XDialogBuilder backend, `linux-direct`, and
+# `fluent-egui`. Turn default features off (and enable `winit-host`) to build xdialog with no winit.
+# Cargo features can't be per-target and a renamed second `winit` dependency is rejected ("depends
+# on crate winit multiple times with different names"), so on Windows this also compiles winit
+# (never used, nothing linked from it, unless `fluent-egui` / `linux-egui` is on).
+builtin-winit = ["dep:winit"]
+# Windows: XDialogBuilder uses the Fluent (WinUI 3 look) egui backend instead of Win32 TaskDialog.
+# Linux: compiles the fluent theme too (dev only; selectable via XDIALOG_BACKEND=fluent). macOS: no-op.
+# NOT additive in behaviour: any crate in the graph enabling it switches the Windows builder backend.
+fluent-egui = ["builtin-winit", "_egui", "_fluent-theme"]
+# Compiles the Linux (egui) theme + own winit loop on Windows for development/testing.
+# On Linux this is always on (no-op). Does NOT change the Windows default (use XDIALOG_BACKEND=linux).
+linux-egui = ["builtin-winit", "_egui", "_linux-theme"]
+# `init_linux_direct()`: xdialog owns a persistent UI thread with its own winit 0.30 loop,
+# started lazily on the first dialog request.
+linux-direct = ["linux-egui"]
+# `xdialog::host` + `init_winit_host()`: integrate into the host application's own event loop
+# (any winit >= 0.29 via raw-window-handle 0.6, or no winit at all). Never uses xdialog's winit.
+# With `default-features = false` winit is not compiled at all (the "turn off built-in winit" mode).
+winit-host = ["_egui", "_linux-theme"]
+
+# ---- private (underscore = not part of the public contract) ----
+_egui = ["dep:egui", "dep:softbuffer", "dep:strength_reduce", "dep:skrifa", "dep:unicode-bidi", "dep:ahash"]
+_linux-theme = ["_egui"]
+_fluent-theme = ["_egui"]
+# Offscreen renderer, live input injection and introspection (`xdialog::__test`, doc(hidden)).
+# Implies the linux theme so that `--features _test-hooks` alone has a concrete Theme (no dead code).
+_test-hooks = ["_egui", "_linux-theme"]
 
 [dependencies]
 log = "0.4"
 oneshot = { version = "0.2", features = ["std"] }
 thiserror = "2.0"
+# Public dependency of `xdialog::host` (feature `winit-host`). Pure Rust, no dependencies; kept
+# non-optional so the macOS `host` stub and the Linux/Windows egui backends share one declaration.
+raw-window-handle = "0.6.2"
 
 # AppKit Backend
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -63,19 +91,19 @@ block2 = "0.6"
 core-foundation = { version = "0.10", optional = true }
 core-foundation-sys = { version = "0.8", optional = true }
 
-# Linux / Skia backend
+# Linux: egui backend (always compiled on Linux)
 [target.'cfg(target_os = "linux")'.dependencies]
-winit = "0.30"
-softbuffer = "0.4"
-tiny-skia = "0.12"
-cosmic-text = "0.19"
-enum-map = "=2.7.3"
-mina = "0.1"
-multiversion = "0.8.0"
+egui = { version = "0.36.2", default-features = false }
+softbuffer = "0.4.8"
+winit = { version = "0.30.13", optional = true }
 zbus = "5"
-sysinfo = { version = "0.39", optional = true, default-features = false, features = ["system"] }
+fontdb = "0.24"
+skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
+unicode-bidi = "0.3.18"
+strength_reduce = "0.2.4"
+ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"] }
 
-# Win32 Backend
+# Win32 Backend (+ optional egui backends: `fluent-egui`, `linux-egui`, `linux-direct`, `winit-host`)
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_System",
@@ -83,8 +111,22 @@ windows = { version = "0.62", features = [
     "Win32_UI_Controls",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_LibraryLoader",
+    "Win32_Graphics_Dwm",
+    "Win32_System_Registry",
+    "Win32_UI_HiDpi",
+    "Win32_Globalization",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_Xps",
+    "Win32_Graphics_Dwm",
 ] }
 widestring = "1.2"
+egui = { version = "0.36.2", default-features = false, optional = true }
+softbuffer = { version = "0.4.8", default-features = false, optional = true }
+winit = { version = "0.30.13", default-features = false, features = ["rwh_06"], optional = true }
+skrifa = { version = "0.44.0", default-features = false, features = ["std"], optional = true }
+unicode-bidi = { version = "0.3.18", optional = true }
+strength_reduce = { version = "0.2.4", optional = true }
+ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"], optional = true }
 
 [[example]]
 name = "win32_direct"
@@ -95,8 +137,17 @@ name = "maccf_direct"
 required-features = ["maccf-direct"]
 
 [[example]]
-name = "skia_bench"
-required-features = ["skia-instrumentation"]
+name = "linux_direct"
+required-features = ["linux-direct"]
+
+[[example]]
+name = "egui_gallery"
+path = "examples/egui_gallery/main.rs"
+required-features = ["_test-hooks", "fluent-egui", "linux-egui"]
+
+[[example]]
+name = "egui_live"
+required-features = ["_test-hooks", "fluent-egui", "linux-egui"]
 
 [[test]]
 name = "macos_ui"
@@ -106,10 +157,23 @@ harness = false
 name = "visual_regression"
 harness = false
 
-[[bench]]
-name = "convert"
+[[test]]
+name = "egui_offscreen"
+required-features = ["_test-hooks", "linux-egui"]
+
+[[test]]
+name = "egui_direct"
+required-features = ["linux-direct"]
+
+[[test]]
+name = "egui_direct_recreate"
 harness = false
-required-features = ["skia-instrumentation"]
+required-features = ["linux-direct"]
+
+[[bench]]
+name = "render"
+harness = false
+required-features = ["_test-hooks", "linux-egui"]
 
 [dev-dependencies]
 ntest = "=0.9.5"
@@ -122,4 +186,11 @@ windows = { version = "=0.62.2", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
+    "Win32_Storage_Xps",
+    "Win32_Graphics_Dwm",
 ] }
+
+[package.metadata.docs.rs]
+features = ["linux-direct", "winit-host"]
+targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc", "aarch64-apple-darwin"]
+rustdoc-args = ["--cfg", "docsrs"]
