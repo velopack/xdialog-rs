@@ -38,7 +38,9 @@ jobs:
         run: cargo update --workspace
 
       - name: Bump version in README
-        run: sed -i 's/^xdialog = ".*"/xdialog = "${{ inputs.version }}"/' README.md
+        # Only the install snippet (`xdialog = "x.y.z"`); the other README examples use the
+        # `xdialog = { version = "4" }` form and keep the major version.
+        run: sed -i '0,/^xdialog = ".*"/s//xdialog = "${{ inputs.version }}"/' README.md
 
       - name: Verify version was updated
         run: |

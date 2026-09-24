@@ -13,8 +13,16 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   LINUX_APT_DEPS: libx11-dev libxext-dev libxcursor-dev libxrender-dev libxfixes-dev libpipewire-0.3-dev libclang-dev libgbm-dev libegl-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libdbus-1-dev
+  # Windows test windows never take focus and open off every monitor (honoured by test builds).
+  XDIALOG_TEST_NO_ACTIVATE: "1"
+  XDIALOG_TEST_POS: offscreen
 
 jobs:
+  # Build + unit/integration tests for every supported feature set.
+  #   default                               Win32 TaskDialog / AppKit / Linux egui (own winit loop)
+  #   fluent-egui                           Windows builder -> Fluent (egui) backend
+  #   linux-direct                          init_linux_direct(): own winit loop on an xdialog thread
+  #   --no-default-features winit-host      xdialog::host, no winit compiled at all
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -25,11 +33,35 @@ jobs:
           - os: windows-latest
             name: Windows
 
+          - os: windows-latest
+            name: Windows (fluent-egui)
+            cargo-args: --features fluent-egui
+
+          - os: windows-latest
+            name: Windows (linux-direct)
+            cargo-args: --features linux-direct,_test-hooks
+
+          - os: windows-latest
+            name: Windows (winit-host, no default features)
+            cargo-args: --no-default-features --features winit-host
+
           - os: ubuntu-latest
             name: Linux
 
+          - os: ubuntu-latest
+            name: Linux (linux-direct, winit-host)
+            cargo-args: --features linux-direct,winit-host,_test-hooks
+
+          - os: ubuntu-latest
+            name: Linux (winit-host, no default features)
+            cargo-args: --no-default-features --features winit-host
+
           - os: macos-latest
             name: macOS
+
+          - os: macos-latest
+            name: macOS (winit-host stub)
+            cargo-args: --features winit-host
 
     steps:
       - uses: actions/checkout@v7
@@ -59,6 +91,50 @@ jobs:
       - name: Test
         run: cargo test --locked --lib --tests ${{ matrix.cargo-args }}
 
+  # Deterministic offscreen goldens of both egui themes (tests/visual_references/egui/). The
+  # Linux theme uses its bundled font and runs everywhere; the Fluent goldens are local-only and
+  # skip themselves unless the runner's Segoe UI Variable matches FONT_SHA256.
+  egui-offscreen:
+    name: egui offscreen goldens (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: ubuntu-latest
+            name: Linux
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.LINUX_APT_DEPS }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: egui-offscreen-${{ matrix.name }}
+
+      - name: Offscreen goldens
+        run: cargo test --locked --release --features _test-hooks,linux-egui,fluent-egui --test egui_offscreen
+
+      - name: Gallery (renders every variant, checks the colour probes)
+        run: cargo run --locked --release --example egui_gallery --features _test-hooks,linux-egui,fluent-egui -- --theme linux --out target/egui_gallery --strict
+
+      - name: Upload renders on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: egui-offscreen-${{ matrix.name }}
+          path: |
+            tests/visual_output/
+            target/egui_gallery/
+
   clippy:
     name: Clippy (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -69,11 +145,33 @@ jobs:
           - os: windows-latest
             name: Windows
 
+          - os: windows-latest
+            name: Windows (all features)
+            cargo-args: --all-features
+
+          - os: windows-latest
+            name: Windows (winit-host, no default features)
+            cargo-args: --no-default-features --features winit-host
+
           - os: ubuntu-latest
             name: Linux
 
+          - os: ubuntu-latest
+            name: Linux (all features)
+            cargo-args: --all-features
+
+          - os: ubuntu-latest
+            name: Linux (winit-host, no default features)
+            cargo-args: --no-default-features --features winit-host
+
           - os: macos-latest
             name: macOS
+
+          # Not --all-features: the egui test/bench/gallery targets need the Linux/Windows-only
+          # `xdialog::__test` hooks. On macOS the egui features are no-ops and `winit-host` is a stub.
+          - os: macos-latest
+            name: macOS (winit-host stub, maccf-direct)
+            cargo-args: --features winit-host,maccf-direct
 
     steps:
       - uses: actions/checkout@v7
@@ -125,6 +223,72 @@ jobs:
       - name: Build
         run: cargo build --locked --features maccf-direct
 
+  # examples/winit_host: a separate package that hosts xdialog (default-features = false,
+  # features = ["winit-host"]) in a winit 0.29 event loop. Proves that xdialog's winit 0.30 never
+  # leaks into a host graph.
+  winit-host-example:
+    name: winit-host example (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: ubuntu-latest
+            name: Linux
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ env.LINUX_APT_DEPS }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: winit-host-${{ matrix.name }}
+          workspaces: |
+            . -> target
+            examples/winit_host -> target
+
+      - name: No winit 0.30 in the example, no winit at all in xdialog --no-default-features --features winit-host
+        shell: bash
+        run: |
+          if cargo tree --locked --manifest-path examples/winit_host/Cargo.toml -e normal --prefix none | grep -E '^winit v0\.30'; then
+            echo "::error::examples/winit_host depends on winit 0.30"; exit 1
+          fi
+          if cargo tree --locked -e normal --no-default-features --features winit-host --prefix none | grep -E '^winit v'; then
+            echo "::error::xdialog --no-default-features --features winit-host depends on winit"; exit 1
+          fi
+
+      - name: Clippy
+        run: cargo clippy --locked --manifest-path examples/winit_host/Cargo.toml --all-targets -- -D warnings
+
+      # Linux: X11 softbuffer surfaces on the host's display connection, shutdown ordering.
+      - name: Start virtual display
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb
+          Xvfb :99 -screen 0 1024x768x24 &
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+
+      - name: Host protocol test (real winit 0.29 loop)
+        run: cargo test --locked --manifest-path examples/winit_host/Cargo.toml
+
+      - name: Scripted self-test (injected input)
+        if: runner.os == 'Windows'
+        run: cargo run --locked --manifest-path examples/winit_host/Cargo.toml --features test-hooks -- --selftest
+
+      - name: Check (Linux)
+        if: runner.os == 'Linux'
+        run: cargo check --locked --manifest-path examples/winit_host/Cargo.toml --all-targets
+
   doctest:
     name: Doc Tests
     runs-on: ubuntu-latest
@@ -143,7 +307,12 @@ jobs:
           key: doctest
 
       - name: Run doc tests
-        run: cargo test --locked --doc
+        run: cargo test --locked --doc --features linux-direct,winit-host
+
+      - name: Rustdoc (no warnings)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --no-deps --features linux-direct,winit-host
 
   headless-build:
     name: Headless Build
@@ -210,6 +379,11 @@ jobs:
   visual-regression:
     name: Visual Regression (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
+    # TODO(4.0): the linux/ and linux_wayland/ references were captured from the removed skia
+    # renderer and must be re-seeded from the egui Linux backend (download this job's
+    # "visual-regression-output-*" artifact, or run tests/image_seed.sh on Linux). Until then a
+    # Linux failure doesn't fail the workflow.
+    continue-on-error: ${{ matrix.reseed == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -217,15 +391,23 @@ jobs:
           - os: windows-latest
             name: Windows
 
+          # Local-only references: skipped unless Segoe UI Variable matches FONT_SHA256 (GitHub's
+          # Windows images don't ship it), but the dialogs are still shown and captured.
+          - os: windows-latest
+            name: Windows Fluent
+            cargo-args: --features fluent-egui
+
           - os: macos-26
             name: macOS
 
           - os: ubuntu-latest
             name: Linux
+            reseed: true
 
           - os: ubuntu-latest
             name: Linux Wayland
             wayland: true
+            reseed: true
 
     steps:
       - uses: actions/checkout@v7
@@ -277,6 +459,8 @@ jobs:
       - name: Run visual regression tests
         env:
           XDIALOG_VISUAL_TEST: "1"
+          # The visual test positions its windows itself (the TaskDialog path captures the screen).
+          XDIALOG_TEST_POS: ""
         run: cargo test --locked ${{ matrix.cargo-args }} --test visual_regression
 
       - name: Upload screenshots on failure
@@ -286,8 +470,10 @@ jobs:
           name: visual-regression-output-${{ matrix.name }}
           path: tests/visual_output/
 
-  skia-bench:
-    name: Skia Bench
+  # Software-rendering performance: one offscreen frame per case (static, hover fade,
+  # indeterminate progress, 2x HiDPI, construction) for the Linux theme.
+  egui-bench:
+    name: egui Bench
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -301,32 +487,10 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: skia-bench
+          key: egui-bench
 
-      - name: Start virtual display (X11)
-        run: |
-          sudo apt-get install -y xvfb openbox
-          Xvfb :99 -screen 0 1280x1024x24 &
-          sleep 1
-          DISPLAY=:99 openbox &
-          sleep 2
-          echo "DISPLAY=:99" >> $GITHUB_ENV
-          # Verify window manager is running
-          DISPLAY=:99 xprop -root _NET_CLIENT_LIST_STACKING || echo "Warning: WM may not be ready"
-
-      - name: Build benchmark
-        run: cargo build --locked --features skia-instrumentation --example skia_bench
-
-      - name: Run benchmark (capped 60fps)
-        env:
-          XDIALOG_BENCH_DURATION_SECS: "30"
-        run: cargo run --locked --features skia-instrumentation --example skia_bench
-
-      - name: Run benchmark (uncapped)
-        env:
-          XDIALOG_BENCH_DURATION_SECS: "30"
-          XDIALOG_BENCH_UNCAPPED: "1"
-        run: cargo run --locked --features skia-instrumentation --example skia_bench
+      - name: Run benchmark
+        run: cargo bench --locked --bench render --features _test-hooks,linux-egui -- --quick
 
   supply-chain:
     name: Supply Chain

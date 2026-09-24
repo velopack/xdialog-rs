@@ -2,6 +2,12 @@
 /// xdialog functions directly without XDialogBuilder or run_loop.
 ///
 /// Run with: cargo run --example win32_direct --features win32-direct
+#[cfg(not(windows))]
+fn main() {
+    eprintln!("This example only runs on Windows.");
+}
+
+#[cfg(windows)]
 fn main() {
     xdialog::init_win32_direct();
     // No XDialogBuilder needed - just call show functions directly.
