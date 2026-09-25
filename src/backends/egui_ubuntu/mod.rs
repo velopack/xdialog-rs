@@ -18,7 +18,7 @@ use egui::{Align, Event, Frame, Id, Layout, Rect, Sense, Ui, UiBuilder, Vec2};
 
 use crate::backends::egui_core::a11y;
 use crate::backends::egui_core::appearance::Appearance;
-use crate::backends::egui_core::fonts::bundled;
+use crate::backends::egui_core::fonts::ui_fonts;
 use crate::backends::egui_core::text::{self, TextBlock, TextBlockWidget, TextStyle};
 use crate::backends::egui_core::theme::*;
 
@@ -91,7 +91,7 @@ impl Theme for UbuntuTheme {
     }
 
     fn fonts(&self) -> ThemeFonts {
-        ThemeFonts::new(bundled::UBUNTU_REGULAR, bundled::UBUNTU_BOLD)
+        ui_fonts()
     }
 
     fn configure_style(&self, style: &mut egui::Style) {

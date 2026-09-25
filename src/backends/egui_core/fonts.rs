@@ -121,12 +121,49 @@ pub(crate) fn font_definitions(fonts: &ThemeFonts, fallbacks: &[Fallback]) -> eg
     defs
 }
 
-/// Fonts bundled with the crate (the Ubuntu theme's faces and the Fluent theme's last resort).
+/// Fonts bundled with the crate (see [`ui_fonts`]). Not on Windows / macOS (about 680 KiB), except
+/// in test builds, so the Ubuntu goldens render the same on every OS.
+#[cfg(any(not(any(windows, target_os = "macos")), test, feature = "_test-hooks"))]
 pub(crate) mod bundled {
     use super::FaceRef;
 
     pub(crate) static UBUNTU_REGULAR: FaceRef = FaceRef::new(include_bytes!("fonts/Ubuntu-Regular.ttf"), 0);
     pub(crate) static UBUNTU_BOLD: FaceRef = FaceRef::new(include_bytes!("fonts/Ubuntu-Bold.ttf"), 0);
+}
+
+/// The Ubuntu theme's faces, also the Fluent theme's last resort: the bundled Ubuntu faces where
+/// they are bundled, else the platform's stock sans (Windows: Segoe UI, macOS: SF). Panics when no
+/// stock face loads (a caught dialog failure; `Auto` on Windows then falls back to Win32).
+pub(crate) fn ui_fonts() -> ThemeFonts {
+    #[cfg(any(not(any(windows, target_os = "macos")), test, feature = "_test-hooks"))]
+    return ThemeFonts::new(bundled::UBUNTU_REGULAR, bundled::UBUNTU_BOLD);
+    #[cfg(not(any(not(any(windows, target_os = "macos")), test, feature = "_test-hooks")))]
+    {
+        static FONTS: OnceLock<Option<ThemeFonts>> = OnceLock::new();
+        FONTS.get_or_init(|| system_ui_fonts(FontRegistry::global())).clone().expect("xdialog: no usable system UI font")
+    }
+}
+
+/// The platform's stock sans, regular + bold (see [`ui_fonts`]). `None` elsewhere or when no
+/// candidate validates.
+#[cfg_attr(any(not(any(windows, target_os = "macos")), feature = "_test-hooks"), allow(dead_code))] // bundled faces used instead
+fn system_ui_fonts(reg: &FontRegistry) -> Option<ThemeFonts> {
+    #[cfg(target_os = "macos")]
+    if let Some(face) = reg.load_face(Path::new("/System/Library/Fonts/SFNS.ttf"), 0) {
+        let at = |w: f32| ThemeFace { face, coords: VariationCoords::new([(b"wght", w)]) };
+        return Some(ThemeFonts { regular: at(400.0), bold: at(700.0) });
+    }
+    let pairs: &[(&str, &str)] = if cfg!(windows) {
+        &[("segoeui.ttf", "segoeuib.ttf"), ("arial.ttf", "arialbd.ttf"), ("tahoma.ttf", "tahomabd.ttf")]
+    } else if cfg!(target_os = "macos") {
+        &[("/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf"),
+          ("/Library/Fonts/Arial.ttf", "/Library/Fonts/Arial Bold.ttf")]
+    } else {
+        &[]
+    };
+    // Windows: file names in the fonts directory; macOS: absolute paths.
+    let path = |f: &str| windows_fonts_dir().map_or_else(|| PathBuf::from(f), |d| d.join(f));
+    pairs.iter().find_map(|(r, b)| Some(ThemeFonts::new(reg.load_face(&path(r), 0)?, reg.load_face(&path(b), 0)?)))
 }
 
 /// A fallback face registered process-wide. `name` is the egui font-data key.
@@ -574,6 +611,13 @@ mod tests {
 
     fn ubuntu() -> ThemeFonts {
         ThemeFonts::new(bundled::UBUNTU_REGULAR, bundled::UBUNTU_BOLD)
+    }
+
+    #[test]
+    #[cfg(any(windows, target_os = "macos"))]
+    fn system_ui_fonts_load() {
+        let fonts = system_ui_fonts(FontRegistry::global()).expect("a stock system face");
+        assert!(fonts.regular.face.covers('A') && fonts.bold.face.covers('A'));
     }
 
     #[test]

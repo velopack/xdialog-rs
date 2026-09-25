@@ -8,7 +8,7 @@
 //! Fonts: WinUI resolves `XamlAutoFontFamily` to **Segoe UI Variable** (`SegUIVar.ttf`, axes
 //! `wght` and `opsz`): body/buttons `wght 400`, the 20 px SemiBold title `wght 600`, each with the
 //! automatic optical size, i.e. the same bytes with different coordinates. Fallbacks: `segoeui.ttf`
-//! + `seguisb.ttf` (Windows 10), then the bundled Ubuntu Regular/Bold (other platforms).
+//! + `seguisb.ttf` (Windows 10), then [`ui_fonts`] (other platforms).
 
 use std::sync::OnceLock;
 
@@ -17,7 +17,7 @@ use egui::Color32;
 
 use crate::backends::egui_core::appearance::Appearance;
 use crate::backends::egui_core::color::{argb, rgb};
-use crate::backends::egui_core::fonts::{bundled, FontRegistry, ThemeFace, ThemeFonts};
+use crate::backends::egui_core::fonts::{ui_fonts, FontRegistry, ThemeFace, ThemeFonts};
 
 /// Windows 11 default (blue) accent palette `[L3, L2, L1, A, D1, D2, D3]`: the fallback when the
 /// system provides no accent.
@@ -179,7 +179,7 @@ pub(crate) fn theme_fonts(reg: &FontRegistry) -> ThemeFonts {
              }
              match (reg.windows_font("segoeui.ttf", 0), reg.windows_font("seguisb.ttf", 0)) {
                  (Some(regular), Some(semibold)) => ThemeFonts::new(regular, semibold),
-                 _ => ThemeFonts::new(bundled::UBUNTU_REGULAR, bundled::UBUNTU_BOLD),
+                 _ => ui_fonts(),
              }
          })
          .clone()
