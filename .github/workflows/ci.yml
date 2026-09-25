@@ -17,7 +17,7 @@ env:
   XDIALOG_TEST_POS: offscreen
 
 jobs:
-  # On every OS: clippy with the default and with all features, then every test with all features.
+  # On every OS: clippy and every test, with the default and with all features.
   #   default        XDialogBuilder, backend chosen at runtime (Auto: Fluent/Win32, Ubuntu, AppKit)
   #   all features   + winit-host (xdialog::host), win32-direct / maccf-direct, and _test-hooks:
   #                  the offscreen goldens of the egui themes (tests/egui_offscreen.rs) and the
@@ -65,7 +65,10 @@ jobs:
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Test
-        run: cargo test --locked --lib --tests --all-features
+        shell: bash
+        run: |
+          cargo test --locked --lib --tests
+          cargo test --locked --lib --tests --all-features
 
       - name: Doc tests and rustdoc (no warnings)
         if: runner.os == 'Linux'
