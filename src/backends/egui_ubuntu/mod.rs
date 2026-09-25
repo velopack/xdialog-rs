@@ -16,6 +16,7 @@
 
 use egui::{Align, Event, Frame, Id, Layout, Rect, Sense, Ui, UiBuilder, Vec2};
 
+use crate::backends::egui_core::a11y;
 use crate::backends::egui_core::appearance::Appearance;
 use crate::backends::egui_core::fonts::bundled;
 use crate::backends::egui_core::text::{self, TextBlock, TextBlockWidget, TextStyle};
@@ -113,7 +114,8 @@ impl Theme for UbuntuTheme {
                             Frame::NONE.inner_margin(MARGIN).show(ui, |ui| {
                                            ui.horizontal_top(|ui| {
                                                  if has_icon {
-                                                     let (r, _) = ui.allocate_exact_size(Vec2::splat(ICON_SIZE), Sense::hover());
+                                                     let (r, response) = ui.allocate_exact_size(Vec2::splat(ICON_SIZE), Sense::hover());
+                                                     a11y::describe_icon(&response, view.icon);
                                                      widgets::draw_icon(ui.painter(), view.icon, r);
                                                      ui.add_space(MARGIN);
                                                  }

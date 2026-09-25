@@ -32,7 +32,9 @@ thiserror = "2.0"
 # (x11, wayland, rwh_06); their platform deps are target-gated inside those crates, so one entry
 # each serves every OS.
 egui = { version = "0.36.2", default-features = false }
-egui-winit = { version = "0.36.2", default-features = false }
+# `accesskit`: every dialog window gets an AccessKit adapter (UIA / AT-SPI / NSAccessibility).
+# `x11` / `wayland`: egui-winit's Linux display-server code paths (target-gated: no-op elsewhere).
+egui-winit = { version = "0.36.2", default-features = false, features = ["accesskit", "x11", "wayland"] }
 winit = "0.30.13"
 softbuffer = "0.4.8"
 skrifa = { version = "0.44.0", default-features = false, features = ["std"] }

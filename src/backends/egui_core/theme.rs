@@ -302,6 +302,8 @@ impl ButtonInteraction {
     /// with [`button_id`], moves focus to the button on a primary press, and derives the states.
     pub(crate) fn interact(ui: &egui::Ui, rect: Rect, index: usize, view: &DialogView<'_>) -> Self {
         let response = ui.interact(rect, button_id(index), Sense::click());
+        let label = view.buttons.get(index).map_or("", String::as_str);
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
         let pointer_down = response.is_pointer_button_down_on();
         let contains_pointer = response.contains_pointer();
         let activated = response.clicked() && contains_pointer;

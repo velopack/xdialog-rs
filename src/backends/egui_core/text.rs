@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use egui::epaint::text::{LayoutJob, TextFormat};
-use egui::{Color32, FontFamily, FontId, Galley, Painter, Pos2, Response, Sense, Ui, Vec2, Widget};
+use egui::{Color32, FontFamily, FontId, Galley, Painter, Pos2, Response, Sense, Ui, Vec2, Widget, WidgetInfo, WidgetType};
 
 use super::bidi;
 
@@ -61,6 +61,8 @@ pub(crate) struct TextBlock {
     pub size: Vec2,
     /// The text starts right-to-left (the block is right-aligned by [`TextBlockWidget`]).
     rtl: bool,
+    /// The source text in logical order, unwrapped and unelided (what assistive technology reads).
+    text: String,
 }
 
 impl TextBlock {
@@ -86,6 +88,7 @@ impl Widget for TextBlockWidget<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let size = Vec2::new(self.width, self.block.size.y);
         let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+        response.widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, &self.block.text));
         if ui.is_rect_visible(rect) {
             let x = if self.block.rtl { rect.right() - self.block.size.x } else { rect.left() };
             self.block.paint(ui.painter(), Pos2::new(x, rect.top()), self.color);
@@ -127,7 +130,7 @@ pub(crate) fn layout(ctx: &egui::Context, text: &str, style: &TextStyle, wrap_wi
     };
     let galley = ctx.fonts_mut(|f| f.layout_job(job));
     let size = if text.is_empty() { Vec2::ZERO } else { Vec2::new(text_width(&galley), galley.rect.height()) };
-    TextBlock { galley, size, rtl: needs_bidi && bidi::paragraph_is_rtl(text) }
+    TextBlock { galley, size, rtl: needs_bidi && bidi::paragraph_is_rtl(text), text: text.to_owned() }
 }
 
 /// Width of one unwrapped line.

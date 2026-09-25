@@ -155,8 +155,6 @@ function.
 
 ## Limitations of the egui backends
 
-- **Accessibility:** the egui backends expose nothing to screen readers yet. Win32 TaskDialog and
-  AppKit are accessible: choose `XDialogBackend::Win32` on Windows if you need that.
 - **Emoji** are drawn as monochrome outlines on Windows (Segoe UI Emoji). On Linux only outline
   emoji fonts can be used; most distributions ship only the bitmap *Noto Color Emoji*, so emoji
   show as empty boxes there. Colour emoji should return with egui 0.37.

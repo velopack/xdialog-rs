@@ -3,6 +3,7 @@
 //! the keyboard policy. Look, layout and widgets live in the themes, which build each dialog from
 //! egui layout and their own `egui::Widget`s (egui does hover, press and focus).
 
+pub(crate) mod a11y;
 pub(crate) mod anim;
 pub(crate) mod appearance;
 #[cfg(target_os = "linux")]

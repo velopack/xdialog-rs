@@ -12,8 +12,7 @@ behaviour.
 
 - **Windows 10 and later now show the Fluent look by default** instead of Win32 TaskDialog
   (falling back to TaskDialog if the egui backend fails). Older Windows keep TaskDialog. Use
-  `XDialogBuilder::new().with_backend(XDialogBackend::Win32)` for the previous behaviour, e.g. if
-  you need screen reader support.
+  `XDialogBuilder::new().with_backend(XDialogBackend::Win32)` for the previous behaviour.
 - **Rust 1.95** is now required on every platform (egui 0.36's MSRV): egui, winit 0.30 and
   softbuffer are always compiled.
 - **One winit loop per process:** with an egui backend (the default on Windows 10+ and Linux)
@@ -68,6 +67,10 @@ behaviour.
 - System font fallback for characters the bundled font lacks, including the family's bold face
   for headings, placed on the primary font's baseline. Linux scans fonts with fontdb on a
   background thread; Windows uses a known list of system fonts ordered by the user's locale.
+- Accessibility for the egui backends (AccessKit): screen readers see each dialog (title, heading
+  and body), its icon, texts, buttons and progress bar (value in percent), follow the keyboard
+  focus and can press the buttons (UI Automation on Windows, AT-SPI on Linux, NSAccessibility on
+  macOS). Always on; the tree is built on demand, when an assistive technology asks for it.
 
 ### Changed
 
@@ -84,8 +87,8 @@ behaviour.
 
 ### Known limitations
 
-See [Limitations of the egui backends](README.md#limitations-of-the-egui-backends) (accessibility,
-emoji, complex scripts). 3.x drew colour emoji on Linux; text rendering differs slightly from 3.x
+See [Limitations of the egui backends](README.md#limitations-of-the-egui-backends) (emoji,
+complex scripts). 3.x drew colour emoji on Linux; text rendering differs slightly from 3.x
 (egui's rasterizer instead of cosmic-text).
 
 ### Tests and CI

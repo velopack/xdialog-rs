@@ -6,6 +6,7 @@
 use egui::{Id, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2, Widget};
 
 use super::tokens::{ButtonColors, FluentTokens};
+use crate::backends::egui_core::a11y;
 use crate::backends::egui_core::anim::{self, Easing, Transition};
 use crate::backends::egui_core::text::TextBlock;
 use crate::backends::egui_core::theme::{unsnapped_rect, ButtonInteraction, DialogView, ProgressView};
@@ -116,6 +117,7 @@ pub(crate) struct FluentProgress<'a> {
 impl Widget for FluentProgress<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let (r, response) = ui.allocate_exact_size(Vec2::new(ui.available_width(), PROGRESS_H), Sense::hover());
+        a11y::describe_progress(&response, self.progress);
         let ctx = ui.ctx().clone();
         let id = Id::new("fluent.progress");
         let painter = ui.painter_at(r);
@@ -191,6 +193,7 @@ const X_HALF: f32 = 4.95;
 impl Widget for FluentIcon<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let (rect, response) = ui.allocate_exact_size(Vec2::splat(ICON_SIZE), Sense::hover());
+        a11y::describe_icon(&response, self.icon);
         let (painter, tk) = (ui.painter(), self.tk);
         let s = rect.width() / ICON_SIZE;
         let c = rect.min + Vec2::new(15.0, 17.0) * s;

@@ -72,7 +72,7 @@ impl Inbox {
     }
 
     /// Call the waker unless a wake is already outstanding.
-    fn wake(&self) {
+    pub(crate) fn wake(&self) {
         if !self.wake_pending.swap(true, Ordering::SeqCst) {
             (self.waker.lock().unwrap_or_else(|e| e.into_inner()))();
         }

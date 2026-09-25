@@ -1,12 +1,14 @@
 //! The egui runtime, shared by builder mode (`event_loop.rs`, xdialog owns the winit loop) and
 //! host mode (`xdialog::host`, the application owns it): requests, dialog windows, egui-winit
-//! input, repaint deadlines, the Win32 TaskDialog routing/fallback and panic isolation.
+//! input, AccessKit adapters (`a11y.rs`), repaint deadlines, the Win32 TaskDialog routing/fallback
+//! and panic isolation.
 //!
 //! Window creation (`show`):
 //! 1. `Dialog::new` builds the egui context (fonts before any pass) and runs the measure pass at
 //!    the primary monitor's scale.
 //! 2. An INVISIBLE window is created at exactly the measured (logical) size, the presenter and the
-//!    egui-winit input state are attached (a different real scale re-requests the size).
+//!    egui-winit input state (with the AccessKit adapter, which must exist before the window is
+//!    first shown) are attached (a different real scale re-requests the size).
 //! 3. `set_visible(true)`, then the first frame is rendered and presented immediately.
 //! 4. `reply.opened()`: the dialog's result goes to the caller from now on.
 //!
@@ -31,6 +33,7 @@ use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, OwnedDisplayHandle};
 use winit::window::{Window, WindowButtons, WindowId};
 
+use super::a11y::{A11yEvent, A11yQueue};
 use super::appearance::{resolve_appearance, test_env_enabled};
 use super::clock::DialogClock;
 use super::dialog::{Dialog, DialogContent, DialogParams, MAX_TEXTURE_SIDE};
@@ -54,7 +57,8 @@ struct DialogWindow {
     dialog: Dialog,
     /// `Rc`: the softbuffer surface holds a clone.
     window: Rc<Window>,
-    /// Translates winit events into `egui::Event`s (nothing else of egui-winit is used).
+    /// Translates winit events into `egui::Event`s and owns the window's AccessKit adapter
+    /// (`input.accesskit`; its tree updates are sent by `redraw`).
     input: egui_winit::State,
     /// Cached monitor refresh period and when it was read (re-read about once a second, so a
     /// window dragged to another monitor picks up its rate).
@@ -77,6 +81,8 @@ pub(crate) struct Runtime {
     xtheme: XDialogTheme,
     inbox: Arc<Inbox>,
     rx: Receiver<DialogMessageRequest>,
+    /// AccessKit adapter requests of every dialog window (wake the loop through `inbox`).
+    a11y: A11yQueue,
     dialogs: BTreeMap<usize, DialogWindow>,
     /// Windows of closed dialogs, until their `Destroyed` arrives.
     retired: Vec<WindowId>,
@@ -105,6 +111,7 @@ impl Runtime {
                      #[cfg(windows)]
                      win32: None,
                      xtheme,
+                     a11y: A11yQueue::new(inbox.clone()),
                      inbox,
                      rx,
                      dialogs: BTreeMap::new(),
@@ -134,6 +141,9 @@ impl Runtime {
         }
         if refresh {
             self.guarded(None, "refreshing fonts/appearance", Self::refresh);
+        }
+        for (id, ev) in self.a11y.take() {
+            self.guarded(Some(id), "handling an accessibility request", |rt| rt.a11y_event(id, ev));
         }
 
         let now = Instant::now();
@@ -173,7 +183,13 @@ impl Runtime {
         let Some(w) = self.dialogs.get_mut(&key) else { return };
         match ev {
             WindowEvent::RedrawRequested => w.redraw(),
-            WindowEvent::Resized(s) => w.dialog.resized([s.width, s.height]),
+            WindowEvent::Resized(s) => {
+                // The window bounds AT-SPI reports (egui-winit never sees this event).
+                if let Some(a) = w.input.accesskit.as_mut() {
+                    a.process_event(&w.window, ev);
+                }
+                w.dialog.resized([s.width, s.height]);
+            }
             // winit keeps the logical size itself; the following `Resized` has the new size.
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => w.dialog.scale_changed(*scale_factor as f32),
             WindowEvent::CloseRequested => w.dialog.finish(XDialogResult::WindowClosed),
@@ -208,6 +224,17 @@ impl Runtime {
             }
         }
         self.after(key);
+    }
+
+    /// A request from dialog `id`'s AccessKit adapter (ignored once the dialog is gone).
+    fn a11y_event(&mut self, id: usize, ev: A11yEvent) {
+        let Some(w) = self.dialogs.get_mut(&id) else { return };
+        match ev {
+            A11yEvent::Activated => w.dialog.set_assistive_tech(true),
+            A11yEvent::Deactivated => w.dialog.set_assistive_tech(false),
+            A11yEvent::Action(req) => w.dialog.handle_events([egui::Event::AccessKitActionRequest(req)]),
+        }
+        self.after(id);
     }
 
     fn handle_request(&mut self, el: &ActiveEventLoop, msg: DialogMessageRequest) {
@@ -357,7 +384,9 @@ impl Runtime {
 
         let presenter = self.presenter(el, &window)?;
         let scale = window.scale_factor() as f32;
-        let input = egui_winit::State::new(dialog.ctx().clone(), ViewportId::ROOT, el, Some(scale), None, Some(MAX_TEXTURE_SIDE));
+        let mut input = egui_winit::State::new(dialog.ctx().clone(), ViewportId::ROOT, el, Some(scale), None, Some(MAX_TEXTURE_SIDE));
+        // Before the window is first shown (AccessKit requires it).
+        input.accesskit = Some(self.a11y.adapter(el, &window, id));
         let s = window.inner_size();
         dialog.attach(Box::new(presenter), scale, [s.width, s.height]);
         window.set_visible(true);
@@ -475,6 +504,14 @@ impl DialogWindow {
         self.dialog.schedule_mut().set_monitor_period(period);
         if let Err(e) = self.dialog.frame() {
             warn!("xdialog: present failed: {e}");
+        }
+        self.update_accesskit();
+    }
+
+    /// Send the dialog's latest AccessKit tree (if any) to the window's adapter.
+    fn update_accesskit(&mut self) {
+        if let (Some(update), Some(adapter)) = (self.dialog.take_accesskit_update(), self.input.accesskit.as_mut()) {
+            adapter.update_if_active(|| update);
         }
     }
 

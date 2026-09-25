@@ -127,10 +127,16 @@ impl KeyboardState {
     /// `wrap`, focus stays put at an end. Focus becomes visible and a held Space is cancelled.
     fn step(&mut self, ctx: &egui::Context, order: &[usize], cur: Option<usize>, dir: isize, wrap: bool) {
         if let Some(b) = step(order, cur, dir, wrap) {
-            ctx.memory_mut(|m| m.request_focus(button_id(b)));
-            self.focus_visible = true;
-            self.space_down = None;
+            self.focus(ctx, b);
         }
+    }
+
+    /// Move focus to button `b` as keyboard navigation does (also for assistive technology focus
+    /// requests): focus becomes visible and a held Space is cancelled.
+    pub(crate) fn focus(&mut self, ctx: &egui::Context, b: usize) {
+        ctx.memory_mut(|m| m.request_focus(button_id(b)));
+        self.focus_visible = true;
+        self.space_down = None;
     }
 
     /// This pass's `FrameInfo` (the scroll request applies to one pass: taken).

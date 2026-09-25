@@ -8,19 +8,24 @@
 //! (`egui::Event`s in points, from egui-winit or the offscreen harness): pointer and wheel events
 //! to egui, keys to the keyboard policy. A dialog is closed once it has delivered its result
 //! ([`Dialog::is_closed`]); the owner then hides and drops its window.
+//!
+//! Accessibility (see `a11y.rs`): [`Dialog::set_assistive_tech`] turns egui's AccessKit output on
+//! while an assistive technology is active; each frame's tree is taken with
+//! [`Dialog::take_accesskit_update`]. AccessKit action requests arrive as `egui::Event`s.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::{Duration, Instant};
 
 use egui::{Event, PointerButton, Pos2, Rect, Vec2, ViewportId};
 
+use super::a11y;
 use super::anim;
 use super::appearance::{resolve_appearance, Appearance};
 use super::clock::{DialogClock, Schedule, Wants};
 use super::fonts::{font_definitions, FontRegistry};
 use super::keyboard::{KeyAction, KeyboardState};
 use super::render::{Presenter, RenderFrame};
-use super::theme::{core_options, install_style, DialogKind, DialogUiOutput, DialogView, ProgressView, Theme};
+use super::theme::{button_id, core_options, install_style, DialogKind, DialogUiOutput, DialogView, ProgressView, Theme};
 use crate::model::{ResultSender, XDialogIcon, XDialogOptions, XDialogResult, XDialogTheme};
 use crate::{ProgressButtonCallback, ProgressDialogProxy};
 
@@ -134,6 +139,8 @@ pub(crate) struct Dialog {
     /// The next pass consumes an `egui::Event::PointerGone`: egui clears the pointer's hover
     /// position only on the pass after that, so one more frame follows it (no stale hover).
     pointer_gone: bool,
+    /// The last frame's AccessKit tree (only while AccessKit output is on), not taken yet.
+    accesskit_update: Option<egui::accesskit::TreeUpdate>,
 }
 
 impl Dialog {
@@ -168,7 +175,8 @@ impl Dialog {
                              #[cfg(any(test, all(feature = "winit-host", feature = "_test-hooks")))]
                              frames: 0,
                              fonts: FontState::default(),
-                             pointer_gone: false };
+                             pointer_gone: false,
+                             accesskit_update: None };
         d.ctx.options_mut(core_options);
         install_style(&d.ctx, &*d.theme, d.appearance.dark);
         d.update_fonts(true);
@@ -223,7 +231,10 @@ impl Dialog {
                                 frame };
         let theme = &self.theme;
         let mut out = DialogUiOutput::default();
-        let full = self.ctx.run_ui(raw, |ui| out = theme.ui(&view, ui));
+        let full = self.ctx.run_ui(raw, |ui| {
+                               out = theme.ui(&view, ui);
+                               a11y::describe_root(ui.ctx(), &c.title, &c.heading, &c.body, c.progress.is_some());
+                           });
         self.out = out;
         full
     }
@@ -267,6 +278,9 @@ impl Dialog {
         let pointer_gone = std::mem::take(&mut self.pointer_gone);
         let mut full = self.run_pass(false);
         self.textures.append(std::mem::take(&mut full.textures_delta));
+        if let Some(update) = full.platform_output.accesskit_update.take() {
+            self.accesskit_update = Some(update);
+        }
         if let Some(i) = self.out.activated {
             self.activate(i);
             if self.is_closed() {
@@ -354,6 +368,7 @@ impl Dialog {
                     self.egui_events.push(ev);
                 }
                 Event::PointerMoved(_) | Event::MouseWheel { .. } | Event::ModifiersChanged(_) => self.egui_events.push(ev),
+                Event::AccessKitActionRequest(req) => self.accesskit_action(req),
                 _ => {}
             }
         }
@@ -381,6 +396,20 @@ impl Dialog {
     pub(crate) fn scale_changed(&mut self, ppp: f32) {
         self.ppp = ppp;
         self.schedule.asap(Instant::now());
+    }
+
+    /// An assistive technology's action request. Click and Focus on a button take the keyboard's
+    /// paths (activation, visible focus); anything else goes to egui. Clicks never reach egui, so
+    /// a button can't report the same click again as a pointer activation.
+    fn accesskit_action(&mut self, req: egui::accesskit::ActionRequest) {
+        use egui::accesskit::Action;
+        let button = (0..self.content.buttons.len()).find(|&i| button_id(i).accesskit_id() == req.target_node);
+        match (req.action, button) {
+            (Action::Click, Some(i)) => self.activate(i),
+            (Action::Click, None) => {}
+            (Action::Focus, Some(i)) => self.keyboard.focus(&self.ctx, i),
+            _ => self.egui_events.push(Event::AccessKitActionRequest(req)),
+        }
     }
 
     /// Run the keyboard policy for one event and apply its action.
@@ -482,6 +511,23 @@ impl Dialog {
             self.update_fonts(false);
             self.schedule.asap(Instant::now());
         }
+    }
+
+    /// An assistive technology became active (`true`: egui builds the AccessKit tree from the next
+    /// frame on) or went away.
+    pub(crate) fn set_assistive_tech(&mut self, active: bool) {
+        if active {
+            self.ctx.enable_accesskit();
+        } else {
+            self.ctx.disable_accesskit();
+            self.accesskit_update = None;
+        }
+        self.schedule.asap(Instant::now());
+    }
+
+    /// The last frame's AccessKit tree (always a full tree), taken.
+    pub(crate) fn take_accesskit_update(&mut self) -> Option<egui::accesskit::TreeUpdate> {
+        self.accesskit_update.take()
     }
 
     /// Re-resolve the platform appearance (portal change); no-op for a fixed appearance.
@@ -890,6 +936,95 @@ mod tests {
         r.at(0.0);
         let id = egui::FontId::new(14.0, egui::FontFamily::Proportional);
         assert!(r.d.ctx.fonts_mut(|f| f.has_glyphs(&id, "你好世界确定")));
+    }
+
+    /// A real theme's dialog with a memory presenter and AccessKit output on (after the first frame).
+    fn accessible(backend: crate::XDialogBackend, kind: DialogKind, buttons: &[&str]) -> (Dialog, crate::oneshot::Receiver<Result<XDialogResult, crate::XDialogError>>) {
+        let options = XDialogOptions { title: "Title".into(),
+                                       main_instruction: "Heading".into(),
+                                       message: "Body text".into(),
+                                       icon: XDialogIcon::Warning,
+                                       buttons: buttons.iter().map(|s| s.to_string()).collect() };
+        let (tx, rx) = crate::oneshot::channel();
+        let params = DialogParams { id: 3,
+                                    content: DialogContent::new(kind, options),
+                                    appearance: Appearance::default(),
+                                    system_appearance: None,
+                                    ppp: 1.0,
+                                    max_height: 800.0,
+                                    clock: DialogClock::frozen(0.0),
+                                    sender: Some(crate::model::DialogReply::Message(tx).opened()) };
+        let mut d = Dialog::new(crate::backends::egui_core::theme::new(backend), params);
+        let size = d.physical_size(1.0);
+        d.attach(Box::new(MemoryPresenter::new()), 1.0, size);
+        d.frame().unwrap();
+        assert!(d.take_accesskit_update().is_none(), "no tree before an assistive technology asks");
+        d.set_assistive_tech(true);
+        (d, rx)
+    }
+
+    fn tree(d: &mut Dialog) -> egui::accesskit::TreeUpdate {
+        d.frame().unwrap();
+        d.take_accesskit_update().expect("a tree while accessibility is on")
+    }
+
+    fn action(d: &mut Dialog, action: egui::accesskit::Action, button: usize) {
+        let req = egui::accesskit::ActionRequest { action,
+                                                   target_tree: egui::accesskit::TreeId::ROOT,
+                                                   target_node: button_id(button).accesskit_id(),
+                                                   data: None };
+        d.handle_events([Event::AccessKitActionRequest(req)]);
+    }
+
+    #[test]
+    fn accessibility_tree_and_actions() {
+        use egui::accesskit::{Action, Role};
+        for backend in [crate::XDialogBackend::Fluent, crate::XDialogBackend::Ubuntu] {
+            let (mut d, rx) = accessible(backend, DialogKind::Message, &["No", "Yes"]);
+            let t = tree(&mut d);
+            let with_role = |role: Role| t.nodes.iter().filter(move |(_, n)| n.role() == role).map(|(_, n)| n);
+            let root = with_role(Role::AlertDialog).next().expect("dialog root");
+            assert_eq!(root.label(), Some("Title"), "{backend:?}");
+            assert_eq!(root.description(), Some("Heading\nBody text"));
+            let mut buttons: Vec<_> = with_role(Role::Button).filter_map(|n| n.label()).collect();
+            buttons.sort();
+            assert_eq!(buttons, ["No", "Yes"], "{backend:?}");
+            let labels: Vec<_> = with_role(Role::Label).filter_map(|n| n.value()).collect();
+            assert!(labels.contains(&"Heading") && labels.contains(&"Body text"), "{backend:?}: {labels:?}");
+            // The icon reads as its severity word.
+            assert!(labels.contains(&"Warning") && with_role(Role::Image).next().is_none(), "{backend:?}: {labels:?}");
+            // The default button has focus.
+            assert_eq!(t.focus, button_id(1).accesskit_id());
+
+            action(&mut d, Action::Focus, 0);
+            assert_eq!(tree(&mut d).focus, button_id(0).accesskit_id(), "{backend:?}");
+            action(&mut d, Action::Click, 0);
+            assert!(matches!(rx.try_recv(), Ok(Ok(XDialogResult::ButtonPressed(0)))), "{backend:?}");
+
+            // Off again: no more trees.
+            let (mut d, _rx) = accessible(backend, DialogKind::Message, &["OK"]);
+            tree(&mut d);
+            d.set_assistive_tech(false);
+            d.frame().unwrap();
+            assert!(d.take_accesskit_update().is_none());
+        }
+    }
+
+    #[test]
+    fn accessibility_progress() {
+        use egui::accesskit::Role;
+        for backend in [crate::XDialogBackend::Fluent, crate::XDialogBackend::Ubuntu] {
+            let (mut d, _rx) = accessible(backend, DialogKind::Progress, &["Cancel"]);
+            d.set_progress_value(0.42);
+            let t = tree(&mut d);
+            assert!(t.nodes.iter().any(|(_, n)| n.role() == Role::Dialog));
+            let bar = t.nodes.iter().map(|(_, n)| n).find(|n| n.role() == Role::ProgressIndicator).expect("progress bar");
+            assert_eq!((bar.numeric_value(), bar.max_numeric_value(), bar.value()), (Some(42.0), Some(100.0), Some("42%")), "{backend:?}");
+            d.set_progress_indeterminate();
+            let t = tree(&mut d);
+            let bar = t.nodes.iter().map(|(_, n)| n).find(|n| n.role() == Role::ProgressIndicator).expect("progress bar");
+            assert_eq!(bar.numeric_value(), None, "{backend:?}");
+        }
     }
 
     #[test]

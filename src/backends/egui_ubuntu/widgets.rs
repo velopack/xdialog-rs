@@ -3,6 +3,7 @@
 use egui::{Color32, Id, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2, Widget};
 
 use super::tokens::*;
+use crate::backends::egui_core::a11y;
 use crate::backends::egui_core::anim::{self, Easing, Lerp, Transition};
 use crate::backends::egui_core::color::rgb;
 use crate::backends::egui_core::text::TextBlock;
@@ -98,6 +99,7 @@ fn progress_id() -> Id {
 impl Widget for ProgressBar<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let (rect, response) = ui.allocate_exact_size(Vec2::new(self.width, PROGRESS_H), Sense::hover());
+        a11y::describe_progress(&response, self.progress);
         let ctx = ui.ctx().clone();
         let painter = ui.painter();
         let tk = self.tk;
