@@ -18,7 +18,7 @@
 //! xdialog = { version = "4", default-features = false, features = ["winit-host"] }
 //! ```
 //!
-//! On Windows this mode shows the Linux look; `init_win32_direct` (feature `win32-direct`) gives
+//! On Windows this mode shows the Ubuntu look; `init_win32_direct` (feature `win32-direct`) gives
 //! native dialogs there. On macOS this module is a stub with the same API: [`init_winit_host`]
 //! returns [`XDialogError::NoBackendAvailable`], installs nothing (so `XDialogBuilder` and
 //! `maccf-direct` keep working), [`pump`] returns `None` and the other functions do nothing. The

@@ -28,13 +28,13 @@ pub mod host_types;
 #[cfg(xd_egui)]
 pub mod egui_core;
 
-/// The Linux look (the former skia backend's design) on egui.
-#[cfg(xd_theme_linux)]
-pub mod linux_egui;
+/// The Ubuntu look (the former skia backend's design) on egui.
+#[cfg(xd_theme_ubuntu)]
+pub mod egui_ubuntu;
 
 /// The Fluent look (WinUI 3 ContentDialog) on egui.
 #[cfg(xd_theme_fluent)]
-pub mod fluent_egui;
+pub mod egui_fluent;
 
 /// Answer every request on `receiver` with an error until `ExitEventLoop` arrives or the channel
 /// closes: creation requests get `Err(make_err())`, updates are ignored. Used when no backend can

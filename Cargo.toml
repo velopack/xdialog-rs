@@ -15,33 +15,33 @@ win32-direct = []
 maccf-direct = ["dep:core-foundation", "dep:core-foundation-sys"]
 
 # xdialog may own a winit 0.30 event loop: the Linux XDialogBuilder backend, `linux-direct`, and
-# `fluent-egui`. Turn default features off (and enable `winit-host`) to build xdialog with no winit.
+# `egui-fluent`. Turn default features off (and enable `winit-host`) to build xdialog with no winit.
 # Cargo features can't be per-target and a renamed second `winit` dependency is rejected ("depends
 # on crate winit multiple times with different names"), so on Windows this also compiles winit
-# (never used, nothing linked from it, unless `fluent-egui` / `linux-egui` is on).
+# (never used, nothing linked from it, unless `egui-fluent` / `egui-ubuntu` is on).
 builtin-winit = ["dep:winit"]
 # Windows: XDialogBuilder uses the Fluent (WinUI 3 look) egui backend instead of Win32 TaskDialog.
 # Linux: compiles the fluent theme too (dev only; selectable via XDIALOG_BACKEND=fluent). macOS: no-op.
 # NOT additive in behaviour: any crate in the graph enabling it switches the Windows builder backend.
-fluent-egui = ["builtin-winit", "_egui", "_fluent-theme"]
+egui-fluent = ["builtin-winit", "_egui", "_fluent-theme"]
 # Compiles the Linux (egui) theme + own winit loop on Windows for development/testing.
-# On Linux this is always on (no-op). Does NOT change the Windows default (use XDIALOG_BACKEND=linux).
-linux-egui = ["builtin-winit", "_egui", "_linux-theme"]
+# On Linux this is always on (no-op). Does NOT change the Windows default (use XDIALOG_BACKEND=ubuntu).
+egui-ubuntu = ["builtin-winit", "_egui", "_ubuntu-theme"]
 # `init_linux_direct()`: xdialog owns a persistent UI thread with its own winit 0.30 loop,
 # started lazily on the first dialog request.
-linux-direct = ["linux-egui"]
+linux-direct = ["egui-ubuntu"]
 # `xdialog::host` + `init_winit_host()`: integrate into the host application's own event loop
 # (any winit >= 0.29 via raw-window-handle 0.6, or no winit at all). Never uses xdialog's winit.
 # With `default-features = false` winit is not compiled at all (the "turn off built-in winit" mode).
-winit-host = ["_egui", "_linux-theme"]
+winit-host = ["_egui", "_ubuntu-theme"]
 
 # ---- private (underscore = not part of the public contract) ----
 _egui = ["dep:egui", "dep:softbuffer", "dep:strength_reduce", "dep:skrifa", "dep:unicode-bidi", "dep:ahash"]
-_linux-theme = ["_egui"]
+_ubuntu-theme = ["_egui"]
 _fluent-theme = ["_egui"]
 # Offscreen renderer, live input injection and introspection (`xdialog::__test`, doc(hidden)).
-# Implies the linux theme so that `--features _test-hooks` alone has a concrete Theme (no dead code).
-_test-hooks = ["_egui", "_linux-theme"]
+# Implies the Ubuntu theme so that `--features _test-hooks` alone has a concrete Theme (no dead code).
+_test-hooks = ["_egui", "_ubuntu-theme"]
 
 [dependencies]
 log = "0.4"
@@ -103,7 +103,7 @@ unicode-bidi = "0.3.18"
 strength_reduce = "0.2.4"
 ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"] }
 
-# Win32 Backend (+ optional egui backends: `fluent-egui`, `linux-egui`, `linux-direct`, `winit-host`)
+# Win32 Backend (+ optional egui backends: `egui-fluent`, `egui-ubuntu`, `linux-direct`, `winit-host`)
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_System",
@@ -141,7 +141,7 @@ required-features = ["linux-direct"]
 [[example]]
 name = "egui_gallery"
 path = "examples/egui_gallery/main.rs"
-required-features = ["_test-hooks", "fluent-egui", "linux-egui"]
+required-features = ["_test-hooks", "egui-fluent", "egui-ubuntu"]
 
 [[test]]
 name = "macos_ui"
@@ -153,7 +153,7 @@ harness = false
 
 [[test]]
 name = "egui_offscreen"
-required-features = ["_test-hooks", "linux-egui"]
+required-features = ["_test-hooks", "egui-ubuntu"]
 
 [[test]]
 name = "egui_direct"
@@ -167,7 +167,7 @@ required-features = ["linux-direct"]
 [[bench]]
 name = "render"
 harness = false
-required-features = ["_test-hooks", "linux-egui"]
+required-features = ["_test-hooks", "egui-ubuntu"]
 
 [dev-dependencies]
 ntest = "=0.9.5"

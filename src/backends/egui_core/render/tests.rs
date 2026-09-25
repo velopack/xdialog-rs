@@ -2,7 +2,7 @@
 //! antialiased ones, cross-checks between the raster's SIMD / optimised paths, presenter
 //! contracts (zero-size skip, delta hygiene, alpha masking) and a deterministic golden scene.
 //!
-//! Re-bless the goldens with `XDIALOG_BLESS=1 cargo test --lib --features linux-egui render::`.
+//! Re-bless the goldens with `XDIALOG_BLESS=1 cargo test --lib --features egui-ubuntu render::`.
 
 use std::path::PathBuf;
 

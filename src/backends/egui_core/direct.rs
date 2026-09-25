@@ -175,7 +175,7 @@ fn ui_thread(shared: Arc<Shared>, xtheme: XDialogTheme) {
     let proxy = event_loop.create_proxy();
     let _ = shared.proxy.set(proxy.clone());
     let inbox = Inbox { rx, wake_pending: shared.wake_pending.clone() };
-    let mut app = OwnLoopApp::new(crate::backends::linux_egui::LinuxTheme::new(), xtheme, proxy, Some(inbox), false);
+    let mut app = OwnLoopApp::new(crate::backends::egui_ubuntu::UbuntuTheme::new(), xtheme, proxy, Some(inbox), false);
 
     let reason = match catch_unwind(AssertUnwindSafe(|| event_loop.run_app(&mut app))) {
         Ok(Ok(())) => "xdialog linux-direct: the UI event loop exited".to_string(),

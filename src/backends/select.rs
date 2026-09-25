@@ -1,6 +1,6 @@
 //! Chooses the backend used by `XDialogBuilder`.
 //!
-//! `XDIALOG_BACKEND=win32|fluent|linux` (hidden, read once) chooses among the backends compiled
+//! `XDIALOG_BACKEND=win32|fluent|ubuntu` (hidden, read once) chooses among the backends compiled
 //! into this build. Unknown or uncompiled values log a warning and use the default. In a default
 //! build there is only one option per OS, so it does nothing.
 
@@ -17,11 +17,11 @@ pub enum BackendKind {
     #[cfg(target_os = "macos")]
     AppKit,
     /// egui with the Linux (skia-look) theme on xdialog's own winit loop.
-    #[cfg(all(xd_own_loop, xd_theme_linux))]
-    LinuxEgui,
+    #[cfg(all(xd_own_loop, xd_theme_ubuntu))]
+    EguiUbuntu,
     /// egui with the Fluent theme on xdialog's own winit loop.
     #[cfg(all(xd_own_loop, xd_theme_fluent))]
-    FluentEgui,
+    EguiFluent,
     /// No builder backend is compiled (Linux built without `builtin-winit`): dialog functions
     /// return `NoBackendAvailable` unless a host handler (`init_winit_host`) is installed.
     None,
@@ -36,10 +36,10 @@ impl BackendKind {
             BackendKind::Win32 => "win32",
             #[cfg(target_os = "macos")]
             BackendKind::AppKit => "appkit",
-            #[cfg(all(xd_own_loop, xd_theme_linux))]
-            BackendKind::LinuxEgui => "linux",
+            #[cfg(all(xd_own_loop, xd_theme_ubuntu))]
+            BackendKind::EguiUbuntu => "ubuntu",
             #[cfg(all(xd_own_loop, xd_theme_fluent))]
-            BackendKind::FluentEgui => "fluent",
+            BackendKind::EguiFluent => "fluent",
             BackendKind::None => "none",
         }
     }
@@ -52,19 +52,19 @@ pub fn compiled_backends() -> Vec<BackendKind> {
 
     // Default first.
     #[cfg(all(windows, xd_own_loop, xd_theme_fluent))]
-    v.push(BackendKind::FluentEgui);
+    v.push(BackendKind::EguiFluent);
     #[cfg(windows)]
     v.push(BackendKind::Win32);
-    #[cfg(all(windows, xd_own_loop, xd_theme_linux))]
-    v.push(BackendKind::LinuxEgui);
+    #[cfg(all(windows, xd_own_loop, xd_theme_ubuntu))]
+    v.push(BackendKind::EguiUbuntu);
 
     #[cfg(target_os = "macos")]
     v.push(BackendKind::AppKit);
 
-    #[cfg(all(target_os = "linux", xd_own_loop, xd_theme_linux))]
-    v.push(BackendKind::LinuxEgui);
+    #[cfg(all(target_os = "linux", xd_own_loop, xd_theme_ubuntu))]
+    v.push(BackendKind::EguiUbuntu);
     #[cfg(all(target_os = "linux", xd_own_loop, xd_theme_fluent))]
-    v.push(BackendKind::FluentEgui);
+    v.push(BackendKind::EguiFluent);
 
     if v.is_empty() {
         v.push(BackendKind::None);

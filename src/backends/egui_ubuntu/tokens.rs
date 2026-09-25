@@ -1,4 +1,4 @@
-//! Design tokens of the Linux theme: metrics (logical px) and the light / dark colours, with the
+//! Design tokens of the Ubuntu theme: metrics (logical px) and the light / dark colours, with the
 //! desktop accent colour applied to the progress bar and the hover / pressed / focused buttons.
 
 use egui::Color32;
@@ -45,7 +45,7 @@ pub(crate) struct ButtonLook {
 
 /// Resolved colours for one appearance.
 #[derive(Clone, Debug)]
-pub(crate) struct LinuxTokens {
+pub(crate) struct UbuntuTokens {
     /// Window background.
     pub bg: Color32,
     pub title_text: Color32,
@@ -62,12 +62,12 @@ const fn look(border: u32, fill: u32, text: u32) -> ButtonLook {
     ButtonLook { border: rgb(border), fill: rgb(fill), text: rgb(text) }
 }
 
-impl LinuxTokens {
+impl UbuntuTokens {
     /// Light or dark palette plus the accent. The accent is honoured only when it comes from the
     /// desktop portal (a no-op off Linux) or a test override.
-    pub(crate) fn resolve(appearance: &Appearance) -> LinuxTokens {
+    pub(crate) fn resolve(appearance: &Appearance) -> UbuntuTokens {
         let mut tk = if appearance.dark {
-            LinuxTokens { bg: rgb(0x2D2D2D),
+            UbuntuTokens { bg: rgb(0x2D2D2D),
                           title_text: rgb(0xFFFFFF),
                           body_text: rgb(0xEEEEEE),
                           progress_bg: rgb(0x4A4A4A),
@@ -77,7 +77,7 @@ impl LinuxTokens {
                           pressed: look(0x1E5FAF, 0x1E5FAF, 0xFFFFFF),
                           focused: look(0x2A7DE3, 0x3B3B3B, 0xEEEEEE) }
         } else {
-            LinuxTokens { bg: rgb(0xFAFAFA),
+            UbuntuTokens { bg: rgb(0xFAFAFA),
                           title_text: rgb(0x3D3D3D),
                           body_text: rgb(0x3D3D3D),
                           progress_bg: rgb(0xADCEF7),
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn accent_overlay() {
-        let tk = LinuxTokens::resolve(&Appearance::test(false, Some([0xE9, 0x54, 0x20]), None));
+        let tk = UbuntuTokens::resolve(&Appearance::test(false, Some([0xE9, 0x54, 0x20]), None));
         assert_eq!(tk.progress_fg, rgb(0xE95420));
         assert_eq!(tk.pressed.fill, Color32::from_rgb(0xAF, 0x3F, 0x18));
         assert_eq!(tk.progress_bg, Color32::from_rgb(((0xE9 as f32) * 0.35 + 250.0 * 0.65).round() as u8,
@@ -144,7 +144,7 @@ mod tests {
                                                      ((0x20 as f32) * 0.35 + 250.0 * 0.65).round() as u8));
         assert_eq!(tk.hover.text, Color32::WHITE);
         assert_eq!(tk.focused.fill, rgb(0xFFFFFF));
-        let base = LinuxTokens::resolve(&Appearance::default());
+        let base = UbuntuTokens::resolve(&Appearance::default());
         assert_eq!(base.progress_fg, rgb(0x2A7DE3));
     }
 }

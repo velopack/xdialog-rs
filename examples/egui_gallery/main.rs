@@ -1,19 +1,19 @@
 //! Offscreen gallery for the egui themes.
 //!
 //! ```text
-//! cargo run --release --example egui_gallery --features _test-hooks,fluent-egui,linux-egui -- \
-//!     [--theme linux|fluent|all] [--out <dir>] [--filter <substr>] [--list]
+//! cargo run --release --example egui_gallery --features _test-hooks,egui-fluent,egui-ubuntu -- \
+//!     [--theme ubuntu|fluent|all] [--out <dir>] [--filter <substr>] [--list]
 //! ```
 //!
-//! Renders every variant of `linux.rs` / `fluent.rs` with the deterministic offscreen renderer
+//! Renders every variant of `ubuntu.rs` / `fluent.rs` with the deterministic offscreen renderer
 //! (injected clock, pointer, keyboard focus and appearance, light and dark) and writes
 //! `<out>/<theme>/<variant><suffix>.png` per capture plus `<out>/<theme>/sheet.png`, a contact
 //! sheet of the stills (captures without a suffix). Review the images by eye.
 //!
-//! The driver is `main.rs` + `model.rs`; the variant lists are `linux.rs` and `fluent.rs`.
+//! The driver is `main.rs` + `model.rs`; the variant lists are `ubuntu.rs` and `fluent.rs`.
 
 mod fluent;
-mod linux;
+mod ubuntu;
 mod model;
 
 use std::path::PathBuf;
@@ -33,16 +33,16 @@ struct Args {
 }
 
 fn parse_args() -> Result<Args, String> {
-    let mut a = Args { themes: vec!["linux"], out: PathBuf::from("target/egui_gallery"), filter: None, list: false };
+    let mut a = Args { themes: vec!["ubuntu"], out: PathBuf::from("target/egui_gallery"), filter: None, list: false };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         let mut val = || it.next().ok_or_else(|| format!("{arg} needs a value"));
         match arg.as_str() {
             "--theme" => {
                 a.themes = match val()?.as_str() {
-                    "linux" => vec!["linux"],
+                    "ubuntu" => vec!["ubuntu"],
                     "fluent" => vec!["fluent"],
-                    "all" => vec!["linux", "fluent"],
+                    "all" => vec!["ubuntu", "fluent"],
                     other => return Err(format!("unknown theme {other}")),
                 }
             }
@@ -68,7 +68,7 @@ fn main() {
         }
     };
     for &theme in &args.themes {
-        let all = if theme == "fluent" { fluent::variants() } else { linux::variants() };
+        let all = if theme == "fluent" { fluent::variants() } else { ubuntu::variants() };
         let variants: Vec<Variant> = all.into_iter().filter(|v| args.filter.as_deref().is_none_or(|f| v.name.contains(f))).collect();
         if args.list {
             for v in &variants {

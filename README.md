@@ -101,7 +101,7 @@ cargo run --example various_options
 
 | Platform | `XDialogBuilder` (default) | Optional |
 |---|---|---|
-| Windows | Win32 TaskDialog | `fluent-egui`: WinUI 3 (Fluent) look drawn with egui. `win32-direct`: `init_win32_direct()`, no builder |
+| Windows | Win32 TaskDialog | `egui-fluent`: WinUI 3 (Fluent) look drawn with egui. `win32-direct`: `init_win32_direct()`, no builder |
 | macOS | AppKit | `maccf-direct`: `init_maccf_direct()`, no builder |
 | Linux | egui, the classic xdialog look (Ubuntu font, blue accent), own winit 0.30 loop | `linux-direct`: `init_linux_direct()`, no builder. `winit-host`: runs inside your event loop |
 | Linux, no display | every dialog function returns `XDialogError::NoBackendAvailable`; your program keeps running | |
@@ -114,16 +114,16 @@ Windows accent colour. They render in software only; there is no GPU dependency.
 
 | Feature | Default | What it does |
 |---|---|---|
-| `builtin-winit` | yes | Lets xdialog own a winit 0.30 event loop: the Linux builder backend, `linux-direct` and `fluent-egui` need it. On Windows it also compiles winit 0.30 (Cargo features can't be per-target), but nothing uses or links it unless `fluent-egui` / `linux-egui` is on; `default-features = false` avoids it. On macOS it does nothing. |
-| `fluent-egui` | | Windows: `XDialogBuilder` uses the Fluent (WinUI 3 look) egui backend instead of Win32 TaskDialog. See the note below. |
-| `linux-egui` | | Compiles the Linux egui backend on Windows too, for development and testing (it doesn't change the Windows default). On Linux the theme is always compiled; this feature only adds `builtin-winit` (the builder's own loop). |
+| `builtin-winit` | yes | Lets xdialog own a winit 0.30 event loop: the Linux builder backend, `linux-direct` and `egui-fluent` need it. On Windows it also compiles winit 0.30 (Cargo features can't be per-target), but nothing uses or links it unless `egui-fluent` / `egui-ubuntu` is on; `default-features = false` avoids it. On macOS it does nothing. |
+| `egui-fluent` | | Windows: `XDialogBuilder` uses the Fluent (WinUI 3 look) egui backend instead of Win32 TaskDialog. See the note below. |
+| `egui-ubuntu` | | Compiles the Ubuntu egui theme on Windows too, for development and testing (it doesn't change the Windows default). On Linux the theme is always compiled; this feature only adds `builtin-winit` (the builder's own loop). |
 | `linux-direct` | | `init_linux_direct()`: no `XDialogBuilder` needed; xdialog starts its own UI thread with a winit 0.30 loop on the first dialog. Linux and Windows. |
 | `winit-host` | | `xdialog::host` + `init_winit_host()`: xdialog renders into windows your application creates in its own event loop (winit 0.29, 0.30, 0.31, or anything with raw-window-handle 0.6). |
 | `win32-direct` | | `init_win32_direct()` (Windows) |
 | `maccf-direct` | | `init_maccf_direct()` (macOS) |
 
-**`fluent-egui` is a graph-wide switch.** Cargo unifies features, so if *any* crate in your
-dependency graph enables `fluent-egui`, every `XDialogBuilder` in the final binary uses the Fluent
+**`egui-fluent` is a graph-wide switch.** Cargo unifies features, so if *any* crate in your
+dependency graph enables `egui-fluent`, every `XDialogBuilder` in the final binary uses the Fluent
 backend on Windows. Libraries should leave this choice to the application.
 
 Only depend on the egui backends where you need them; resolver 2 ignores features of
@@ -156,7 +156,7 @@ the full contract and glue for winit 0.29, 0.30 and 0.31, and
 
 With `default-features = false` and no handler installed, `XDialogBuilder` on Linux has no
 backend: dialog functions return `XDialogError::NoBackendAvailable` (your `main` still runs).
-Host mode always uses the Linux look, on Windows too; use `win32-direct` for native Windows
+Host mode always uses the Ubuntu look, on Windows too; use `win32-direct` for native Windows
 dialogs. On macOS `xdialog::host` is a stub (`init_winit_host` returns `NoBackendAvailable`).
 
 ### Threads
@@ -178,15 +178,15 @@ dialog function, including `show_message*`.
   should return with egui 0.37.
 - **Accessibility:** the egui backends expose nothing to screen readers yet (the previous Linux
   renderer didn't either). The default Win32 TaskDialog and AppKit backends are accessible; on
-  Windows `fluent-egui` is an opt-in trade-off.
-- **One winit loop per process:** `XDialogBuilder` on Linux, `fluent-egui` and `linux-direct` own a
+  Windows `egui-fluent` is an opt-in trade-off.
+- **One winit loop per process:** `XDialogBuilder` on Linux, `egui-fluent` and `linux-direct` own a
   winit 0.30 event loop. An application with its own winit loop must use `winit-host` instead
   (`linux-direct` reports a `SystemError` if the process already created a winit 0.30 loop, and
   from its first dialog on the application can't create one).
 - **Complex scripts:** right-to-left text (Arabic, Hebrew) is reordered correctly, but shaping is
   limited to what egui's text engine does. Glyphs come from the system's fonts (fontconfig
   directories on Linux, a known list of Windows fonts on Windows).
-- **Host mode shows the Linux look on Windows**, see above.
+- **Host mode shows the Ubuntu look on Windows**, see above.
 
 ## Development
 
@@ -194,18 +194,18 @@ The egui backends share one core (`src/backends/egui_core/`: event loops, window
 software presenter) and each look is a small theme built from egui's own layout, painting, text and
 animation, driven by design tokens (colours, sizes, spacing, radii, timings).
 
-- `cargo test` runs the unit and integration tests; `--features fluent-egui`, `linux-direct`,
+- `cargo test` runs the unit and integration tests; `--features egui-fluent`, `linux-direct`,
   `_test-hooks` enable more. On Windows set `XDIALOG_TEST_NO_ACTIVATE=1` and
   `XDIALOG_TEST_POS=offscreen` so test windows never take focus.
-- `cargo test --release --features _test-hooks,linux-egui,fluent-egui --test egui_offscreen` checks
+- `cargo test --release --features _test-hooks,egui-ubuntu,egui-fluent --test egui_offscreen` checks
   the deterministic offscreen renders in `tests/visual_references/egui/`
   (`XDIALOG_VISUAL_SEED=1` re-seeds them; the Fluent ones apply only when the local Segoe UI
   Variable has the byte length recorded in `tests/visual_references/egui/fluent/FONT_ID`).
-- `cargo run --release --example egui_gallery --features _test-hooks,fluent-egui,linux-egui -- --theme all`
+- `cargo run --release --example egui_gallery --features _test-hooks,egui-fluent,egui-ubuntu -- --theme all`
   renders every dialog variant of both looks to `target/egui_gallery/<theme>/` plus a contact
   sheet (`--out <dir>`, `--filter <substr>`, `--list`).
 - `tests/image_seed.sh` re-seeds the screenshot references of `tests/visual_regression.rs`.
-- Hidden environment variables (testing only): `XDIALOG_BACKEND=win32|fluent|linux` picks among the
+- Hidden environment variables (testing only): `XDIALOG_BACKEND=win32|fluent|ubuntu` picks among the
   compiled builder backends; `XDIALOG_TEST_NO_ACTIVATE`, and in debug builds `XDIALOG_TEST_POS` and
   `XDIALOG_TEST_ACCENT`.
 

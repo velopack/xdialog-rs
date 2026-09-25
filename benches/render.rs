@@ -1,6 +1,6 @@
 //! Offscreen frame render benchmark per theme (software rendering performance).
 //!
-//! `cargo bench --bench render --features _test-hooks,linux-egui[,fluent-egui]`
+//! `cargo bench --bench render --features _test-hooks,egui-ubuntu[,egui-fluent]`
 //!
 //! Each case measures one full frame through the real `Dialog` path (egui pass, tessellation,
 //! software raster into memory, RGBA copy): a static frame, a frame during the hover fade, an
@@ -11,8 +11,8 @@ use xdialog::__test::{HostEvent, OffscreenDialog, TestAppearance, TestKind, Test
 use xdialog::{XDialogIcon, XDialogOptions};
 
 fn themes() -> Vec<&'static str> {
-    let mut t = vec!["linux"];
-    if cfg!(feature = "fluent-egui") {
+    let mut t = vec!["ubuntu"];
+    if cfg!(feature = "egui-fluent") {
         t.push("fluent");
     }
     t

@@ -44,7 +44,7 @@ use super::render::{Presenter, RawHandles, SoftwarePresenter};
 use super::window_system::{CreatedWindow, WindowSpec, WindowSystem};
 use crate::backends::answer_with_error;
 use crate::backends::host_types::{HostEvent, HostWindows, WindowKey, WindowRequest};
-use crate::backends::linux_egui::LinuxTheme;
+use crate::backends::egui_ubuntu::UbuntuTheme;
 use crate::channel::{init_handler, mark_ui_thread, DialogRequestHandler};
 use crate::model::DialogMessageRequest;
 use crate::{XDialogError, XDialogTheme};
@@ -204,7 +204,7 @@ struct WinTable {
 
 /// Everything xdialog keeps on the host thread.
 struct HostState {
-    manager: Manager<LinuxTheme, WindowKey>,
+    manager: Manager<UbuntuTheme, WindowKey>,
     table: WinTable,
     /// The deadline the last `pump` returned (`None` = wait indefinitely).
     last_deadline: Option<Instant>,
@@ -466,7 +466,7 @@ fn new_state(shared: &Arc<Shared>) -> HostState {
         }
     });
     #[allow(unused_mut)]
-    let mut manager = Manager::new(LinuxTheme::new(), shared.xtheme.clone(), Some(waker));
+    let mut manager = Manager::new(UbuntuTheme::new(), shared.xtheme.clone(), Some(waker));
     #[cfg(xd_test_hooks)]
     {
         let remote = Arc::downgrade(shared);
@@ -546,7 +546,7 @@ fn guarded(state: &mut HostState,
            host: &mut dyn HostWindows,
            id: Option<usize>,
            what: &str,
-           f: impl FnOnce(&mut Manager<LinuxTheme, WindowKey>, &mut HostWs<'_>)) {
+           f: impl FnOnce(&mut Manager<UbuntuTheme, WindowKey>, &mut HostWs<'_>)) {
     let HostState { manager, table, .. } = state;
     let mut ws = HostWs { host: &mut *host, table };
     if catch_unwind(AssertUnwindSafe(|| f(manager, &mut ws))).is_ok() {

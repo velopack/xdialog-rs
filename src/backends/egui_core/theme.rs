@@ -194,7 +194,7 @@ pub(crate) struct KeyboardPolicy {
 // The trait
 // ------------------------------------------------------------------------------------------------
 
-/// Implemented by `linux_egui::LinuxTheme` and `fluent_egui::FluentTheme`.
+/// Implemented by `egui_ubuntu::UbuntuTheme` and `egui_fluent::FluentTheme`.
 pub(crate) trait Theme: Send + Sync + 'static {
     type Tokens: Clone + Send + 'static;
 

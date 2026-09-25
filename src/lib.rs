@@ -102,7 +102,7 @@
 //!
 //! | Platform | [`XDialogBuilder`] (default) | Optional |
 //! |---|---|---|
-//! | Windows | Win32 TaskDialog | `fluent-egui`: WinUI 3 (Fluent) look drawn with egui. `win32-direct`: `init_win32_direct()`, no builder |
+//! | Windows | Win32 TaskDialog | `egui-fluent`: WinUI 3 (Fluent) look drawn with egui. `win32-direct`: `init_win32_direct()`, no builder |
 //! | macOS | AppKit | `maccf-direct`: `init_maccf_direct()`, no builder |
 //! | Linux | egui, the classic xdialog look (Ubuntu font, blue accent), own winit 0.30 loop | `linux-direct`: `init_linux_direct()`, no builder. `winit-host`: runs inside your event loop |
 //!
@@ -116,15 +116,15 @@
 //!
 //! | Feature | Default | What it does |
 //! |---|---|---|
-//! | `builtin-winit` | yes | Lets xdialog own a winit 0.30 event loop: the Linux builder backend, `linux-direct` and `fluent-egui` need it. On Windows it also compiles winit 0.30 (Cargo features can't be per-target), but nothing uses or links it unless `fluent-egui` / `linux-egui` is on; `default-features = false` avoids it. On macOS it does nothing. |
-//! | `fluent-egui` | | Windows: [`XDialogBuilder`] uses the Fluent (WinUI 3 look) egui backend instead of Win32 TaskDialog. |
-//! | `linux-egui` | | Compiles the Linux egui backend on Windows too, for development and testing (it doesn't change the Windows default). On Linux the theme is always compiled; this feature only adds `builtin-winit` (the builder's own loop). |
+//! | `builtin-winit` | yes | Lets xdialog own a winit 0.30 event loop: the Linux builder backend, `linux-direct` and `egui-fluent` need it. On Windows it also compiles winit 0.30 (Cargo features can't be per-target), but nothing uses or links it unless `egui-fluent` / `egui-ubuntu` is on; `default-features = false` avoids it. On macOS it does nothing. |
+//! | `egui-fluent` | | Windows: [`XDialogBuilder`] uses the Fluent (WinUI 3 look) egui backend instead of Win32 TaskDialog. |
+//! | `egui-ubuntu` | | Compiles the Ubuntu egui theme on Windows too, for development and testing (it doesn't change the Windows default). On Linux the theme is always compiled; this feature only adds `builtin-winit` (the builder's own loop). |
 //! | `linux-direct` | | `init_linux_direct()`: no [`XDialogBuilder`] needed; xdialog starts its own UI thread with a winit 0.30 loop on the first dialog. Linux and Windows. |
 //! | `winit-host` | | `xdialog::host` + `init_winit_host()`: xdialog renders into windows your application creates in its own event loop (winit 0.29, 0.30, 0.31, or anything with raw-window-handle 0.6). |
 //! | `win32-direct` | | `init_win32_direct()` (Windows) |
 //! | `maccf-direct` | | `init_maccf_direct()` (macOS) |
 //!
-//! **`fluent-egui` is a graph-wide switch.** Cargo unifies features, so if *any* crate in your
+//! **`egui-fluent` is a graph-wide switch.** Cargo unifies features, so if *any* crate in your
 //! dependency graph enables it, every [`XDialogBuilder`] in the final binary uses the Fluent
 //! backend on Windows. Libraries should leave this choice to the application.
 //!
@@ -154,7 +154,7 @@
 //! winit 0.29, 0.30 and 0.31; `examples/winit_host` in the repository is a complete winit 0.29
 //! host. With `default-features = false` and no handler installed, [`XDialogBuilder`] on Linux
 //! has no backend: dialog functions return [`XDialogError::NoBackendAvailable`] (your `main` still
-//! runs). Host mode uses the Linux look on every platform (use `win32-direct` for native Windows
+//! runs). Host mode uses the Ubuntu look on every platform (use `win32-direct` for native Windows
 //! dialogs); on macOS `host` is a stub whose `init_winit_host` returns `NoBackendAvailable`.
 //!
 //! ### Threads
@@ -174,8 +174,8 @@
 //!   emoji fonts can be used; most distributions ship only the bitmap *Noto Color Emoji*, so emoji
 //!   show as empty boxes there (the previous skia renderer drew colour emoji).
 //! - **Accessibility:** the egui backends expose nothing to screen readers yet. The default Win32
-//!   TaskDialog and AppKit backends are accessible; on Windows `fluent-egui` is an opt-in trade-off.
-//! - **One winit loop per process:** [`XDialogBuilder`] on Linux, `fluent-egui` and `linux-direct`
+//!   TaskDialog and AppKit backends are accessible; on Windows `egui-fluent` is an opt-in trade-off.
+//! - **One winit loop per process:** [`XDialogBuilder`] on Linux, `egui-fluent` and `linux-direct`
 //!   own a winit 0.30 event loop. An application with its own winit loop must use `winit-host`.
 //! - **Complex scripts:** right-to-left text is reordered correctly, but shaping is limited to what
 //!   egui's text engine does.

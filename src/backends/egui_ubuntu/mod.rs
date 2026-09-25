@@ -1,6 +1,6 @@
-//! Linux theme: the look of xdialog 3.x's Linux dialogs, built from egui layout and painting.
+//! Ubuntu theme: the look of xdialog 3.x's Linux dialogs, built from egui layout and painting.
 //!
-//! Layout ([`LinuxTheme::ui`]): the window is 350-600 px wide depending on the natural text width.
+//! Layout ([`UbuntuTheme::ui`]): the window is 350-600 px wide depending on the natural text width.
 //! Inside a 16 px margin, an optional 48 px icon sits left of a column of title (Ubuntu Bold 18),
 //! progress bar (6 px) and body (Ubuntu Regular 14), 16 px apart. With buttons, a 48 px footer
 //! holds them right-aligned, 7 px apart and 7 px from the right edge. Colours and metrics are in
@@ -26,18 +26,18 @@ mod icons;
 mod tokens;
 mod widgets;
 
-pub(crate) use tokens::LinuxTokens;
+pub(crate) use tokens::UbuntuTokens;
 use tokens::*;
 
-/// The Linux theme.
-pub(crate) struct LinuxTheme;
+/// The Ubuntu theme.
+pub(crate) struct UbuntuTheme;
 
-impl LinuxTheme {
+impl UbuntuTheme {
     // Linux with neither built-in winit nor `winit-host` compiles the theme but has no entry point
     // that runs it (every dialog fails with `NoBackendAvailable`).
     #[cfg_attr(not(any(xd_own_loop, xd_winit_host, xd_test_hooks)), allow(dead_code))]
     pub(crate) fn new() -> Self {
-        LinuxTheme
+        UbuntuTheme
     }
 }
 
@@ -66,8 +66,8 @@ fn focus_suppressed(ui: &Ui, button_count: usize) -> bool {
     suppressed
 }
 
-impl Theme for LinuxTheme {
-    type Tokens = LinuxTokens;
+impl Theme for UbuntuTheme {
+    type Tokens = UbuntuTokens;
 
     fn keyboard_policy(&self) -> KeyboardPolicy {
         KeyboardPolicy { focus_visibility: FocusVisibility::Always,
@@ -77,21 +77,21 @@ impl Theme for LinuxTheme {
                          scroll_keys: false }
     }
 
-    fn tokens(&self, appearance: &Appearance) -> LinuxTokens {
-        LinuxTokens::resolve(appearance)
+    fn tokens(&self, appearance: &Appearance) -> UbuntuTokens {
+        UbuntuTokens::resolve(appearance)
     }
 
     fn fonts(&self) -> ThemeFonts {
         ThemeFonts::new(bundled::ubuntu_regular(), bundled::ubuntu_bold())
     }
 
-    fn configure_style(&self, tk: &LinuxTokens, style: &mut egui::Style) {
+    fn configure_style(&self, tk: &UbuntuTokens, style: &mut egui::Style) {
         style.spacing.item_spacing = Vec2::ZERO;
         style.visuals.panel_fill = tk.bg;
         style.visuals.window_fill = tk.bg;
     }
 
-    fn ui(&self, tk: &LinuxTokens, view: &DialogView<'_>, ui: &mut Ui) -> DialogUiOutput {
+    fn ui(&self, tk: &UbuntuTokens, view: &DialogView<'_>, ui: &mut Ui) -> DialogUiOutput {
         let ctx = ui.ctx().clone();
         let text = TextCtx::new(&ctx);
         let title_style = TextStyle::bold(TITLE_SIZE, TITLE_SIZE * LINE_HEIGHT_SCALE);
@@ -172,8 +172,8 @@ mod tests {
 
     struct Harness {
         ctx: egui::Context,
-        theme: LinuxTheme,
-        tk: LinuxTokens,
+        theme: UbuntuTheme,
+        tk: UbuntuTokens,
         /// `RawInput::focused` (window activation) for the next passes.
         window_focused: std::cell::Cell<bool>,
     }
@@ -198,7 +198,7 @@ mod tests {
 
     impl Harness {
         fn new() -> Self {
-            let theme = LinuxTheme::new();
+            let theme = UbuntuTheme::new();
             let tk = theme.tokens(&Appearance::default());
             let ctx = theme_ctx(&theme, &tk);
             Harness { ctx, theme, tk, window_focused: std::cell::Cell::new(true) }
