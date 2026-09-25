@@ -271,6 +271,9 @@ jobs:
 
       - name: Scripted self-test (injected input)
         if: runner.os == 'Windows'
+        env:
+          # The self-test captures its windows with PrintWindow, which needs them on a real monitor.
+          XDIALOG_TEST_POS: ""
         run: cargo run --locked --manifest-path examples/winit_host/Cargo.toml --features test-hooks -- --selftest
 
       - name: Check (Linux)
@@ -384,7 +387,6 @@ jobs:
 
           - os: ubuntu-latest
             name: Linux
-            reseed: true
 
           - os: ubuntu-latest
             name: Linux Wayland

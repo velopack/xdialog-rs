@@ -79,7 +79,7 @@ impl Image {
         assert_eq!((self.w, self.h), (other.w, other.h), "image size");
         let mut max = 0;
         let mut over = 0;
-        for (a, b) in self.px.chunks_exact(4).zip(other.px.chunks_exact(4)) {
+        for (a, b) in self.px.as_chunks::<4>().0.iter().zip(other.px.as_chunks::<4>().0) {
             let d = a.iter().zip(b).map(|(x, y)| x.abs_diff(*y)).max().unwrap();
             max = max.max(d);
             if d > tol {
@@ -124,7 +124,7 @@ fn opaque_rects_are_exact() {
 #[test]
 fn clear_colour_fills_empty_frame() {
     let img = render(vec2(7.0, 5.0), 1.0, |_| {});
-    assert!(img.px.chunks_exact(4).all(|p| p == [0xFA, 0xFA, 0xFA, 255]));
+    assert!(img.px.as_chunks::<4>().0.iter().all(|p| *p == [0xFA, 0xFA, 0xFA, 255]));
 }
 
 #[test]
@@ -141,7 +141,7 @@ fn antialiased_circle_coverage_matches_area() {
         let px = size_px(size, ppp);
         p.present(RenderFrame { prims: &prims, textures: &mut textures, size_px: px, ppp, clear: Color32::WHITE }).unwrap();
         let (_, _, rgba) = p.read_rgba().unwrap();
-        let covered: f64 = rgba.chunks_exact(4).map(|p| (255 - p[1]) as f64 / 255.0).sum();
+        let covered: f64 = rgba.as_chunks::<4>().0.iter().map(|p| (255 - p[1]) as f64 / 255.0).sum();
         let expected = std::f64::consts::PI * (r * ppp) as f64 * (r * ppp) as f64;
         let rel = (covered - expected).abs() / expected;
         assert!(rel < 0.02, "ppp {ppp} r {r}: covered {covered:.1} px² vs {expected:.1} px² ({:.2}%)", rel * 100.0);
@@ -196,7 +196,7 @@ fn zero_size_frame_applies_and_clears_textures() {
     p.present(RenderFrame { prims: &prims, textures: &mut textures, size_px: [120, 30], ppp: 1.0, clear: CLEAR }).unwrap();
     assert!(textures.is_empty());
     let (_, _, rgba) = p.read_rgba().unwrap();
-    let dark = rgba.chunks_exact(4).filter(|p| p[0] < 100).count();
+    let dark = rgba.as_chunks::<4>().0.iter().filter(|p| p[0] < 100).count();
     assert!(dark > 30, "text drawn from the previously applied atlas ({dark} dark px)");
 }
 
