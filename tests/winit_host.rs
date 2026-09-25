@@ -157,6 +157,21 @@ fn run() {
         pump(el, app, 10_000, &|app| !app.test_dialogs().is_empty());
         first_dialog(app).expect("a dialog opened")
     };
+    let titled = |app: &App, title: &str| app.test_dialogs().into_iter().find(|d| d.title == title);
+    let wait_titled = |el: &mut EventLoop<()>, app: &mut App, title: &str| -> LiveDialog {
+        pump(el, app, 10_000, &|app| titled(app, title).is_some());
+        titled(app, title).unwrap_or_else(|| panic!("dialog '{title}' opened"))
+    };
+    // Click button `index` (move, press, release).
+    let click = |el: &mut EventLoop<()>, app: &mut App, d: &LiveDialog, index: usize| {
+        let [x, y, w, h] = d.button_rects[index];
+        let pos = Pos2::new(x + w / 2.0, y + h / 2.0);
+        let button = |pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+        app.test_inject(d.id, Event::PointerMoved(pos));
+        app.test_inject(d.id, button(true));
+        pump(el, app, 50, &|_| false);
+        app.test_inject(d.id, button(false));
+    };
     let deadline = |app: &App| match app.test_control_flow() {
         Some(ControlFlow::WaitUntil(t)) => Some(t),
         _ => None,
@@ -177,6 +192,8 @@ fn run() {
     // Event-loop thread: blocking calls fail, progress works and animates.
     assert!(matches!(show_message_info_ok("t", "b", "c"), Err(XDialogError::BlockingCallOnUiThread)));
     let progress = show_progress("t", "Host thread", "body", XDialogIcon::Information).unwrap();
+    progress.set_value(0.25).unwrap();
+    progress.set_text("Step 1").unwrap();
     progress.set_indeterminate().unwrap();
     let d = wait_dialog(&mut el, &mut app);
     assert_eq!(d.title, "t");
@@ -215,13 +232,7 @@ fn run() {
     let d = wait_dialog(&mut el, &mut app);
     assert!(wakes.load(Ordering::SeqCst) > wakes_before, "the request woke the loop");
     assert!(app.inner().user_events > user_before, "the wake-up is forwarded to the host app");
-    let [x, y, w, h] = d.button_rects[1];
-    let pos = Pos2::new(x + w / 2.0, y + h / 2.0);
-    let button = |pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
-    app.test_inject(d.id, Event::PointerMoved(pos));
-    app.test_inject(d.id, button(true));
-    pump(&mut el, &mut app, 50, &|_| false);
-    app.test_inject(d.id, button(false));
+    click(&mut el, &mut app, &d, 1);
     pump(&mut el, &mut app, 2_000, &|_| worker.is_finished());
     assert!(worker.is_finished(), "the click answered the dialog");
     assert!(matches!(worker.join().unwrap(), Ok(true)));
@@ -235,6 +246,54 @@ fn run() {
     assert!(worker.is_finished(), "Escape answered the dialog");
     assert!(matches!(worker.join().unwrap(), Ok(XDialogResult::WindowClosed)));
     assert!(app.inner().resumes.is_empty(), "the host app never sees xdialog's deadline as its own");
+
+    // Several worker threads at once: all their dialogs open, each closes by its timeout.
+    let workers: Vec<_> = (0..4).map(|i| {
+                                    let options = XDialogOptions { title: format!("worker {i}"), buttons: vec!["OK".into()], ..Default::default() };
+                                    std::thread::spawn(move || show_message(options, Some(Duration::from_secs(2))))
+                                })
+                                .collect();
+    pump(&mut el, &mut app, 10_000, &|app| app.test_dialogs().len() == 4);
+    assert_eq!(app.test_dialogs().len(), 4, "every worker's dialog is open");
+    pump(&mut el, &mut app, 10_000, &|_| workers.iter().all(|w| w.is_finished()));
+    for w in workers {
+        assert!(w.is_finished(), "the timeout closed the dialog");
+        assert!(matches!(w.join().unwrap(), Ok(XDialogResult::TimeoutElapsed)));
+    }
+
+    // A progress callback runs on the event-loop thread: a message box there fails fast, another
+    // progress dialog opens without waiting; `true` keeps its dialog open.
+    let (tx, rx) = std::sync::mpsc::channel();
+    let options = XDialogOptions { title: "callback".into(), buttons: vec!["Cancel".into()], ..Default::default() };
+    let progress = show_progress_with_callback(options, move |i, proxy| {
+                       let _ = proxy.set_text("Cancelling...");
+                       let blocked = show_message_info_ok("t", "b", "c");
+                       let nested = show_progress_ex(XDialogOptions { title: "nested".into(), buttons: vec!["Hide".into()], ..Default::default() });
+                       let _ = tx.send((i, blocked, nested.is_ok()));
+                       std::mem::forget(nested); // open until its button closes it
+                       true
+                   }).unwrap();
+    let d = wait_titled(&mut el, &mut app, "callback");
+    click(&mut el, &mut app, &d, 0);
+    let nested = wait_titled(&mut el, &mut app, "nested");
+    let (i, blocked, nested_ok) = rx.try_recv().expect("the callback ran");
+    assert_eq!(i, 0);
+    assert!(matches!(blocked, Err(XDialogError::BlockingCallOnUiThread)), "{blocked:?}");
+    assert!(nested_ok);
+    assert!(titled(&app, "callback").is_some(), "the callback kept its dialog open");
+    // A button without a callback closes its dialog.
+    click(&mut el, &mut app, &nested, 0);
+    pump(&mut el, &mut app, 2_000, &|app| titled(app, "nested").is_none());
+    assert!(titled(&app, "nested").is_none(), "the nested dialog closed");
+    drop(progress);
+
+    // A panicking callback closes only its dialog; the loop keeps serving (the next section).
+    let options = XDialogOptions { title: "panic".into(), buttons: vec!["Boom".into()], ..Default::default() };
+    let _panicking = show_progress_with_callback(options, |_, _| panic!("test panic in a progress callback")).unwrap();
+    let d = wait_titled(&mut el, &mut app, "panic");
+    click(&mut el, &mut app, &d, 0);
+    pump(&mut el, &mut app, 2_000, &|app| app.test_dialogs().is_empty());
+    assert!(app.test_dialogs().is_empty(), "the panicking callback's dialog closed");
 
     // The host exits: `exiting` closes open dialogs and ends the backend.
     let worker = message("Exit");
