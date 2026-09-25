@@ -73,10 +73,11 @@ jobs:
           cargo test --locked --doc --features winit-host
           RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --features winit-host
 
-  # Linux without a display server: every dialog function returns NoBackendAvailable. The binary
-  # is static (musl) and loads no userland libraries, so any distribution behaves like the runner.
-  headless:
-    name: Headless
+  # Linux without a display server: every dialog function returns NoBackendAvailable and the
+  # program keeps running. The static (musl) test binary is built once, then run on a range of old
+  # and new distributions.
+  headless-build:
+    name: Headless Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -94,8 +95,52 @@ jobs:
         with:
           key: headless
 
-      - name: Headless test
-        run: cargo test --locked --release --target x86_64-unknown-linux-musl --test headless
+      - name: Build and run the headless test
+        run: |
+          cargo test --locked --release --target x86_64-unknown-linux-musl --test headless
+          bin=$(cargo test --locked --release --target x86_64-unknown-linux-musl --test headless --no-run --message-format=json \
+                | jq -r 'select(.profile.test == true and .target.name == "headless") | .executable')
+          cp "$bin" xdialog-headless-test
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: headless-binary
+          path: xdialog-headless-test
+
+  headless:
+    name: Headless (${{ matrix.distro }})
+    needs: headless-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - ubuntu:12.04
+          - ubuntu:18.04
+          - ubuntu:24.04
+          - debian:7
+          - debian:bookworm-slim
+          - alpine:3.3
+          - alpine:3.20
+          - centos:6
+          - centos:7
+          - fedora:21
+          - fedora:41
+          - gcr.io/distroless/static-debian12
+    steps:
+      - name: Download binary
+        uses: actions/download-artifact@v8
+        with:
+          name: headless-binary
+
+      - name: Run in container
+        run: |
+          chmod +x xdialog-headless-test
+          docker run --rm \
+            -v $PWD/xdialog-headless-test:/xdialog-headless-test \
+            ${{ matrix.distro }} \
+            /xdialog-headless-test
 
   # On-screen captures of the native backends vs tests/visual_references/<platform>/ (Win32
   # TaskDialog: the test forces it; AppKit). The egui looks have offscreen goldens (build job).
