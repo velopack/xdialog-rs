@@ -142,8 +142,10 @@ jobs:
             ${{ matrix.distro }} \
             /xdialog-headless-test
 
-  # On-screen captures of the native backends vs tests/visual_references/<platform>/ (Win32
-  # TaskDialog: the test forces it; AppKit). The egui looks have offscreen goldens (build job).
+  # On-screen captures vs tests/visual_references/<platform>/: the native backends (Win32
+  # TaskDialog: the test forces it; AppKit) and the Linux default, the egui Ubuntu look, on X11
+  # (Xvfb + openbox) and Wayland (headless sway, captured with grim). The egui looks also have
+  # offscreen goldens (build job).
   visual-regression:
     name: Visual Regression (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -157,6 +159,13 @@ jobs:
           - os: macos-26
             name: macOS
 
+          - os: ubuntu-latest
+            name: Linux
+
+          - os: ubuntu-latest
+            name: Linux Wayland
+            wayland: true
+
     steps:
       - uses: actions/checkout@v7
 
@@ -165,6 +174,40 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: visual-regression-${{ matrix.name }}
+
+      - name: Start virtual display (X11)
+        if: runner.os == 'Linux' && !matrix.wayland
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb openbox x11-utils libx11-xcb1 libxcursor1 libxi6 libxrandr2 libxkbcommon-x11-0
+          Xvfb :99 -screen 0 1280x1024x24 &
+          sleep 1
+          DISPLAY=:99 openbox &
+          sleep 2
+          echo "DISPLAY=:99" >> $GITHUB_ENV
+          # Verify the window manager is running
+          DISPLAY=:99 xprop -root _NET_CLIENT_LIST_STACKING || echo "Warning: WM may not be ready"
+
+      - name: Start virtual display (Wayland)
+        if: matrix.wayland
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sway grim
+          export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/wayland-runtime}"
+          mkdir -p "$XDG_RUNTIME_DIR"
+          echo "XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >> $GITHUB_ENV
+          # Minimal sway config for headless mode
+          mkdir -p /tmp/sway-config
+          cat > /tmp/sway-config/config << 'SWAYCFG'
+          output HEADLESS-1 resolution 500x500
+          SWAYCFG
+          # Start sway with the headless wlroots backend (supports wlr-screencopy for grim)
+          WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 sway -c /tmp/sway-config/config &
+          sleep 3
+          # Find the socket sway created
+          SOCKET=$(ls "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null | grep -v '\.lock$' | head -1 | xargs basename)
+          echo "Found Wayland socket: $SOCKET"
+          echo "WAYLAND_DISPLAY=$SOCKET" >> $GITHUB_ENV
 
       - name: Run visual regression tests
         env:

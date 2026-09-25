@@ -1,9 +1,14 @@
-//! On-screen captures of the native backends (Win32 TaskDialog, AppKit) vs
-//! `tests/visual_references/<windows|macos>/`; the egui looks have offscreen goldens
-//! (`tests/egui_offscreen.rs`). Opt-in, it takes focus: `XDIALOG_VISUAL_TEST=1` compares,
+//! On-screen captures vs `tests/visual_references/<windows|macos|linux|linux_wayland>/`: the native
+//! backends (Win32 TaskDialog: forced here; AppKit) and the Linux default (the egui Ubuntu look,
+//! X11 and Wayland); every egui look also has offscreen goldens (`tests/egui_offscreen.rs`).
+//! Opt-in, it takes focus: `XDIALOG_VISUAL_TEST=1` compares,
 //! `XDIALOG_VISUAL_SEED=1 cargo test --test visual_regression` (re)writes the references. A failing
 //! capture and its diff are written to `target/tmp/visual_output/`. `harness = false`: one backend
 //! per process, macOS wants the UI on the main thread.
+//!
+//! Linux: X11 captures the dialog's client area (by title); Wayland captures the whole output with
+//! `grim` (the compositor needs wlr-screencopy, e.g. headless sway), so the reference includes the
+//! compositor's decoration.
 
 use std::path::Path;
 use std::thread;
@@ -89,7 +94,62 @@ mod capture {
     }
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(target_os = "linux")]
+mod capture {
+    use super::*;
+
+    pub fn try_capture(title: &str) -> Option<RgbaImage> {
+        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+            try_capture_wayland()
+        } else {
+            try_capture_x11(title).unwrap_or_else(|e| {
+                                      eprintln!("X11 capture failed: {e}");
+                                      None
+                                  })
+        }
+    }
+
+    /// The client area of the viewable window whose `_NET_WM_NAME` is `title`.
+    fn try_capture_x11(title: &str) -> Result<Option<RgbaImage>, Box<dyn std::error::Error>> {
+        use x11rb::connection::Connection;
+        use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, MapState};
+
+        let (conn, screen) = x11rb::connect(None)?;
+        let net_wm_name = conn.intern_atom(false, b"_NET_WM_NAME")?.reply()?.atom;
+        let utf8_string = conn.intern_atom(false, b"UTF8_STRING")?.reply()?.atom;
+        // Depth first: under a window manager the dialog is a child of its frame.
+        let mut stack = vec![conn.setup().roots[screen].root];
+        while let Some(w) = stack.pop() {
+            stack.extend(conn.query_tree(w)?.reply()?.children);
+            if conn.get_property(false, w, net_wm_name, utf8_string, 0, 1024)?.reply()?.value != title.as_bytes()
+               || conn.get_window_attributes(w)?.reply()?.map_state != MapState::VIEWABLE
+            {
+                continue;
+            }
+            let g = conn.get_geometry(w)?.reply()?;
+            let image = conn.get_image(ImageFormat::Z_PIXMAP, w, 0, 0, g.width, g.height, !0)?.reply()?;
+            // TrueColor, 32 bits per pixel: BGRX.
+            let rgba = image.data.as_chunks::<4>().0.iter().flat_map(|p| [p[2], p[1], p[0], 255]).collect();
+            return Ok(RgbaImage::from_raw(g.width.into(), g.height.into(), rgba));
+        }
+        Ok(None)
+    }
+
+    /// The whole compositor output, through `grim`.
+    fn try_capture_wayland() -> Option<RgbaImage> {
+        let file = Path::new(env!("CARGO_TARGET_TMPDIR")).join("wayland_capture.png");
+        let output = std::process::Command::new("grim").arg(&file).output().map_err(|e| eprintln!("grim: {e}")).ok()?;
+        if !output.status.success() {
+            eprintln!("grim failed: {}", String::from_utf8_lossy(&output.stderr));
+            return None;
+        }
+        let image = image::open(&file).ok()?.to_rgba8();
+        let _ = std::fs::remove_file(&file);
+        Some(image)
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 mod capture {
     pub fn try_capture(_title: &str) -> Option<super::RgbaImage> {
         None
@@ -153,15 +213,21 @@ fn diff(actual: &RgbaImage, expected: &RgbaImage) -> (f64, RgbaImage) {
 
 fn main() {
     let seed = std::env::var_os("XDIALOG_VISUAL_SEED").is_some();
-    if (!seed && std::env::var_os("XDIALOG_VISUAL_TEST").is_none()) || !cfg!(any(windows, target_os = "macos")) {
-        eprintln!("Skipping visual regression (Windows and macOS; set XDIALOG_VISUAL_TEST=1 or XDIALOG_VISUAL_SEED=1)");
+    if (!seed && std::env::var_os("XDIALOG_VISUAL_TEST").is_none()) || !cfg!(any(windows, target_os = "macos", target_os = "linux")) {
+        eprintln!("Skipping visual regression (Windows, macOS and Linux; set XDIALOG_VISUAL_TEST=1 or XDIALOG_VISUAL_SEED=1)");
         return;
     }
-    // The references are the native backends (`Auto` picks Fluent on Windows 10+).
+    // Windows: the references are the Win32 TaskDialog (`Auto` picks Fluent on Windows 10+).
     let backend = if cfg!(windows) { XDialogBackend::Win32 } else { XDialogBackend::Auto };
     let captures = XDialogBuilder::new().with_backend(backend).run_loop(run_all_captures);
 
-    let refs = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/visual_references").join(if cfg!(windows) { "windows" } else { "macos" });
+    let platform = match () {
+        _ if cfg!(windows) => "windows",
+        _ if cfg!(target_os = "macos") => "macos",
+        _ if std::env::var_os("WAYLAND_DISPLAY").is_some() => "linux_wayland",
+        _ => "linux",
+    };
+    let refs = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/visual_references").join(platform);
     let out = Path::new(env!("CARGO_TARGET_TMPDIR")).join("visual_output");
     let mut failures = Vec::new();
     for (name, actual) in captures {
