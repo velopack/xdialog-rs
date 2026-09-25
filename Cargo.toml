@@ -129,8 +129,14 @@ name = "winit_host"
 harness = false
 required-features = ["winit-host", "_test-hooks"]
 
+[[bench]]
+name = "render"
+harness = false
+required-features = ["_test-hooks"]
+
 [dev-dependencies]
 image = "=0.25.10"
+criterion = { version = "=0.8.2", default-features = false, features = ["cargo_bench_support"] }
 
 # Window captures for tests/visual_regression.rs (Windows uses GDI directly, Wayland `grim`).
 [target.'cfg(target_os = "macos")'.dev-dependencies]
