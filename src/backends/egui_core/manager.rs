@@ -232,6 +232,7 @@ impl<T: Theme, W> Manager<T, W> {
     /// Render dialog `id` (window `RedrawRequested`).
     pub(crate) fn redraw<WS: WindowSystem<Win = W>>(&mut self, ws: &mut WS, id: usize) {
         let Some(e) = self.dialogs.get_mut(&id) else { return };
+        e.dialog.schedule_mut().set_monitor_period(ws.monitor_period(&e.win));
         e.dialog.frame(&self.theme);
         if e.dialog.take_present_failed() {
             if let Some(p) = ws.recreate_presenter(&e.win) {

@@ -70,4 +70,9 @@ pub(crate) trait WindowSystem {
 
     /// The appearance switched: update the title bar / decorations (dark or light).
     fn set_dark_titlebar(&mut self, _w: &Self::Win, _dark: bool) {}
+
+    /// Refresh period of the monitor showing `w`; `None` when unknown (60 Hz is assumed).
+    fn monitor_period(&self, _w: &Self::Win) -> Option<std::time::Duration> {
+        None
+    }
 }

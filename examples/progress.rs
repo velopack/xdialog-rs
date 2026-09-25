@@ -23,6 +23,6 @@ fn run() {
     std::thread::sleep(std::time::Duration::from_secs(2));
     result.set_text("Oops, not quite there yet.").unwrap();
     result.set_indeterminate().unwrap();
-    std::thread::sleep(std::time::Duration::from_secs(5));
+    std::thread::sleep(std::time::Duration::from_secs(12));
     result.close().unwrap();
 }

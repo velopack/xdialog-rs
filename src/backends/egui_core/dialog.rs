@@ -343,7 +343,8 @@ impl<T: Theme> Dialog<T> {
         self.frames += 1;
 
         let delay = full.viewport_output.get(&ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
-        let wants = Wants { immediate: pointer_gone, delay: (delay < Duration::from_secs(3600)).then_some(delay) };
+        let smooth = super::anim::take_smooth_request(&self.ctx);
+        let wants = Wants { immediate: pointer_gone, delay: (delay < Duration::from_secs(3600)).then_some(delay), smooth };
         self.schedule.after_frame(Instant::now(), wants);
     }
 
