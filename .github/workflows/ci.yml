@@ -223,6 +223,23 @@ jobs:
           name: visual-regression-output-${{ matrix.name }}
           path: target/tmp/visual_output/
 
+  # Software-rendering performance: one offscreen frame per case (static, hover fade,
+  # indeterminate progress, 2x HiDPI, construction) for each egui theme.
+  egui-bench:
+    name: egui Bench
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: egui-bench
+
+      - name: Run benchmark
+        run: cargo bench --locked --bench render --features _test-hooks -- --quick
+
   supply-chain:
     name: Supply Chain
     runs-on: ubuntu-latest
