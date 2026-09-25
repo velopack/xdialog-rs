@@ -16,7 +16,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 #[cfg(target_os = "linux")]
 use std::time::Duration;
@@ -48,6 +47,7 @@ impl FaceRef {
     }
 
     /// Whether the face maps `c` to a glyph.
+    #[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))] // no system-font discovery elsewhere yet
     pub(crate) fn covers(&self, c: char) -> bool {
         self.font_ref().is_some_and(|f| f.charmap().map(c).is_some())
     }
@@ -125,15 +125,8 @@ pub(crate) fn font_definitions(fonts: &ThemeFonts, fallbacks: &[Fallback]) -> eg
 pub(crate) mod bundled {
     use super::FaceRef;
 
-    pub(crate) static UBUNTU_REGULAR: &[u8] = include_bytes!("fonts/Ubuntu-Regular.ttf");
-    pub(crate) static UBUNTU_BOLD: &[u8] = include_bytes!("fonts/Ubuntu-Bold.ttf");
-
-    pub(crate) const fn ubuntu_regular() -> FaceRef {
-        FaceRef::new(UBUNTU_REGULAR, 0)
-    }
-    pub(crate) const fn ubuntu_bold() -> FaceRef {
-        FaceRef::new(UBUNTU_BOLD, 0)
-    }
+    pub(crate) static UBUNTU_REGULAR: FaceRef = FaceRef::new(include_bytes!("fonts/Ubuntu-Regular.ttf"), 0);
+    pub(crate) static UBUNTU_BOLD: FaceRef = FaceRef::new(include_bytes!("fonts/Ubuntu-Bold.ttf"), 0);
 }
 
 /// A fallback face registered process-wide. `name` is the egui font-data key.
@@ -153,9 +146,6 @@ impl Fallback {
     }
 }
 
-/// A callback that wakes an event loop (the loop then re-checks fonts and appearance).
-pub(crate) type Waker = Arc<dyn Fn() + Send + Sync>;
-
 #[derive(Default)]
 struct Inner {
     files: HashMap<PathBuf, Option<&'static [u8]>>,
@@ -167,22 +157,13 @@ struct Inner {
 /// Process-wide font registry.
 pub(crate) struct FontRegistry {
     inner: Mutex<Inner>,
-    /// Bumped whenever something that may resolve earlier misses happens (fontdb scan finished).
-    generation: AtomicU64,
-    wakers: Mutex<Vec<Waker>>,
-    #[cfg(target_os = "linux")]
-    scan: linux::Scan,
 }
 
 impl FontRegistry {
     /// The process-wide registry.
     pub(crate) fn global() -> &'static FontRegistry {
         static REG: OnceLock<FontRegistry> = OnceLock::new();
-        REG.get_or_init(|| FontRegistry { inner: Mutex::new(Inner::default()),
-                                          generation: AtomicU64::new(0),
-                                          wakers: Mutex::new(Vec::new()),
-                                          #[cfg(target_os = "linux")]
-                                          scan: linux::Scan::default() })
+        REG.get_or_init(|| FontRegistry { inner: Mutex::new(Inner::default()) })
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Inner> {
@@ -221,38 +202,18 @@ impl FontRegistry {
         self.lock().fallbacks.clone()
     }
 
-    /// Changes when a background discovery step finished (see [`FontRegistry::ensure_coverage`]).
-    pub(crate) fn generation(&self) -> u64 {
-        self.generation.load(Ordering::Acquire)
-    }
-
-    /// Register a waker called (from any thread) when [`FontRegistry::generation`] changes.
-    pub(crate) fn add_waker(&self, waker: Waker) {
-        self.wakers.lock().unwrap_or_else(|e| e.into_inner()).push(waker);
-    }
-
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))] // only the Linux fontdb scan is asynchronous
-    fn bump_generation(&self) {
-        self.generation.fetch_add(1, Ordering::AcqRel);
-        let wakers = self.wakers.lock().unwrap_or_else(|e| e.into_inner()).clone();
-        for w in wakers {
-            w();
-        }
-    }
-
-    /// Start background discovery (the Linux `fontdb` scan). Cheap and idempotent; call when the
-    /// first dialog request arrives. No-op on Windows.
-    pub(crate) fn start_background_scan(&'static self) {
+    /// Start background discovery (the Linux `fontdb` scan; it wakes the runtime when done).
+    /// Cheap and idempotent. No-op elsewhere.
+    pub(crate) fn start_background_scan(&self) {
         #[cfg(target_os = "linux")]
-        self.scan.start(move || self.bump_generation());
+        linux::start_scan();
     }
 
     /// Make sure every visible character of `texts` is covered by the theme's faces or a
     /// registered fallback, discovering and registering new fallbacks as needed. `wait`: on a
     /// miss, wait up to 300 ms for the Linux system-font scan (never on later retries). Returns
     /// whether every character is covered or known to be uncoverable (`false` while a Linux scan
-    /// that could still resolve a miss is running: retry when [`FontRegistry::generation`]
-    /// changes).
+    /// that could still resolve a miss is running: retry when it wakes the runtime).
     pub(crate) fn ensure_coverage(&self, fonts: &ThemeFonts, texts: &[&str], wait: bool) -> bool {
         let mut faces: Vec<FontRef<'static>> = [fonts.regular.face, fonts.bold.face].iter().filter_map(FaceRef::font_ref).collect();
         let (fallbacks, uncoverable) = {
@@ -276,12 +237,12 @@ impl FontRegistry {
         }
 
         let mut complete = true;
-        let mut ctx = self.discovery(wait);
+        let mut discover = discoverer(wait);
         for c in misses {
             if faces.iter().any(|f| f.charmap().map(c).is_some()) {
                 continue; // covered by a face found for an earlier miss
             }
-            match self.discover(&mut ctx, c) {
+            match discover(self, c) {
                 Discovered::Face(fb) => {
                     if let Some(f) = fb.face.font_ref() {
                         faces.push(f);
@@ -302,6 +263,7 @@ impl FontRegistry {
 }
 
 enum Discovered {
+    #[cfg_attr(not(any(windows, target_os = "linux")), allow(dead_code))] // no system-font discovery elsewhere yet
     Face(Fallback),
     /// No face on this system covers the character.
     Never,
@@ -310,60 +272,46 @@ enum Discovered {
     NotYet,
 }
 
-/// Per-`ensure_coverage` discovery state.
-struct DiscoveryCtx {
-    #[cfg(target_os = "linux")]
-    db: Option<Arc<fontdb::Database>>,
-    #[cfg(target_os = "linux")]
-    budget: u64,
-    #[cfg(windows)]
-    locale: String,
+/// A fallback lookup for the misses of one `ensure_coverage` call: the Windows known-path table
+/// (for the user's locale).
+#[cfg(windows)]
+fn discoverer(_wait: bool) -> impl FnMut(&FontRegistry, char) -> Discovered {
+    let locale = super::platform_win::user_locale().unwrap_or_default();
+    move |reg, c| {
+        let Some(dir) = windows_fonts_dir() else { return Discovered::Never };
+        for (file, index) in windows_candidates(c, &locale) {
+            if let Some(face) = reg.load_face(&dir.join(file), index).filter(|f| f.covers(c)) {
+                let bold = windows_bold_counterpart(file, index).and_then(|(f, i)| reg.load_face(&dir.join(f), i));
+                return Discovered::Face(Fallback { name: format!("fallback:{file}#{index}"), face, bold });
+            }
+        }
+        Discovered::Never
+    }
 }
 
-impl FontRegistry {
-    fn discovery(&self, wait: bool) -> DiscoveryCtx {
-        let _ = wait;
-        DiscoveryCtx { #[cfg(target_os = "linux")]
-                       db: self.scan.get(if wait { Duration::from_millis(300) } else { Duration::ZERO }),
-                       #[cfg(target_os = "linux")]
-                       budget: 64 << 20,
-                       #[cfg(windows)]
-                       locale: super::platform_win::user_locale().unwrap_or_default() }
+/// A fallback lookup for the misses of one `ensure_coverage` call: the fontdb scan (waited for up
+/// to 300 ms with `wait`), reading at most 64 MiB of candidate files in total.
+#[cfg(target_os = "linux")]
+fn discoverer(wait: bool) -> impl FnMut(&FontRegistry, char) -> Discovered {
+    let db = linux::SCAN.get(if wait { Duration::from_millis(300) } else { Duration::ZERO });
+    let mut budget = 64 << 20;
+    move |reg, c| {
+        let Some(db) = &db else {
+            return if linux::SCAN.done() { Discovered::Never } else { Discovered::NotYet };
+        };
+        match linux::find_face(reg, db, c, &mut budget) {
+            Some((path, index, face, bold)) => {
+                Discovered::Face(Fallback { name: format!("fallback:{}#{index}", path.display()), face, bold })
+            }
+            None => Discovered::Never,
+        }
     }
+}
 
-    fn discover(&self, ctx: &mut DiscoveryCtx, c: char) -> Discovered {
-        #[cfg(windows)]
-        {
-            let Some(dir) = windows_fonts_dir() else { return Discovered::Never };
-            for (file, index) in windows_candidates(c, &ctx.locale) {
-                let path = dir.join(file);
-                if let Some(face) = self.load_face(&path, index) {
-                    if face.covers(c) {
-                        let bold = windows_bold_counterpart(file, index).and_then(|(f, i)| self.load_face(&dir.join(f), i));
-                        return Discovered::Face(Fallback { name: format!("fallback:{file}#{index}"), face, bold });
-                    }
-                }
-            }
-            Discovered::Never
-        }
-        #[cfg(target_os = "linux")]
-        {
-            let Some(db) = ctx.db.clone() else {
-                return if self.scan.finished() { Discovered::Never } else { Discovered::NotYet };
-            };
-            match linux::find_face(self, &db, c, &mut ctx.budget) {
-                Some((path, index, face, bold)) => {
-                    Discovered::Face(Fallback { name: format!("fallback:{}#{index}", path.display()), face, bold })
-                }
-                None => Discovered::Never,
-            }
-        }
-        #[cfg(not(any(windows, target_os = "linux")))]
-        {
-            let _ = (ctx, c);
-            Discovered::Never
-        }
-    }
+/// No system-font discovery on other platforms yet.
+#[cfg(not(any(windows, target_os = "linux")))]
+fn discoverer(_wait: bool) -> impl FnMut(&FontRegistry, char) -> Discovered {
+    |_, _| Discovered::Never
 }
 
 /// A file is valid when at least one face in it validates.
@@ -490,83 +438,26 @@ mod linux {
 
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
-    use std::sync::{Arc, Condvar, Mutex};
-    use std::time::{Duration, Instant};
+    use std::sync::Arc;
+    use std::time::Instant;
 
     use skrifa::{FontRef, MetadataProvider};
 
     use super::{FaceRef, FontRegistry};
+    use crate::backends::egui_core::background::Background;
 
-    #[derive(Default)]
-    enum State {
-        #[default]
-        NotStarted,
-        Running,
-        Done(Arc<fontdb::Database>),
-    }
+    /// The system font database (empty if the scan failed).
+    pub(super) static SCAN: Background<Arc<fontdb::Database>> = Background::new();
 
-    #[derive(Default)]
-    pub(super) struct Scan {
-        state: Mutex<State>,
-        cv: Condvar,
-    }
-
-    impl Scan {
-        pub(super) fn start(&'static self, on_done: impl FnOnce() + Send + 'static) {
-            {
-                let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
-                if !matches!(*st, State::NotStarted) {
-                    return;
-                }
-                *st = State::Running;
-            }
-            let spawned = std::thread::Builder::new().name("xdialog-fontdb".into()).spawn(move || {
+    pub(super) fn start_scan() {
+        SCAN.start("xdialog-fontdb", || {
                 let t0 = Instant::now();
-                // A panic inside the scan must still leave `Running`, or every coverage check
-                // would wait for it for the rest of the process.
-                let scanned = std::panic::catch_unwind(|| {
-                    let mut db = fontdb::Database::new();
-                    db.load_system_fonts();
-                    db
-                });
-                let db = scanned.unwrap_or_else(|_| {
-                                    warn!("xdialog: the system font scan panicked; continuing without system fonts");
-                                    fontdb::Database::new()
-                                });
+                let mut db = fontdb::Database::new();
+                db.load_system_fonts();
                 debug!("xdialog: fontdb scanned {} faces in {:?}", db.len(), t0.elapsed());
-                *self.state.lock().unwrap_or_else(|e| e.into_inner()) = State::Done(Arc::new(db));
-                self.cv.notify_all();
-                on_done();
+                SCAN.set(Arc::new(db));
+                crate::backends::egui_core::runtime::wake_all();
             });
-            if let Err(e) = spawned {
-                warn!("xdialog: could not start the font scan thread: {e}");
-                *self.state.lock().unwrap_or_else(|e| e.into_inner()) = State::Done(Arc::new(fontdb::Database::new()));
-                self.cv.notify_all();
-            }
-        }
-
-        pub(super) fn finished(&self) -> bool {
-            matches!(*self.state.lock().unwrap_or_else(|e| e.into_inner()), State::Done(_))
-        }
-
-        /// The scanned database, waiting up to `wait` for a running scan.
-        pub(super) fn get(&self, wait: Duration) -> Option<Arc<fontdb::Database>> {
-            let deadline = Instant::now() + wait;
-            let mut st = self.state.lock().unwrap_or_else(|e| e.into_inner());
-            loop {
-                match &*st {
-                    State::Done(db) => return Some(db.clone()),
-                    State::NotStarted => return None,
-                    State::Running => {
-                        let now = Instant::now();
-                        if now >= deadline {
-                            return None;
-                        }
-                        st = self.cv.wait_timeout(st, deadline - now).unwrap_or_else(|e| e.into_inner()).0;
-                    }
-                }
-            }
-        }
     }
 
     /// Preferred fallback families, CJK ordered by `$LANG`.
@@ -682,7 +573,7 @@ mod tests {
     use super::*;
 
     fn ubuntu() -> ThemeFonts {
-        ThemeFonts::new(bundled::ubuntu_regular(), bundled::ubuntu_bold())
+        ThemeFonts::new(bundled::UBUNTU_REGULAR, bundled::UBUNTU_BOLD)
     }
 
     #[test]
@@ -697,7 +588,7 @@ mod tests {
 
     #[test]
     fn bundled_faces_validate_and_cover_latin() {
-        let r = bundled::ubuntu_regular();
+        let r = bundled::UBUNTU_REGULAR;
         assert!(validate_face(&r));
         assert!(r.covers('A'));
         assert!(!r.covers('中'));
@@ -711,7 +602,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("xdialog-font-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("truncated.ttf");
-        std::fs::write(&path, &bundled::UBUNTU_REGULAR[..2000]).unwrap();
+        std::fs::write(&path, &bundled::UBUNTU_REGULAR.bytes[..2000]).unwrap();
         let reg = FontRegistry::global();
         assert!(reg.load_file(&path).is_none());
         assert!(reg.load_face(&path, 0).is_none());
@@ -719,7 +610,7 @@ mod tests {
         std::fs::write(&junk, b"not a font at all").unwrap();
         assert!(reg.load_file(&junk).is_none());
         let good = dir.join("good.ttf");
-        std::fs::write(&good, bundled::UBUNTU_REGULAR).unwrap();
+        std::fs::write(&good, bundled::UBUNTU_REGULAR.bytes).unwrap();
         assert!(reg.load_face(&good, 0).is_some());
         assert!(reg.load_face(&good, 1).is_none());
         let _ = std::fs::remove_dir_all(&dir);

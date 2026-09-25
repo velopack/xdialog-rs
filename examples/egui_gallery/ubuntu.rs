@@ -1,4 +1,4 @@
-//! Linux (skia-look) theme gallery variants, light and dark.
+//! Ubuntu theme gallery variants, light and dark.
 //!
 //! Stills are captured at `t = 1.0` (suffix ""). Transitions are sampled at a few points: the
 //! 150 ms fades at the trigger (`_t0`), +75 ms (`_t75ms`) and settled (+200 ms, ""); the 300 ms
@@ -24,12 +24,13 @@ fn grow(v: Variant, t: f64) -> Variant {
     v.capture(t + 0.15, "_t150ms").capture(t + 0.3, "")
 }
 
-fn states_opts(title: &str) -> XDialogOptions {
-    opts(title, "New version available", "Would you like to update to the new version now?", XDialogIcon::Warning, &["No", "Yes"])
+// The window title is never drawn in the client area: variants share one.
+fn states_opts() -> XDialogOptions {
+    opts("Update Available", "New version available", "Would you like to update to the new version now?", XDialogIcon::Warning, &["No", "Yes"])
 }
 
-fn progress_opts(title: &str, buttons: &[&str]) -> XDialogOptions {
-    opts(title, "Downloading updates", "Downloading package 1 of 3...", XDialogIcon::Information, buttons)
+fn progress_opts(buttons: &[&str]) -> XDialogOptions {
+    opts("Downloading", "Downloading updates", "Downloading package 1 of 3...", XDialogIcon::Information, buttons)
 }
 
 /// All variants for the Ubuntu theme.
@@ -41,7 +42,8 @@ pub fn variants() -> Vec<Variant> {
         // ---- static dialogs ----
         v.push(still("info_ok", dark, opts("Information", "Update installed", "My App has been updated to version 2.4.1 successfully.", XDialogIcon::Information, &["OK"]))
                .golden());
-        v.push(still("warning_yesno", dark, states_opts("Update Available")).golden());
+        // Also the default keyboard focus look (the last button focused on open).
+        v.push(still("warning_yesno", dark, states_opts()).golden());
         v.push(still("error_retrycancel",
                      dark,
                      opts("Error", "The update failed", "The download could not be completed. Check your network connection and try again.", XDialogIcon::Error, &["Cancel", "Retry"])));
@@ -86,8 +88,7 @@ pub fn variants() -> Vec<Variant> {
 
         // ---- button states (API 0 = "No", 1 = "Yes", the default) ----
         let (no, yes) = (0usize, 1usize);
-        let st = |name: &str| Variant::message(format!("{name}_{th}"), states_opts("Update Available (states)"), look(dark));
-        v.push(st("state_idle").capture(1.0, ""));
+        let st = |name: &str| Variant::message(format!("{name}_{th}"), states_opts(), look(dark));
         v.push(fade(st("hover_default").at(1.0, Action::HoverButton(yes)), 1.0));
         v.push(fade(st("hover_secondary").at(1.0, Action::HoverButton(no)), 1.0));
         v.push(fade(st("unhover").at(0.5, Action::HoverButton(no)).at(1.0, Action::MoveTo(5.0, 5.0)), 1.0));
@@ -95,24 +96,21 @@ pub fn variants() -> Vec<Variant> {
         v.push(st("after_press_focus_moved").at(0.5, Action::PressButton(no)).at(1.0, Action::MoveTo(5.0, 5.0)).at(1.0, Action::Release).capture(1.5, ""));
 
         // Keyboard focus.
-        let fo = |name: &str| Variant::message(format!("{name}_{th}"), states_opts("Update Available (focus)"), look(dark));
-        v.push(fo("focus_default").capture(1.0, "").golden());
-        v.push(fade(fo("focus_tab").at(1.0, Action::Key(Key::Tab)), 1.0));
-        v.push(fo("focus_right_arrow").at(0.5, Action::Key(Key::Tab)).at(1.0, Action::Key(Key::ArrowRight)).capture(1.5, ""));
+        v.push(fade(st("focus_tab").at(1.0, Action::Key(Key::Tab)), 1.0));
+        v.push(st("focus_right_arrow").at(0.5, Action::Key(Key::Tab)).at(1.0, Action::Key(Key::ArrowRight)).capture(1.5, ""));
 
         // The pointer leaves the window over the hovered "No": "No" fades back to idle and the
         // focus ring on "Yes" returns.
-        v.push(Variant::message(format!("leave_restores_focus_{th}"), states_opts("Update Available (leave)"), look(dark))
-                   .at(1.0, Action::HoverButton(no))
-                   .capture(1.3, "_hovered")
-                   .at(1.5, Action::Leave)
-                   .capture(2.0, ""));
+        v.push(st("leave_restores_focus").at(1.0, Action::HoverButton(no))
+                                         .capture(1.3, "_hovered")
+                                         .at(1.5, Action::Leave)
+                                         .capture(2.0, "")
+                                         .golden());
         // An inactive window keeps the default button's focus ring.
-        v.push(Variant::message(format!("inactive_focus_{th}"), states_opts("Update Available (inactive)"), look(dark)).at(0.5, Action::WindowFocus(false))
-                                                                                                                    .capture(1.0, ""));
+        v.push(st("inactive_focus").at(0.5, Action::WindowFocus(false)).capture(1.0, "").golden());
 
         // ---- progress ----
-        let pr = |name: &str| Variant::progress(format!("{name}_{th}"), progress_opts("Downloading (progress)", &[]), look(dark));
+        let pr = |name: &str| Variant::progress(format!("{name}_{th}"), progress_opts(&[]), look(dark));
         v.push(pr("progress_0").capture(1.0, "").golden());
         v.push(grow(pr("progress_50").at(1.0, Action::Progress(TestProgress::Value(0.5))), 1.0));
         v.push(grow(pr("progress_100").at(0.5, Action::Progress(TestProgress::Value(0.5))).at(1.0, Action::Progress(TestProgress::Value(1.0))), 1.0));
@@ -129,7 +127,7 @@ pub fn variants() -> Vec<Variant> {
 
         // Progress with a Cancel button, then hovered.
         let pc = |name: &str| {
-            Variant::progress(format!("{name}_{th}"), progress_opts("Downloading (cancel)", &["Cancel"]), look(dark)).at(0.3, Action::Progress(TestProgress::Value(0.35)))
+            Variant::progress(format!("{name}_{th}"), progress_opts(&["Cancel"]), look(dark)).at(0.3, Action::Progress(TestProgress::Value(0.35)))
         };
         v.push(pc("progress_cancel").capture(1.0, ""));
         v.push(pc("progress_cancel_hover").at(1.0, Action::HoverButton(0)).capture(1.3, ""));
@@ -140,7 +138,7 @@ pub fn variants() -> Vec<Variant> {
                    .capture(1.0, ""));
 
         // HiDPI smoke set.
-        v.push(Variant::message(format!("hidpi2_warning_yesno_{th}"), states_opts("Update Available"), look(dark)).ppp(2.0).capture(1.0, ""));
+        v.push(st("hidpi2_warning_yesno").ppp(2.0).capture(1.0, ""));
         v.push(Variant::message(format!("hidpi125_info_ok_{th}"),
                                 opts("Information", "Update installed", "My App has been updated to version 2.4.1 successfully.", XDialogIcon::Information, &["OK"]),
                                 look(dark)).ppp(1.25)
@@ -149,11 +147,12 @@ pub fn variants() -> Vec<Variant> {
         // Desktop-portal accent overlay: hover/pressed/focus/progress take the accent, the track is
         // 35 % accent.
         let accented = TestAppearance { accent: Some([0xE9, 0x54, 0x20]), ..look(dark) };
-        v.push(Variant::message(format!("accent_hover_{th}"), states_opts("Update Available (accent)"), accented.clone()).at(1.0, Action::HoverButton(no))
-                                                                                                                       .capture(1.5, ""));
-        v.push(Variant::message(format!("accent_focus_{th}"), states_opts("Update Available (accent)"), accented.clone()).capture(1.0, ""));
-        v.push(Variant::progress(format!("accent_progress_{th}"), progress_opts("Downloading (accent)", &[]), accented).at(0.3, Action::Progress(TestProgress::Value(0.5)))
-                                                                                                                     .capture(1.0, ""));
+        let ac = |name: &str| Variant::message(format!("{name}_{th}"), states_opts(), accented.clone());
+        v.push(ac("accent_hover").at(1.0, Action::HoverButton(no)).capture(1.5, "").golden());
+        v.push(ac("accent_focus").capture(1.0, "").golden());
+        v.push(Variant::progress(format!("accent_progress_{th}"), progress_opts(&[]), accented).at(0.3, Action::Progress(TestProgress::Value(0.5)))
+                                                                                              .capture(1.0, "")
+                                                                                              .golden());
     }
     v
 }

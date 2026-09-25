@@ -35,28 +35,26 @@ pub fn variants() -> Vec<Variant> {
         let look = purple(dark);
 
         // ---- standalone dialogs (pointer mode: no focus visual) ----
+        let info_o = opts("Information", "Information", "The operation completed successfully.", XDialogIcon::None, &["OK"]);
+        let warning_o = opts("Warning", "Warning", "The application is running from a temporary folder. Updates may not work correctly.", XDialogIcon::Warning, &["Cancel", "Continue"]);
         let sw = |name: &str, o: XDialogOptions| pointer_mode(Variant::message(format!("{name}_{th}"), o, look.clone())).capture(1.0, "");
-        v.push(sw("info", opts("Information", "Information", "The operation completed successfully.", XDialogIcon::None, &["OK"])).golden());
+        v.push(sw("info", info_o.clone()).golden());
         v.push(sw("yesno", yesno()).golden());
         v.push(sw("retrycancel",
                   opts("Download failed", "Download failed", "The update could not be downloaded. Check your network connection and try again.", XDialogIcon::None, &["Cancel", "Retry"])));
         v.push(sw("three_buttons", opts("Save your work?", "Save your work?", "Your changes will be lost if you don't save them.", XDialogIcon::None, &["Cancel", "Don't save", "Save"])));
         v.push(sw("icon_info", opts("Information", "Information", "A new version of this application is available.", XDialogIcon::Information, &["OK"])).golden());
-        v.push(sw("icon_warning",
-                  opts("Warning", "Warning", "The application is running from a temporary folder. Updates may not work correctly.", XDialogIcon::Warning, &["Cancel", "Continue"])));
+        v.push(sw("icon_warning", warning_o.clone()));
         v.push(sw("icon_error", opts("Error", "Error", "The installation failed. The package signature could not be verified.", XDialogIcon::Error, &["Close"])));
         v.push(sw("long_text", opts("Update ready to install", "Update ready to install", LONG, XDialogIcon::None, &["Later", "Restart now"])));
 
-        let info_o = opts("Information", "Information", "The operation completed successfully.", XDialogIcon::None, &["OK"]);
         let long_title_o = opts("Long title", "This is a considerably longer dialog title that needs to wrap onto a second line", "Short body.", XDialogIcon::None, &["OK"]);
-        let warning_o = opts("Warning", "Warning", "The application is running from a temporary folder. Updates may not work correctly.", XDialogIcon::Warning, &["Cancel", "Continue"]);
-        v.push(sw("cd_info_accentclose", info_o.clone()));
         v.push(sw("cd_long_title", long_title_o).golden());
         // Opened without pointer input: the default button shows the keyboard focus visual.
         let kb = |name: &str, o: XDialogOptions| Variant::message(format!("kbfocus_{name}_{th}"), o, look.clone()).capture(1.0, "");
         v.push(kb("yesno", yesno()).golden());
         v.push(kb("info_accentclose", info_o));
-        v.push(kb("icon_warning", warning_o));
+        v.push(kb("icon_warning", warning_o.clone()));
         v.push(Variant::progress(format!("kbfocus_progress_050_{th}"), opts("Installing update", "Installing update", "Downloading package... 50%", XDialogIcon::None, &["Cancel"]), look.clone())
                .at(0.2, Action::Progress(TestProgress::Value(0.5)))
                .capture(1.0, ""));
@@ -74,18 +72,17 @@ pub fn variants() -> Vec<Variant> {
 
         // ---- button states in the yesno dialog ----
         // API: 0 = "No" (standard), 1 = "Yes" (accent, default). The `standard` states keep the
-        // default button's keyboard focus visual, the `accent` ones hide it (pointer mode).
+        // default button's keyboard focus visual, the `accent` ones hide it (pointer mode). The
+        // normal looks are `kbfocus_yesno` (standard) and `yesno` (accent).
         let (std_b, acc_b) = (0usize, 1usize);
         let state = |kind: &str, state: &str| Variant::message(format!("btn_{kind}_{state}_{th}"), yesno(), look.clone());
         for (kind, b) in [("standard", std_b), ("accent", acc_b)] {
             let mode = |v: Variant| if kind == "standard" { v } else { pointer_mode(v) };
-            v.push(mode(state(kind, "normal")).capture(1.0, ""));
             v.push(mode(state(kind, "pointerover")).at(1.0, Action::HoverButton(b)).capture(1.5, ""));
             v.push(mode(state(kind, "pressed")).at(1.0, Action::PressButton(b)).capture(1.5, ""));
         }
-        // Keyboard focus: the default (accent) button has it on open; Tab moves it to "No" and the
-        // accent style follows focus.
-        v.push(state("accent", "focused").capture(1.0, ""));
+        // Keyboard focus: the default (accent) button has it on open (`kbfocus_yesno`); Tab moves
+        // it to "No" and the accent style follows focus.
         v.push(state("accent", "focused_pointerover").at(1.0, Action::HoverButton(acc_b)).capture(1.5, ""));
         v.push(state("standard", "focused").at(1.0, Action::Key(Key::Tab)).capture(1.5, ""));
         v.push(state("standard", "focused_pointerover").at(1.0, Action::Key(Key::Tab)).at(1.0, Action::HoverButton(std_b)).capture(1.5, ""));
@@ -110,9 +107,7 @@ pub fn variants() -> Vec<Variant> {
 
         // ---- default blue accent ----
         v.push(Variant::message(format!("blue_yesno_{th}"), yesno(), super::look(dark)).capture(1.0, ""));
-        v.push(Variant::message(format!("blue_icon_warning_{th}"),
-                                opts("Warning", "Warning", "The application is running from a temporary folder. Updates may not work correctly.", XDialogIcon::Warning, &["Cancel", "Continue"]),
-                                super::look(dark)).capture(1.0, ""));
+        v.push(Variant::message(format!("blue_icon_warning_{th}"), warning_o, super::look(dark)).capture(1.0, ""));
     }
     // Edge cases: scrolling body, missing parts, many buttons.
     let huge: String = (1..=80).map(|i| format!("Line {i} of a very long message that has to scroll.")).collect::<Vec<_>>().join("\n");

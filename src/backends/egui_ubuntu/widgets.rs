@@ -1,11 +1,13 @@
-//! The Ubuntu theme's widgets: the outlined button and the progress bar (icons are in `icons.rs`).
+//! The Ubuntu theme's widgets: the outlined button, the progress bar and the icons.
 
-use egui::{Color32, Id, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2, Widget};
+use egui::{Color32, Id, Painter, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2, Widget};
 
 use super::tokens::*;
 use crate::backends::egui_core::anim::{self, Easing, Lerp, Transition};
+use crate::backends::egui_core::color::rgb;
 use crate::backends::egui_core::text::TextBlock;
-use crate::backends::egui_core::theme::{ButtonInteraction, DialogView, ProgressView};
+use crate::backends::egui_core::theme::{unsnapped_rect, ButtonInteraction, DialogView, ProgressView};
+use crate::model::XDialogIcon;
 
 /// Button colour fade: 150 ms linear.
 const FADE: Transition = Transition::linear(0.15);
@@ -49,8 +51,8 @@ impl Button<'_> {
         let tk = self.tk;
         // The focus ring shows whether or not the window is active. `Response::has_focus` (and so
         // `st.focus_visible`) is false while the window is inactive; egui's focus memory keeps the
-        // focused widget, so read that instead (not in the measure pass, which stays idle).
-        let focused = !self.view.frame.sizing && self.view.frame.focus_visible && ui.ctx().memory(|m| m.has_focus(st.response.id));
+        // focused widget, so read that instead.
+        let focused = self.view.frame.focus_visible && ui.ctx().memory(|m| m.has_focus(st.response.id));
         let target = if st.pointer_down || st.key_pressed {
             // The pressed look stays while the pointer is dragged off the button.
             tk.pressed
@@ -90,7 +92,7 @@ pub(crate) struct ProgressBar<'a> {
 /// Stable id: the value tween must survive indeterminate phases (the next value animates from
 /// the last determinate bar end).
 fn progress_id() -> Id {
-    Id::new("linux.progress.value")
+    Id::new("ubuntu.progress.value")
 }
 
 impl Widget for ProgressBar<'_> {
@@ -105,7 +107,7 @@ impl Widget for ProgressBar<'_> {
                 painter.rect_filled(rect, PROGRESS_RADIUS, tk.progress_bg);
                 if v > 0.0 {
                     let bar = Rect::from_min_size(rect.min, Vec2::new(v * rect.width(), rect.height()));
-                    painter.add(unsnapped(bar, PROGRESS_RADIUS, tk.progress_fg));
+                    painter.add(unsnapped_rect(bar, PROGRESS_RADIUS, tk.progress_fg));
                 }
             }
             ProgressView::Indeterminate { restarted_at, .. } => {
@@ -121,19 +123,13 @@ impl Widget for ProgressBar<'_> {
                 let (left, right) = ((cx - len / 2.0).max(0.0), (cx + len / 2.0).min(w));
                 if right > left {
                     let cap = Rect::from_x_y_ranges(rect.left() + left..=rect.left() + right, rect.y_range());
-                    painter.add(unsnapped(cap, r, tk.progress_fg));
+                    painter.add(unsnapped_rect(cap, r, tk.progress_fg));
                 }
                 anim::request_smooth_frame(&ctx);
             }
         }
         response
     }
-}
-
-/// A filled rounded rect that is not snapped to whole pixels, so a moving end glides instead of
-/// stepping a pixel at a time.
-fn unsnapped(rect: Rect, radius: f32, color: Color32) -> egui::epaint::RectShape {
-    egui::epaint::RectShape::filled(rect, radius, color).with_round_to_pixels(false)
 }
 
 /// Capsule travel position 0..1 at normalized cycle time `n`: 0-40 % sweep right, 40-50 % hold,
@@ -151,5 +147,51 @@ pub(crate) fn capsule_pos(n: f32) -> f32 {
         1.0 - smooth((n - 0.5) / 0.4)
     } else {
         0.0
+    }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Icons: drawn procedurally, a filled disc with a white "i" (information), a white X (error) or a
+// dark "!" (warning). Every proportion is relative to the icon size.
+// ------------------------------------------------------------------------------------------------
+
+const INFO: Color32 = rgb(0x2196F3);
+const ERROR: Color32 = rgb(0xD75A4A);
+const WARNING: Color32 = rgb(0xFFC107);
+const WARNING_GLYPH: Color32 = rgb(0x3D3D3D);
+
+/// Draw `icon` into the square `rect` (logical px).
+pub(crate) fn draw_icon(painter: &Painter, icon: &XDialogIcon, rect: Rect) {
+    let s = rect.width();
+    let c = rect.center();
+    let disc = |col| painter.circle_filled(c, s / 2.0 - 1.0, col);
+    // A vertical pill of width `0.1 s` whose top edge is `top` below the centre.
+    let stem = |top: f32, h: f32, col| {
+        let w = s * 0.1;
+        painter.rect_filled(Rect::from_min_size(Pos2::new(c.x - w / 2.0, c.y + top), Vec2::new(w, h)), w / 2.0, col);
+    };
+    match icon {
+        XDialogIcon::None => {}
+        XDialogIcon::Information => {
+            disc(INFO);
+            painter.circle_filled(c - Vec2::new(0.0, s * 0.2), s * 0.07, Color32::WHITE);
+            stem(-s * 0.05, s * 0.3, Color32::WHITE);
+        }
+        XDialogIcon::Error => {
+            disc(ERROR);
+            let (arm, width) = (s * 0.18, s * 0.08);
+            for d in [Vec2::new(arm, arm), Vec2::new(arm, -arm)] {
+                let (a, b) = (c - d, c + d);
+                painter.line_segment([a, b], Stroke::new(width, Color32::WHITE));
+                // Round caps.
+                painter.circle_filled(a, width / 2.0, Color32::WHITE);
+                painter.circle_filled(b, width / 2.0, Color32::WHITE);
+            }
+        }
+        XDialogIcon::Warning => {
+            disc(WARNING);
+            stem(-s * 0.25, s * 0.28, WARNING_GLYPH);
+            painter.circle_filled(c + Vec2::new(0.0, s * 0.18), s * 0.065, WARNING_GLYPH);
+        }
     }
 }

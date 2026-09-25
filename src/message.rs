@@ -1,6 +1,7 @@
+use std::sync::mpsc;
 use std::time::Duration;
 
-use crate::channel::ui_thread_guard;
+use crate::channel::is_ui_thread;
 use crate::*;
 
 /// Shows a message box with an information icon and an OK button and blocks until the user closes it.
@@ -88,32 +89,30 @@ fn show_message_internal<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
 
 /// Shows a message box with the specified options and blocks until the user closes it or the timeout occurs.
 ///
-/// Every `show_message*` function blocks. Called *on* an xdialog UI thread (from a progress button
-/// callback of the egui or AppKit backends, or on the host event-loop thread in `winit-host` mode)
-/// it would deadlock the loop that has to show the dialog, so it returns
-/// [`XDialogError::BlockingCallOnUiThread`] instead. (Win32 TaskDialog callbacks run on the
-/// dialog's own thread, where this call works.)
-/// Only calls made directly on that thread are detected: a UI thread that waits on another thread
-/// which is itself inside `show_message` still deadlocks.
+/// Every `show_message*` function blocks, and returns [`XDialogError::BlockingCallOnUiThread`] on
+/// xdialog's UI thread (see [Threads](crate#threads)).
 pub fn show_message(options: XDialogOptions, timeout: Option<Duration>) -> Result<XDialogResult, XDialogError> {
     if get_silent() {
         return Ok(XDialogResult::SilentMode);
     }
-    ui_thread_guard("show_message")?;
+    if is_ui_thread() {
+        warn!("xdialog: show_message would block the xdialog UI thread and deadlock; call it from another thread");
+        return Err(XDialogError::BlockingCallOnUiThread);
+    }
 
     let id = get_next_id();
-    let (creation_sender, creation_receiver) = oneshot::channel();
+    let (creation_sender, creation_receiver) = mpsc::channel();
     send_request(DialogMessageRequest::ShowMessageWindow(id, options, creation_sender))?;
     let dialog_receiver = creation_receiver.recv().map_err(XDialogError::NoResult)??;
 
     match timeout {
         Some(timeout) => match dialog_receiver.recv_timeout(timeout) {
             Ok(result) => Ok(result),
-            Err(oneshot::RecvTimeoutError::Timeout) => {
+            Err(mpsc::RecvTimeoutError::Timeout) => {
                 send_request(DialogMessageRequest::CloseWindow(id))?;
                 Ok(XDialogResult::TimeoutElapsed)
             }
-            Err(oneshot::RecvTimeoutError::Disconnected) => Err(XDialogError::NoResult(oneshot::RecvError)),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(XDialogError::NoResult(mpsc::RecvError)),
         },
         None => dialog_receiver.recv().map_err(XDialogError::NoResult),
     }
@@ -125,9 +124,9 @@ mod tests {
 
     #[test]
     fn show_message_on_ui_thread_fails_fast() {
-        crate::channel::mark_ui_thread(true);
+        let mark = crate::channel::UiThreadMark::set();
         let r = show_message_info_ok("t", "m", "b");
-        crate::channel::mark_ui_thread(false);
+        drop(mark);
         assert!(matches!(r, Err(XDialogError::BlockingCallOnUiThread)), "{r:?}");
     }
 }

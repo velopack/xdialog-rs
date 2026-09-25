@@ -28,6 +28,7 @@ impl DialogClock {
     }
 
     /// A clock fixed at `t` seconds (offscreen harness).
+    #[cfg(any(test, feature = "_test-hooks"))]
     pub(crate) fn frozen(t: f64) -> Self {
         DialogClock { origin: Instant::now(), frozen: Some(t) }
     }
@@ -41,14 +42,9 @@ impl DialogClock {
     }
 
     /// Fix the clock at `t` seconds.
+    #[cfg(any(test, feature = "_test-hooks"))]
     pub(crate) fn freeze(&mut self, t: f64) {
         self.frozen = Some(t);
-    }
-}
-
-impl Default for DialogClock {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

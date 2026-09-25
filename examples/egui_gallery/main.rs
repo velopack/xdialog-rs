@@ -1,8 +1,8 @@
 //! Offscreen gallery for the egui themes.
 //!
 //! ```text
-//! cargo run --release --example egui_gallery --features _test-hooks,egui-fluent,egui-ubuntu -- \
-//!     [--theme ubuntu|fluent|all] [--out <dir>] [--filter <substr>] [--list]
+//! cargo run --release --example egui_gallery --features _test-hooks -- \
+//!     [--theme ubuntu|fluent|all] [--out <dir>] [--filter <substr>]
 //! ```
 //!
 //! Renders every variant of `ubuntu.rs` / `fluent.rs` with the deterministic offscreen renderer
@@ -22,37 +22,36 @@ use std::time::Instant;
 use image::RgbaImage;
 
 pub use model::*;
-pub use xdialog::__test::{Key, TestAppearance, TestKind, TestProgress};
-pub use xdialog::{XDialogIcon, XDialogOptions};
+pub use xdialog::__test::egui::Key;
+pub use xdialog::__test::{TestAppearance, TestKind, TestProgress};
+pub use xdialog::{XDialogBackend, XDialogIcon, XDialogOptions};
+
+type Theme = (XDialogBackend, fn() -> Vec<Variant>);
+
+/// The gallery themes and their variant lists.
+const THEMES: [Theme; 2] = [(XDialogBackend::Ubuntu, ubuntu::variants), (XDialogBackend::Fluent, fluent::variants)];
 
 struct Args {
-    themes: Vec<&'static str>,
+    themes: Vec<Theme>,
     out: PathBuf,
     filter: Option<String>,
-    list: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
-    let mut a = Args { themes: vec!["ubuntu"], out: PathBuf::from("target/egui_gallery"), filter: None, list: false };
+    let mut a = Args { themes: vec![THEMES[0]], out: PathBuf::from("target/egui_gallery"), filter: None };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         let mut val = || it.next().ok_or_else(|| format!("{arg} needs a value"));
         match arg.as_str() {
             "--theme" => {
-                a.themes = match val()?.as_str() {
-                    "ubuntu" => vec!["ubuntu"],
-                    "fluent" => vec!["fluent"],
-                    "all" => vec!["ubuntu", "fluent"],
-                    other => return Err(format!("unknown theme {other}")),
+                let t = val()?;
+                a.themes = THEMES.into_iter().filter(|(b, _)| t == "all" || theme_name(*b) == t).collect();
+                if a.themes.is_empty() {
+                    return Err(format!("unknown theme {t}"));
                 }
             }
             "--out" => a.out = PathBuf::from(val()?),
             "--filter" => a.filter = Some(val()?),
-            "--list" => a.list = true,
-            "-h" | "--help" => {
-                println!("{}", include_str!("main.rs").lines().take_while(|l| l.starts_with("//!")).map(|l| l.trim_start_matches("//!")).collect::<Vec<_>>().join("\n"));
-                std::process::exit(0);
-            }
             other => return Err(format!("unknown argument {other}")),
         }
     }
@@ -67,29 +66,23 @@ fn main() {
             std::process::exit(2);
         }
     };
-    for &theme in &args.themes {
-        let all = if theme == "fluent" { fluent::variants() } else { ubuntu::variants() };
-        let variants: Vec<Variant> = all.into_iter().filter(|v| args.filter.as_deref().is_none_or(|f| v.name.contains(f))).collect();
-        if args.list {
-            for v in &variants {
-                println!("{theme}\t{}\t{} captures", v.name, v.captures.len());
-            }
-            continue;
-        }
-        if let Err(e) = run_theme(theme, &variants, &args) {
-            eprintln!("egui_gallery: {theme}: {e}");
+    for &(backend, variants) in &args.themes {
+        let variants: Vec<Variant> = variants().into_iter().filter(|v| args.filter.as_deref().is_none_or(|f| v.name.contains(f))).collect();
+        if let Err(e) = run_theme(backend, &variants, &args) {
+            eprintln!("egui_gallery: {}: {e}", theme_name(backend));
             std::process::exit(1);
         }
     }
 }
 
-fn run_theme(theme: &str, variants: &[Variant], args: &Args) -> Result<(), String> {
-    let dir = args.out.join(theme);
+fn run_theme(backend: XDialogBackend, variants: &[Variant], args: &Args) -> Result<(), String> {
+    let theme = theme_name(backend);
+    let dir = args.out.join(&theme);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let t0 = Instant::now();
     let (mut frames_total, mut stills) = (0usize, Vec::new());
     for v in variants {
-        for f in run_variant(theme, v)? {
+        for f in run_variant(backend, v)? {
             frames_total += 1;
             let img = RgbaImage::from_raw(f.w, f.h, f.rgba).ok_or("bad frame buffer")?;
             let path = dir.join(format!("{}{}.png", v.name, f.suffix));

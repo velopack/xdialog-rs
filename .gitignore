@@ -2,5 +2,3 @@
 .idea
 .vscode
 .claude/
-/examples/winit_host/target
-/tests/headless/target

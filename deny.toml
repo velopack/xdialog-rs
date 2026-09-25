@@ -7,7 +7,7 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 ignore = [
     "RUSTSEC-2024-0436", # paste unmaintained (dev-only: xcap -> image -> rav1e)
     # ttf-parser unmaintained. Transitive only: winit 0.30 -> sctk-adwaita -> ab_glyph ->
-    # owned_ttf_parser (the Wayland client-side decorations; Linux, feature `builtin-winit`).
+    # owned_ttf_parser (the Wayland client-side decorations; Linux).
     # xdialog itself parses fonts with skrifa (via egui/epaint). No replacement upstream yet.
     "RUSTSEC-2026-0192",
 ]
