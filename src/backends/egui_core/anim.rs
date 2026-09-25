@@ -225,6 +225,22 @@ pub(crate) fn stop<T: Lerp>(ctx: &egui::Context, id: Id) -> Option<T> {
        })
 }
 
+fn smooth_id() -> Id {
+    Id::new("xdialog.smooth_frame")
+}
+
+/// Continuous motion (an indeterminate progress bar): repaint, and pace this dialog at the
+/// monitor's refresh rate instead of 60 Hz while it keeps asking.
+pub(crate) fn request_smooth_frame(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.insert_temp(smooth_id(), true));
+    ctx.request_repaint();
+}
+
+/// Whether the pass that just ran called [`request_smooth_frame`] (clears the flag).
+pub(crate) fn take_smooth_request(ctx: &egui::Context) -> bool {
+    ctx.data_mut(|d| d.remove_temp::<bool>(smooth_id())).unwrap_or(false)
+}
+
 /// Make the next [`animate`] call of every id snap to its target, and clear egui's own
 /// animations. Core calls this on theme/appearance change so colours don't fade between palettes.
 pub(crate) fn reset_animations(ctx: &egui::Context) {

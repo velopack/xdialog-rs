@@ -162,7 +162,10 @@ impl Theme for FluentTheme {
         let max_h = view.limits.max_height.min(MAX_H);
         let content = Frame::new().fill(tk.content_bg).inner_margin(PAD).show(ui, |ui| {
             ui.set_width(col_w);
-            ui.set_min_height(MIN_H - bar_h - 2.0 * PAD);
+            // ContentDialog's minimum height; a button-less progress dialog hugs its content.
+            if n > 0 {
+                ui.set_min_height(MIN_H - bar_h - 2.0 * PAD);
+            }
             if let Some(t) = &title {
                 ui.add(TextBlockWidget { block: t, color: tk.text, width: Some(col_w) });
                 if has_row || view.progress.is_some() {

@@ -19,7 +19,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use egui::Vec2;
 use winit::application::ApplicationHandler;
@@ -177,6 +177,9 @@ impl Drop for UiThreadMark {
 pub(crate) struct WinitWin {
     pub window: Rc<Window>,
     pub id: WindowId,
+    /// Cached monitor refresh period and when it was read (re-read about once a second, so a
+    /// window dragged to another monitor picks up its rate).
+    period: std::cell::Cell<Option<(Instant, Option<Duration>)>>,
 }
 
 /// The winit window system, created fresh inside each `ApplicationHandler` callback.
@@ -214,6 +217,21 @@ fn winit_theme(dark: bool) -> winit::window::Theme {
 impl WindowSystem for WinitWs<'_> {
     type Win = WinitWin;
 
+    fn monitor_period(&self, w: &WinitWin) -> Option<Duration> {
+        let now = Instant::now();
+        if let Some((at, period)) = w.period.get() {
+            if now.duration_since(at) < Duration::from_secs(1) {
+                return period;
+            }
+        }
+        let period = w.window.current_monitor()
+                      .and_then(|m| m.refresh_rate_millihertz())
+                      .filter(|&mhz| mhz > 0)
+                      .map(|mhz| Duration::from_secs_f64(1000.0 / mhz as f64));
+        w.period.set(Some((now, period)));
+        period
+    }
+
     fn create(&mut self, spec: &WindowSpec<'_>) -> Result<CreatedWindow<WinitWin>, XDialogError> {
         let sb = self.sb.ok_or_else(|| XDialogError::SystemError("xdialog: the software presenter is unavailable".into()))?;
         let mut attrs = Window::default_attributes().with_title(spec.title)
@@ -243,7 +261,7 @@ impl WindowSystem for WinitWs<'_> {
         let ppp = window.scale_factor() as f32;
         let size = window.inner_size();
         let id = window.id();
-        Ok(CreatedWindow { win: WinitWin { window, id }, presenter: Box::new(presenter), ppp, size_px: [size.width, size.height] })
+        Ok(CreatedWindow { win: WinitWin { window, id, period: Default::default() }, presenter: Box::new(presenter), ppp, size_px: [size.width, size.height] })
     }
 
     fn set_visible(&mut self, w: &WinitWin, visible: bool) {

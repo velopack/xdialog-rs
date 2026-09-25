@@ -105,7 +105,7 @@ impl Widget for ProgressBar<'_> {
                 painter.rect_filled(rect, PROGRESS_RADIUS, tk.progress_bg);
                 if v > 0.0 {
                     let bar = Rect::from_min_size(rect.min, Vec2::new(v * rect.width(), rect.height()));
-                    painter.rect_filled(bar, PROGRESS_RADIUS, tk.progress_fg);
+                    painter.add(unsnapped(bar, PROGRESS_RADIUS, tk.progress_fg));
                 }
             }
             ProgressView::Indeterminate { restarted_at, .. } => {
@@ -121,13 +121,19 @@ impl Widget for ProgressBar<'_> {
                 let (left, right) = ((cx - len / 2.0).max(0.0), (cx + len / 2.0).min(w));
                 if right > left {
                     let cap = Rect::from_x_y_ranges(rect.left() + left..=rect.left() + right, rect.y_range());
-                    painter.rect_filled(cap, r, tk.progress_fg);
+                    painter.add(unsnapped(cap, r, tk.progress_fg));
                 }
-                ctx.request_repaint();
+                anim::request_smooth_frame(&ctx);
             }
         }
         response
     }
+}
+
+/// A filled rounded rect that is not snapped to whole pixels, so a moving end glides instead of
+/// stepping a pixel at a time.
+fn unsnapped(rect: Rect, radius: f32, color: Color32) -> egui::epaint::RectShape {
+    egui::epaint::RectShape::filled(rect, radius, color).with_round_to_pixels(false)
 }
 
 /// Capsule travel position 0..1 at normalized cycle time `n`: 0-40 % sweep right, 40-50 % hold,

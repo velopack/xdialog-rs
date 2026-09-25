@@ -19,8 +19,9 @@ const CORNER: f32 = 4.0;
 const FASTER: Transition = Transition::linear(0.083);
 /// Determinate value changes (ControlNormalAnimationDuration, fast-out-slow-in).
 const PROGRESS_VALUE: Transition = Transition::new(0.25, Easing::FLUENT_FAST_OUT_SLOW_IN);
-/// ProgressBar height (ProgressBarMinHeight) and indeterminate loop length.
-pub(crate) const PROGRESS_H: f32 = 3.0;
+/// Indicator height (WinUI's ProgressBarMinHeight is 3; 4 lets the pill ends read as round at
+/// 100 % scale) and indeterminate loop length.
+pub(crate) const PROGRESS_H: f32 = 4.0;
 const INDETERMINATE_LOOP: f64 = 2.0;
 /// Icon box (the 32 px InfoBar glyph composite).
 pub(crate) const ICON_SIZE: f32 = 32.0;
@@ -103,8 +104,8 @@ fn paint_box(painter: &egui::Painter, r: Rect, c: &ButtonColors, elevation_top: 
 // Progress bar
 // ------------------------------------------------------------------------------------------------
 
-/// WinUI ProgressBar (3 px, full available width). Determinate: 1 px track
-/// (ControlStrongStrokeColorDefault) centred in the row + 3 px indicator from the left.
+/// WinUI ProgressBar (full available width). Determinate: 1 px track
+/// (ControlStrongStrokeColorDefault) centred in the row + pill indicator from the left.
 /// Indeterminate: two accent bars sweeping in a 2 s loop (ProgressBar.xaml storyboard), phase
 /// origin = when the bar became indeterminate.
 pub(crate) struct FluentProgress<'a> {
@@ -122,27 +123,36 @@ impl Widget for FluentProgress<'_> {
         match self.progress {
             ProgressView::Determinate { value } => {
                 let v = anim::animate(&ctx, id, value.clamp(0.0, 1.0), PROGRESS_VALUE);
-                let track = Rect::from_min_size(Pos2::new(r.min.x, r.min.y + 1.0), Vec2::new(r.width(), 1.0));
+                let track = Rect::from_min_size(Pos2::new(r.min.x, r.center().y - 0.5), Vec2::new(r.width(), 1.0));
                 painter.rect_filled(track, 0.5, tk.progress_track);
                 let w = r.width() * v;
                 if w > 0.0 {
-                    painter.rect_filled(Rect::from_min_size(r.min, Vec2::new(w, PROGRESS_H)), PROGRESS_H / 2.0, tk.progress_fill);
+                    pill(&painter, Rect::from_min_size(r.min, Vec2::new(w, PROGRESS_H)), tk.progress_fill);
                 }
             }
             ProgressView::Indeterminate { since, .. } => {
                 // WinUI collapses the determinate indicator (width 0) while indeterminate: a later
                 // value grows from 0, never from the stale pre-indeterminate value.
                 anim::animate(&ctx, id, 0.0f32, Transition::INSTANT);
-                ctx.request_repaint();
+                anim::request_smooth_frame(&ctx);
                 let t = (ctx.input(|i| i.time) - since).rem_euclid(INDETERMINATE_LOOP) as f32;
+                // Clamp each bar to the track (not clip it), so it keeps round ends while it slides
+                // in and out.
                 for (x, w) in indeterminate_bars(t, r.width()) {
-                    let bar = Rect::from_min_size(Pos2::new(r.min.x + x, r.min.y), Vec2::new(w, PROGRESS_H));
-                    painter.rect_filled(bar, PROGRESS_H / 2.0, tk.progress_fill);
+                    let (x0, x1) = (x.max(0.0), (x + w).min(r.width()));
+                    if x1 > x0 {
+                        pill(&painter, Rect::from_x_y_ranges(r.min.x + x0..=r.min.x + x1, r.y_range()), tk.progress_fill);
+                    }
                 }
             }
         }
         response
     }
+}
+
+/// A fully rounded bar, not snapped to whole pixels, so moving ends glide instead of stepping.
+fn pill(painter: &egui::Painter, rect: Rect, color: egui::Color32) {
+    painter.add(egui::epaint::RectShape::filled(rect, rect.height() / 2.0, color).with_round_to_pixels(false));
 }
 
 /// `(x offset, width)` of the visible indeterminate bars at loop time `t` (0..2 s) for a bar of
