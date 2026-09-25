@@ -24,28 +24,28 @@ fn run() {
         main_instruction: "This is a main instruction".to_string(),
         title: "This is a title".to_string(),
     };
-    let _ = xdialog::show_message(data.clone(), None);
+    let _ = xdialog::show_message(data.clone()).wait();
 
     data.message = medium_text.to_string();
-    let _ = xdialog::show_message(data.clone(), None);
+    let _ = xdialog::show_message(data.clone()).wait();
 
     // Taller than the height limit: the body scrolls.
     data.message = medium_text.repeat(3);
-    let _ = xdialog::show_message(data.clone(), None);
+    let _ = xdialog::show_message(data.clone()).wait();
 
     data.message = "Hello World\n\nThis is a multi-line dialog with wrapping text and\n\nSome\nElement\nOf\nNewline\nBehavior".to_string();
-    let _ = xdialog::show_message(data.clone(), None);
+    let _ = xdialog::show_message(data.clone()).wait();
 
     data.message = small_text.to_string();
     data.main_instruction = long_instruction.to_string();
-    let _ = xdialog::show_message(data.clone(), None);
+    let _ = xdialog::show_message(data.clone()).wait();
 
     data.icon = XDialogIcon::Error;
-    let _ = xdialog::show_message(data.clone(), None);
+    let _ = xdialog::show_message(data.clone()).wait();
 
     data.message = medium_text.to_string();
     data.title = "".to_string();
-    let _ = xdialog::show_message(data.clone(), None);
+    let _ = xdialog::show_message(data.clone()).wait();
 
     // Unicode: many scripts and emoji, right-to-left and mixed text, complex emoji sequences.
     let _ = xdialog::show_message_ok_cancel(
@@ -67,7 +67,7 @@ fn run() {
         message: "Skin tones: 👋🏻👋🏼👋🏽👋🏾👋🏿\nFamilies: 👨‍👩‍👧‍👦 👩‍👩‍👦‍👦\nCompound: 🏳️‍🌈 🏴‍☠️ 🐻‍❄️\nKeycaps: 0️⃣1️⃣2️⃣🔟".to_string(),
         buttons: vec!["Looks Good! 👍".to_string(), "Broken 💔".to_string()],
     };
-    let _ = xdialog::show_message(data, None);
+    let _ = xdialog::show_message(data).wait();
 
     let d = show_progress("Title", "This is an instruction", small_text, XDialogIcon::None).unwrap();
     d.set_indeterminate().unwrap();

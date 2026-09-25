@@ -23,6 +23,14 @@ behaviour.
   (`show_message*`) made on xdialog's UI thread, e.g. from a progress button callback of the
   egui or AppKit backends, used to deadlock; it now returns this error. (Win32 TaskDialog
   callbacks run on the dialog's own thread and are unaffected.)
+- **`show_message` no longer blocks.** It returns a `MessageDialogProxy` at once:
+  `wait()` blocks for the result, `wait_timeout(d)` replaces the `timeout` parameter (it closes
+  the dialog and returns `TimeoutElapsed`), `try_result()` checks without blocking, the proxy is a
+  `Future`, and dropping it closes the dialog. It works on xdialog's UI thread, e.g. a
+  `winit-host` app's event-loop thread. Errors (no backend, the dialog couldn't be created) are
+  the proxy's result. Replace `show_message(options, None)` with `show_message(options).wait()`.
+  The `show_message_*` shortcuts still block. With `maccf-direct`, a message box that can't be
+  created now returns `SystemError` instead of `WindowClosed`.
 - **`XDialogError` is now `#[non_exhaustive]`**, so future variants are not breaking changes.
   Exhaustive `match`es need a wildcard arm.
 - Dialog calls after the backend has shut down (the builder's event loop ended, or the
@@ -55,6 +63,7 @@ behaviour.
   `Auto` uses the Ubuntu look in host mode (AppKit needs its own loop). See
   `examples/winit_host.rs`.
 - `XDialogTheme` is now `Copy` and `Default` (`SystemDefault`).
+- `XDialogError` is now `Clone`.
 - Right-to-left text (Arabic, Hebrew) is reordered per line (unicode-bidi).
 - System font fallback for characters the bundled font lacks, including the family's bold face
   for headings, placed on the primary font's baseline. Linux scans fonts with fontdb on a

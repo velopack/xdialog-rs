@@ -100,7 +100,7 @@ fn run() {
             .to_string(),
         buttons: vec!["Looks Good! 👍".to_string(), "Broken 💔".to_string()],
     };
-    let _ = xdialog::show_message(data, None);
+    let _ = xdialog::show_message(data).wait();
 
     // Progress dialog with unicode
     let d = show_progress(

@@ -8,10 +8,10 @@
 //! 2. An INVISIBLE window is created at exactly the measured (logical) size, the presenter and the
 //!    egui-winit input state are attached (a different real scale re-requests the size).
 //! 3. `set_visible(true)`, then the first frame is rendered and presented immediately.
-//! 4. `creation.send(Ok(result_rx))`.
+//! 4. `reply.opened()`: the dialog's result goes to the caller from now on.
 //!
 //! If any of this fails or panics (window, softbuffer context, surface, first present), the
-//! request (options, creation sender, callback) is still intact: with `fallback` (Windows `Auto`)
+//! request (options, reply, callback) is still intact: with `fallback` (Windows `Auto`)
 //! it goes to a Win32 TaskDialog and the rest of the session uses TaskDialogs; otherwise the caller
 //! gets the error.
 //!
@@ -21,7 +21,7 @@
 use std::collections::BTreeMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::rc::Rc;
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -40,7 +40,7 @@ use super::theme::{self, DialogKind};
 use crate::channel::{init_handler, Inbox, InboxHandler, UiThreadMark, WakeFn};
 #[cfg(windows)]
 use crate::channel::DialogRequestHandler;
-use crate::model::{CreationSender, DialogMessageRequest, XDialogBackend, XDialogOptions, XDialogResult, XDialogTheme};
+use crate::model::{DialogMessageRequest, DialogReply, XDialogBackend, XDialogOptions, XDialogResult, XDialogTheme};
 use crate::{ProgressButtonCallback, XDialogError};
 
 #[cfg(windows)]
@@ -217,9 +217,9 @@ impl Runtime {
                 self.close_all();
                 self.exit = true;
             }
-            DialogMessageRequest::ShowMessageWindow(id, options, creation) => self.show(el, id, DialogKind::Message, options, creation, None),
-            DialogMessageRequest::ShowProgressWindow(id, options, creation, callback) => {
-                self.show(el, id, DialogKind::Progress, options, creation, callback)
+            DialogMessageRequest::ShowMessageWindow(id, options, reply) => self.show(el, id, DialogKind::Message, options, reply, None),
+            DialogMessageRequest::ShowProgressWindow(id, options, reply, callback) => {
+                self.show(el, id, DialogKind::Progress, options, reply, callback)
             }
             DialogMessageRequest::CloseWindow(id)
             | DialogMessageRequest::SetProgressIndeterminate(id)
@@ -249,15 +249,15 @@ impl Runtime {
             id: usize,
             kind: DialogKind,
             options: XDialogOptions,
-            creation: CreationSender,
+            reply: DialogReply,
             mut callback: Option<ProgressButtonCallback>) {
         #[cfg(windows)]
         if self.backend == XDialogBackend::Win32 {
-            self.win32().show(id, options, kind == DialogKind::Progress, creation, callback);
+            self.win32().show(id, options, kind == DialogKind::Progress, reply, callback);
             return;
         }
         if self.dialogs.contains_key(&id) {
-            let _ = creation.send(Err(XDialogError::SystemError(format!("xdialog: dialog id {id} already exists"))));
+            reply.failed(XDialogError::SystemError(format!("xdialog: dialog id {id} already exists")));
             return;
         }
         // A panic while building the dialog or in its first frame is a failure like any other:
@@ -265,8 +265,10 @@ impl Runtime {
         let shown = catch_unwind(AssertUnwindSafe(|| self.try_show(el, id, kind, &options, &mut callback)))
             .unwrap_or_else(|_| Err(XDialogError::SystemError("xdialog: building the dialog panicked".into())));
         match shown {
-            Ok(result) => {
-                let _ = creation.send(Ok(result));
+            Ok(()) => {
+                if let Some(w) = self.dialogs.get_mut(&id) {
+                    w.dialog.set_sender(reply.opened());
+                }
                 self.after(id);
             }
             Err(e) => {
@@ -274,11 +276,11 @@ impl Runtime {
                 if self.fallback {
                     warn!("xdialog: {e}; using Win32 TaskDialog for the rest of the session");
                     self.backend = XDialogBackend::Win32;
-                    self.win32().show(id, options, kind == DialogKind::Progress, creation, callback);
+                    self.win32().show(id, options, kind == DialogKind::Progress, reply, callback);
                     return;
                 }
                 error!("xdialog: could not show dialog {id}: {e}");
-                let _ = creation.send(Err(e));
+                reply.failed(e);
             }
         }
     }
@@ -292,14 +294,13 @@ impl Runtime {
                 kind: DialogKind,
                 options: &XDialogOptions,
                 callback: &mut Option<ProgressButtonCallback>)
-                -> Result<mpsc::Receiver<XDialogResult>, XDialogError> {
+                -> Result<(), XDialogError> {
         let primary = el.primary_monitor().or_else(|| el.available_monitors().next());
         let ppp = primary.as_ref().map_or(1.0, |m| m.scale_factor() as f32);
         let max_height = primary.as_ref()
                                 .map(|m| (m.size().height as f64 / m.scale_factor() * 0.9) as f32)
                                 .filter(|h| h.is_finite() && *h > 0.0)
                                 .unwrap_or(DEFAULT_MAX_HEIGHT);
-        let (tx, result) = mpsc::channel();
         let params = DialogParams { id,
                                     content: DialogContent::new(kind, options.clone()),
                                     appearance: resolve_appearance(self.xtheme),
@@ -307,7 +308,7 @@ impl Runtime {
                                     ppp,
                                     max_height,
                                     clock: DialogClock::new(),
-                                    sender: Some(tx) };
+                                    sender: None };
         let mut dialog = Dialog::new(theme::new(self.backend), params);
         if no_activate() {
             // Never activated: unfocused from the first frame.
@@ -366,7 +367,7 @@ impl Runtime {
         dialog.set_callback(callback.take());
         self.retired.retain(|r| *r != window.id());
         self.dialogs.insert(id, DialogWindow { dialog, window, input, period: None });
-        Ok(result)
+        Ok(())
     }
 
     /// A surface for `window` (the shared softbuffer context is created with the first window).

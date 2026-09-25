@@ -43,6 +43,7 @@ fn run() {
 
 #[cfg(not(target_os = "macos"))]
 fn run() {
+    use std::future::Future;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Instant;
@@ -141,7 +142,7 @@ fn run() {
 
     let message = |text: &str| {
         let options = XDialogOptions { title: "t".into(), message: text.into(), buttons: vec!["OK".into()], ..Default::default() };
-        std::thread::spawn(move || show_message(options, None))
+        std::thread::spawn(move || show_message(options).wait())
     };
 
     // Pump for `ms`, or until `done`. Short timeouts: the host's `WaitUntil(far)` must not turn a
@@ -237,6 +238,32 @@ fn run() {
     assert!(worker.is_finished(), "the click answered the dialog");
     assert!(matches!(worker.join().unwrap(), Ok(true)));
 
+    // Event-loop thread: `show_message` returns at once, waiting on it fails fast, and the answer
+    // wakes the loop so the host's `try_result` sees it; it can also be polled as a future.
+    let options = XDialogOptions { title: "host question".into(), buttons: vec!["No".into(), "Yes".into()], ..Default::default() };
+    let mut question = show_message(options);
+    assert!(question.try_result().is_none());
+    assert!(matches!(question.wait(), Err(XDialogError::BlockingCallOnUiThread)));
+    let d = wait_titled(&mut el, &mut app, "host question");
+    let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+    assert!(std::pin::Pin::new(&mut question).poll(&mut cx).is_pending());
+    let wakes_before = wakes.load(Ordering::SeqCst);
+    click(&mut el, &mut app, &d, 1);
+    pump(&mut el, &mut app, 2_000, &|_| question.try_result().is_some());
+    assert!(matches!(question.try_result(), Some(Ok(XDialogResult::ButtonPressed(1)))), "the click answered the dialog");
+    assert!(wakes.load(Ordering::SeqCst) > wakes_before, "the answer woke the loop");
+    assert!(matches!(question.wait(), Ok(XDialogResult::ButtonPressed(1))), "once answered, waiting doesn't block");
+    let polled = std::pin::Pin::new(&mut question).poll(&mut cx);
+    assert!(matches!(polled, std::task::Poll::Ready(Ok(XDialogResult::ButtonPressed(1)))));
+    drop(question);
+
+    // Dropping an unanswered proxy closes its dialog.
+    let dropped = show_message(XDialogOptions { title: "dropped".into(), ..Default::default() });
+    wait_titled(&mut el, &mut app, "dropped");
+    drop(dropped);
+    pump(&mut el, &mut app, 2_000, &|app| titled(app, "dropped").is_none());
+    assert!(titled(&app, "dropped").is_none(), "dropping the proxy closes the dialog");
+
     // Escape closes a message.
     let worker = message("Escape");
     let d = wait_dialog(&mut el, &mut app);
@@ -250,7 +277,7 @@ fn run() {
     // Several worker threads at once: all their dialogs open, each closes by its timeout.
     let workers: Vec<_> = (0..4).map(|i| {
                                     let options = XDialogOptions { title: format!("worker {i}"), buttons: vec!["OK".into()], ..Default::default() };
-                                    std::thread::spawn(move || show_message(options, Some(Duration::from_secs(2))))
+                                    std::thread::spawn(move || show_message(options).wait_timeout(Duration::from_secs(2)))
                                 })
                                 .collect();
     pump(&mut el, &mut app, 10_000, &|app| app.test_dialogs().len() == 4);

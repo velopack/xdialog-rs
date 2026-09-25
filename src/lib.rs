@@ -38,6 +38,7 @@ pub mod __test {
 
 mod message;
 mod model;
+mod oneshot;
 mod progress;
 
 static SILENT: AtomicBool = AtomicBool::new(false);
@@ -59,7 +60,7 @@ fn get_next_id() -> usize {
 }
 
 #[allow(missing_docs)]
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone)]
 #[non_exhaustive]
 pub enum XDialogError {
     #[error("xdialog backend not initialized")]

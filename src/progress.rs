@@ -123,15 +123,17 @@ where
 fn show_progress_internal(options: XDialogOptions, on_button: Option<ProgressButtonCallback>) -> Result<ProgressDialogProxy, XDialogError> {
     let (id, silent) = (get_next_id(), get_silent());
     if !silent {
-        let (creation_sender, creation_receiver) = std::sync::mpsc::channel();
-        send_request(DialogMessageRequest::ShowProgressWindow(id, options, creation_sender, on_button))?;
+        let (reply, opened) = crate::oneshot::channel();
+        send_request(DialogMessageRequest::ShowProgressWindow(id, options, crate::model::DialogReply::Progress(reply), on_button))?;
         // On xdialog's UI thread, waiting here would deadlock the loop that creates the window.
         // Requests are handled in order, so the proxy's later updates apply once the window
         // exists; the backend's answer into the dropped receiver is harmless. Creation errors are
         // logged by the backend.
         if !is_ui_thread() {
-            // Wait for creation confirmation, discard the dialog result receiver
-            let _ = creation_receiver.recv().map_err(XDialogError::NoResult)??;
+            // Wait until it opened (or failed to)
+            if let Some(opened) = opened.recv_with(&mut crate::oneshot::Wait::Until(None)) {
+                opened.map_err(XDialogError::NoResult)??;
+            }
         }
     }
     Ok(ProgressDialogProxy { id, silent, owned: true })

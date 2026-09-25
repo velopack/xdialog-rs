@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 
 use core_foundation::base::TCFType;
 use core_foundation::dictionary::CFDictionary;
@@ -171,10 +171,8 @@ impl MacCfDirectHandler {
 impl DialogRequestHandler for MacCfDirectHandler {
     fn send(&self, message: DialogMessageRequest) -> Result<(), XDialogError> {
         match message {
-            DialogMessageRequest::ShowMessageWindow(id, options, creation_sender) => {
+            DialogMessageRequest::ShowMessageWindow(id, options, reply) => {
                 let active = Arc::clone(&self.active);
-                let (dialog_sender, dialog_receiver) = mpsc::channel();
-                let _ = creation_sender.send(Ok(dialog_receiver));
 
                 std::thread::spawn(move || {
                     let flags = icon_to_alert_level(&options.icon);
@@ -192,9 +190,10 @@ impl DialogRequestHandler for MacCfDirectHandler {
                     };
 
                     if notification.is_null() || error != 0 {
-                        let _ = dialog_sender.send(XDialogResult::WindowClosed);
+                        reply.failed(XDialogError::SystemError(format!("CFUserNotificationCreate failed ({error})")));
                         return;
                     }
+                    let dialog_sender = reply.opened();
 
                     active.lock().unwrap().insert(id, Active::Message(NotificationPtr(notification)));
 
@@ -216,7 +215,7 @@ impl DialogRequestHandler for MacCfDirectHandler {
                         XDialogResult::WindowClosed
                     };
 
-                    let _ = dialog_sender.send(result);
+                    dialog_sender.send(result);
 
                     unsafe { CFRelease(notification as *const _) };
                 });
@@ -240,10 +239,10 @@ impl DialogRequestHandler for MacCfDirectHandler {
                 }
                 Ok(())
             }
-            DialogMessageRequest::ShowProgressWindow(id, options, creation_sender, on_button) => {
+            DialogMessageRequest::ShowProgressWindow(id, options, reply, on_button) => {
                 let active = Arc::clone(&self.active);
                 std::thread::spawn(move || {
-                    run_progress_dialog(id, options, on_button, active, creation_sender);
+                    run_progress_dialog(id, options, on_button, active, reply);
                 });
                 Ok(())
             }
@@ -319,7 +318,7 @@ fn run_progress_dialog(
     options: XDialogOptions,
     mut on_button: Option<ProgressButtonCallback>,
     active: Arc<Mutex<HashMap<usize, Active>>>,
-    creation_sender: CreationSender,
+    reply: DialogReply,
 ) {
     let icon_flags = icon_to_alert_level(&options.icon);
     let header = if options.main_instruction.is_empty() {
@@ -346,9 +345,9 @@ fn run_progress_dialog(
         CFUserNotificationCreate(std::ptr::null(), 0.0, icon_flags, &mut error, dict.as_concrete_TypeRef())
     };
     if notification.is_null() || error != 0 {
-        let _ = creation_sender.send(Err(XDialogError::SystemError(
+        reply.failed(XDialogError::SystemError(
             "Failed to create CFUserNotification progress dialog".to_string(),
-        )));
+        ));
         return;
     }
     state.notification = NotificationPtr(notification);
@@ -356,8 +355,7 @@ fn run_progress_dialog(
     let shared = Arc::new(ProgressShared { state: Mutex::new(state) });
     active.lock().unwrap().insert(id, Active::Progress(Arc::clone(&shared)));
 
-    let (dialog_sender, dialog_receiver) = mpsc::channel();
-    let _ = creation_sender.send(Ok(dialog_receiver));
+    let dialog_sender = reply.opened();
 
     let result = run_progress_loop(&shared, &mut on_button, id);
 
@@ -365,7 +363,7 @@ fn run_progress_dialog(
     // CloseWindow cannot cancel a notification we are about to free.
     active.lock().unwrap().remove(&id);
     let final_ptr = shared.state.lock().unwrap().notification.0;
-    let _ = dialog_sender.send(result);
+    dialog_sender.send(result);
     unsafe { CFRelease(final_ptr as *const _) };
 }
 

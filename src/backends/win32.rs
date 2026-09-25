@@ -17,7 +17,7 @@ use windows::Win32::UI::Controls::{
 use windows::Win32::UI::WindowsAndMessaging::{EndDialog, SendMessageW};
 
 use crate::channel::DialogRequestHandler;
-use crate::model::{CreationSender, DialogMessageRequest};
+use crate::model::{DialogMessageRequest, DialogReply};
 use crate::{ProgressButtonCallback, ProgressDialogProxy, XDialogError, XDialogIcon, XDialogOptions, XDialogResult};
 
 /// Manages Win32 Task Dialogs. TaskDialogs need no event loop, so the manager serves requests
@@ -38,13 +38,12 @@ impl TaskDialogManager {
         self.open_dialogs.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    pub(crate) fn show(&self, id: usize, data: XDialogOptions, has_progress: bool, creation: CreationSender, button_callback: Option<ProgressButtonCallback>) {
+    pub(crate) fn show(&self, id: usize, data: XDialogOptions, has_progress: bool, reply: DialogReply, button_callback: Option<ProgressButtonCallback>) {
         let (tx, rx) = channel();
         self.lock().insert(id, tx);
         let open_dialogs = self.open_dialogs.clone();
 
-        let (dialog_sender, dialog_receiver) = channel();
-        let _ = creation.send(Ok(dialog_receiver));
+        let dialog_sender = reply.opened();
         std::thread::spawn(move || {
             let mut config = TaskDialogConfig { options: data,
                                                 progress: has_progress,
@@ -62,7 +61,7 @@ impl TaskDialogManager {
                 Ok(button_id) if button_id >= 0 => XDialogResult::ButtonPressed(button_id as usize),
                 _ => XDialogResult::WindowClosed,
             };
-            let _ = dialog_sender.send(xresult);
+            dialog_sender.send(xresult);
         });
     }
 

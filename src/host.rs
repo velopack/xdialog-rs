@@ -28,7 +28,9 @@
 //! fails with `NoBackendAvailable`.
 //!
 //! Dialog functions work from any thread; the event-loop thread is xdialog's UI thread (see
-//! [Threads](crate#threads)).
+//! [Threads](crate#threads)). There, ask with [`show_message`](crate::show_message) and check
+//! the returned proxy's [`try_result`](crate::MessageDialogProxy::try_result) in `about_to_wait`:
+//! xdialog wakes the loop when the answer arrives.
 //!
 //! The dialogs get the event-loop thread's DPI awareness. winit's default
 //! (`with_dpi_aware(true)`) makes the process per-monitor-v2 aware on Windows; a host that opts

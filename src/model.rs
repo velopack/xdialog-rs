@@ -78,9 +78,53 @@ pub enum XDialogResult {
     ButtonPressed(usize),
 }
 
-/// Channel sender used by backends to deliver the dialog result receiver back to the caller.
-/// Sends `Ok(receiver)` on successful dialog creation, or `Err(e)` on failure.
-pub(crate) type CreationSender = std::sync::mpsc::Sender<Result<std::sync::mpsc::Receiver<XDialogResult>, crate::XDialogError>>;
+/// The one reply a backend owes the caller of a show request (see [`crate::oneshot`]): exactly one
+/// of [`opened`](Self::opened) or [`failed`](Self::failed). Dropped unanswered, the caller gets
+/// `NoResult`.
+pub(crate) enum DialogReply {
+    /// A message box: its result, or the error that kept it from opening.
+    Message(crate::oneshot::Sender<Result<XDialogResult, crate::XDialogError>>),
+    /// A progress dialog: whether it opened (its caller waits only for that).
+    Progress(crate::oneshot::Sender<Result<(), crate::XDialogError>>),
+}
+
+impl DialogReply {
+    /// The dialog is open: a progress caller is told now, a message box's result follows through
+    /// the returned sender.
+    pub(crate) fn opened(self) -> ResultSender {
+        match self {
+            DialogReply::Message(tx) => ResultSender(Some(tx)),
+            DialogReply::Progress(tx) => {
+                let _ = tx.send(Ok(()));
+                ResultSender(None)
+            }
+        }
+    }
+
+    /// The dialog could not be shown.
+    pub(crate) fn failed(self, e: crate::XDialogError) {
+        match self {
+            DialogReply::Message(tx) => {
+                let _ = tx.send(Err(e));
+            }
+            DialogReply::Progress(tx) => {
+                let _ = tx.send(Err(e));
+            }
+        }
+    }
+}
+
+/// Delivers an open dialog's result: a message box's to its caller, a progress dialog's nowhere.
+/// The first result wins.
+pub(crate) struct ResultSender(Option<crate::oneshot::Sender<Result<XDialogResult, crate::XDialogError>>>);
+
+impl ResultSender {
+    pub(crate) fn send(&self, result: XDialogResult) {
+        if let Some(tx) = &self.0 {
+            let _ = tx.send(Ok(result));
+        }
+    }
+}
 
 pub(crate) enum DialogMessageRequest {
     // generic
@@ -91,10 +135,10 @@ pub(crate) enum DialogMessageRequest {
     CloseWindow(usize),
 
     // messagebox
-    ShowMessageWindow(usize, XDialogOptions, CreationSender),
+    ShowMessageWindow(usize, XDialogOptions, DialogReply),
 
     // progress
-    ShowProgressWindow(usize, XDialogOptions, CreationSender, Option<crate::progress::ProgressButtonCallback>),
+    ShowProgressWindow(usize, XDialogOptions, DialogReply, Option<crate::progress::ProgressButtonCallback>),
     SetProgressIndeterminate(usize),
     SetProgressValue(usize, f32),
     SetProgressText(usize, String),

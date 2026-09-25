@@ -141,12 +141,14 @@ a complete host.
 
 ### Threads
 
-Dialog functions can be called from any thread. A *blocking* call (`show_message*`) made on
-xdialog's UI thread would deadlock, so it returns `XDialogError::BlockingCallOnUiThread`
-instead (only direct calls are detected: a UI thread waiting on another thread that is inside
-`show_message` still deadlocks). `show_progress*` there returns `Ok` immediately and the window
-appears on the next loop iteration; if it then can't be created, the error is only logged and the
-proxy does nothing. The UI thread is the egui event-loop thread (where progress button callbacks run), the
+Dialog functions can be called from any thread. A *blocking* call (the `show_message_*`
+shortcuts, `MessageDialogProxy::wait`) made on xdialog's UI thread would deadlock, so it returns
+`XDialogError::BlockingCallOnUiThread` instead (only direct calls are detected: a UI thread
+waiting on another thread that is inside `show_message_yes_no` still deadlocks). There, use
+`show_message`: it returns a `MessageDialogProxy` at once, whose result you check with
+`try_result` (xdialog wakes the loop when it arrives), `.await`, or drop to close the dialog.
+`show_progress*` there returns `Ok` immediately and the window appears on the next loop
+iteration; if it then can't be created, the error is only logged and the proxy does nothing. The UI thread is the egui event-loop thread (where progress button callbacks run), the
 host's event-loop thread in `winit-host` mode, and on macOS the thread running the AppKit loop.
 With Win32 TaskDialog every dialog runs on its own thread, so its callbacks may call any dialog
 function.

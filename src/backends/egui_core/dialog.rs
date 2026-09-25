@@ -10,7 +10,6 @@
 //! ([`Dialog::is_closed`]); the owner then hides and drops its window.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use egui::{Event, PointerButton, Pos2, Rect, Vec2, ViewportId};
@@ -22,7 +21,7 @@ use super::fonts::{font_definitions, FontRegistry};
 use super::keyboard::{KeyAction, KeyboardState};
 use super::render::{Presenter, RenderFrame};
 use super::theme::{core_options, install_style, DialogKind, DialogUiOutput, DialogView, ProgressView, Theme};
-use crate::model::{XDialogIcon, XDialogOptions, XDialogResult, XDialogTheme};
+use crate::model::{ResultSender, XDialogIcon, XDialogOptions, XDialogResult, XDialogTheme};
 use crate::{ProgressButtonCallback, ProgressDialogProxy};
 
 /// Largest font-atlas side the software raster accepts.
@@ -77,7 +76,7 @@ pub(crate) struct DialogParams {
     pub max_height: f32,
     pub clock: DialogClock,
     /// Where the result goes (`None`: offscreen harness).
-    pub sender: Option<mpsc::Sender<XDialogResult>>,
+    pub sender: Option<ResultSender>,
 }
 
 /// Where a cancelled press is released: far outside every widget, so the release can't activate
@@ -123,7 +122,7 @@ pub(crate) struct Dialog {
     requested: Vec2,
     resize: Option<Vec2>,
     titlebar_changed: bool,
-    sender: Option<mpsc::Sender<XDialogResult>>,
+    sender: Option<ResultSender>,
     /// Progress dialogs with `show_progress_with_callback` (set by `attach`).
     callback: Option<ProgressButtonCallback>,
     result: Option<XDialogResult>,
@@ -422,11 +421,17 @@ impl Dialog {
         }
     }
 
+    /// Where the result goes, once the dialog is shown (until then a failure is the caller's error,
+    /// not a result).
+    pub(crate) fn set_sender(&mut self, sender: ResultSender) {
+        self.sender = Some(sender);
+    }
+
     /// Deliver `result` (if none was delivered yet): the dialog is closed from now on.
     pub(crate) fn finish(&mut self, result: XDialogResult) {
         if self.result.is_none() {
             if let Some(tx) = self.sender.take() {
-                let _ = tx.send(result.clone());
+                tx.send(result.clone());
             }
             self.result = Some(result);
         }
@@ -596,7 +601,7 @@ impl Drop for Dialog {
         // epaint debug-asserts that texture deltas are never dropped unapplied.
         self.textures.clear();
         if let Some(tx) = self.sender.take() {
-            let _ = tx.send(XDialogResult::WindowClosed);
+            tx.send(XDialogResult::WindowClosed);
         }
     }
 }
@@ -656,7 +661,7 @@ mod tests {
 
     struct Rig {
         d: Dialog,
-        rx: Option<mpsc::Receiver<XDialogResult>>,
+        rx: Option<crate::oneshot::Receiver<Result<XDialogResult, crate::XDialogError>>>,
     }
 
     impl Rig {
@@ -666,7 +671,7 @@ mod tests {
                                            message: "Hello world, this is a body text.".into(),
                                            icon: XDialogIcon::None,
                                            buttons: buttons.iter().map(|s| s.to_string()).collect() };
-            let (tx, rx) = mpsc::channel();
+            let (tx, rx) = crate::oneshot::channel();
             let params = DialogParams { id: 7,
                                         content: DialogContent::new(kind, options),
                                         appearance: Appearance::default(),
@@ -674,7 +679,7 @@ mod tests {
                                         ppp: 1.0,
                                         max_height: 800.0,
                                         clock: DialogClock::frozen(0.0),
-                                        sender: Some(tx) };
+                                        sender: Some(crate::model::DialogReply::Message(tx).opened()) };
             let mut d = Dialog::new(Box::new(StubTheme { dark: false }), params);
             let size = d.physical_size(1.0);
             d.attach(Box::new(MemoryPresenter::new()), 1.0, size);
@@ -697,7 +702,7 @@ mod tests {
         }
 
         fn result(&mut self) -> Option<XDialogResult> {
-            self.rx.as_ref().and_then(|rx| rx.try_recv().ok())
+            self.rx.as_ref().and_then(|rx| rx.try_recv().ok()?.ok())
         }
 
         fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
@@ -853,7 +858,7 @@ mod tests {
         let rx = r.rx.take().unwrap();
         assert_eq!(r.d.result(), None);
         drop(r);
-        assert_eq!(rx.try_recv().ok(), Some(XDialogResult::WindowClosed));
+        assert!(matches!(rx.try_recv(), Ok(Ok(XDialogResult::WindowClosed))));
     }
 
     #[test]

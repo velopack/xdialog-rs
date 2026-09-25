@@ -22,8 +22,8 @@ fn main() {
             icon: xdialog::XDialogIcon::Information,
             buttons: vec!["Save".to_string(), "Discard".to_string(), "Cancel".to_string()],
         },
-        None,
     )
+    .wait()
     .unwrap();
 
     let msg = match result {

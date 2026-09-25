@@ -10,6 +10,9 @@ use crate::*;
 pub(crate) trait DialogRequestHandler: Send + Sync {
     /// Send a dialog message request to the backend.
     fn send(&self, message: DialogMessageRequest) -> Result<(), XDialogError>;
+
+    /// Make the backend's event loop iterate, if it has one.
+    fn wake(&self) {}
 }
 
 static REQUEST_HANDLER: OnceLock<Box<dyn DialogRequestHandler>> = OnceLock::new();
@@ -33,6 +36,13 @@ pub(crate) fn send_request(message: DialogMessageRequest) -> Result<(), XDialogE
     match REQUEST_HANDLER.get() {
         Some(handler) => handler.send(message),
         None => Err(XDialogError::NotInitialized),
+    }
+}
+
+/// Make xdialog's event loop (builder or host) iterate, if there is one.
+pub(crate) fn wake_ui() {
+    if let Some(handler) = REQUEST_HANDLER.get() {
+        handler.wake();
     }
 }
 
@@ -88,12 +98,16 @@ impl DialogRequestHandler for InboxHandler {
         }
         Ok(())
     }
+
+    fn wake(&self) {
+        self.0.wake();
+    }
 }
 
 /// Answer a creation request with `NoBackendAvailable`; other requests are ignored.
 pub(crate) fn reject(message: DialogMessageRequest) {
-    if let DialogMessageRequest::ShowMessageWindow(_, _, creation) | DialogMessageRequest::ShowProgressWindow(_, _, creation, _) = message {
-        let _ = creation.send(Err(XDialogError::NoBackendAvailable));
+    if let DialogMessageRequest::ShowMessageWindow(_, _, reply) | DialogMessageRequest::ShowProgressWindow(_, _, reply, _) = message {
+        reply.failed(XDialogError::NoBackendAvailable);
     }
 }
 
@@ -152,9 +166,9 @@ mod tests {
         assert_eq!(calls.load(Ordering::SeqCst), 2, "a request after the drain wakes again");
 
         drop(rx);
-        let (tx, crx) = channel();
+        let (tx, crx) = crate::oneshot::channel();
         let opts = XDialogOptions::default();
-        handler.send(DialogMessageRequest::ShowMessageWindow(1, opts, tx)).unwrap();
-        assert!(matches!(crx.recv().unwrap(), Err(XDialogError::NoBackendAvailable)));
+        handler.send(DialogMessageRequest::ShowMessageWindow(1, opts, DialogReply::Message(tx))).unwrap();
+        assert!(matches!(crx.try_recv(), Ok(Err(XDialogError::NoBackendAvailable))));
     }
 }

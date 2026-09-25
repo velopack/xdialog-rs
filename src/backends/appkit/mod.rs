@@ -3,7 +3,7 @@ mod appkit_dialog;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ptr::NonNull;
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, ClassBuilder, Sel};
@@ -20,7 +20,7 @@ use appkit_dialog::AppKitDialog;
 /// button callback.
 struct Open {
     dialog: AppKitDialog,
-    result: Option<mpsc::Sender<XDialogResult>>,
+    result: Option<ResultSender>,
     on_button: Option<ProgressButtonCallback>,
 }
 
@@ -29,7 +29,7 @@ impl Open {
     fn finish(&mut self, result: XDialogResult) {
         self.dialog.close();
         if let Some(tx) = self.result.take() {
-            let _ = tx.send(result);
+            tx.send(result);
         }
     }
 }
@@ -195,11 +195,10 @@ fn show(handler: &Retained<AnyObject>,
         id: usize,
         options: XDialogOptions,
         progress: bool,
-        creation: CreationSender,
+        reply: DialogReply,
         on_button: Option<ProgressButtonCallback>) {
     let dialog = AppKitDialog::new(id, options, progress, handler);
     dialog.show();
-    let (tx, rx) = mpsc::channel();
-    OPEN.with_borrow_mut(|open| open.insert(id, Open { dialog, result: Some(tx), on_button }));
-    let _ = creation.send(Ok(rx));
+    let result = Some(reply.opened());
+    OPEN.with_borrow_mut(|open| open.insert(id, Open { dialog, result, on_button }));
 }

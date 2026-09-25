@@ -4,11 +4,12 @@
 //! cargo run --example winit_host --features winit-host
 //! ```
 //!
-//! A worker thread asks a question and shows a progress dialog. Clicking the host window toggles
-//! a progress dialog shown from the event-loop thread itself, where blocking calls (`show_message*`)
-//! fail with `BlockingCallOnUiThread`. Close the host window to quit.
+//! A worker thread asks a question and shows a progress dialog, blocking as a console app would.
+//! Clicking the host window asks the same question from the event-loop thread itself, where the
+//! blocking `show_message_*` shortcuts fail with `BlockingCallOnUiThread`: `show_message` returns
+//! at once and the app checks for the answer in `about_to_wait`. Close the host window to quit.
 //!
-//! The handler has no xdialog code: `into_host_app` wraps it and handles the dialogs' windows.
+//! `into_host_app` wraps the handler and handles the dialogs' windows.
 
 use std::time::Duration;
 
@@ -27,6 +28,8 @@ enum UserEvent {
 
 struct App {
     window: Option<Window>,
+    /// The question asked from the event-loop thread, until answered.
+    question: Option<MessageDialogProxy>,
     progress: Option<ProgressDialogProxy>,
 }
 
@@ -51,25 +54,40 @@ impl ApplicationHandler<UserEvent> for App {
         }
         match event {
             WindowEvent::CloseRequested => el.exit(),
-            WindowEvent::MouseInput { state: ElementState::Pressed, .. } => self.toggle_progress(),
+            WindowEvent::MouseInput { state: ElementState::Pressed, .. } => self.clicked(),
             _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, _el: &ActiveEventLoop) {
+        // xdialog wakes the loop when the answer arrives.
+        let Some(answer) = self.question.as_ref().and_then(|q| q.try_result()) else { return };
+        self.question = None;
+        if let Ok(XDialogResult::ButtonPressed(1)) = answer {
+            let progress =
+                show_progress("winit host", "Event-loop thread", "Click the host window to close.", XDialogIcon::Information).unwrap();
+            progress.set_indeterminate().unwrap();
+            self.progress = Some(progress);
         }
     }
 }
 
 impl App {
     /// Dialogs shown from the event-loop thread.
-    fn toggle_progress(&mut self) {
-        if self.progress.take().is_some() {
-            return; // dropping the proxy closes the dialog
+    fn clicked(&mut self) {
+        if self.progress.take().is_some() || self.question.is_some() {
+            return; // dropping the progress proxy closes the dialog
         }
         // Blocking here would deadlock the loop that has to show the dialog.
-        let err = show_message_info_ok("winit host", "Blocking", "Never shown").unwrap_err();
-        println!("show_message on the event-loop thread: {err}");
-        // Non-blocking calls work; the window appears in the next `about_to_wait`.
-        let progress = show_progress("winit host", "Event-loop thread", "Click the host window to close.", XDialogIcon::Information).unwrap();
-        progress.set_indeterminate().unwrap();
-        self.progress = Some(progress);
+        let err = show_message_yes_no("winit host", "Blocking", "Never shown", XDialogIcon::None).unwrap_err();
+        println!("show_message_yes_no on the event-loop thread: {err}");
+        // `show_message` doesn't block; the window appears in this iteration's `about_to_wait`.
+        let options = XDialogOptions { title: "winit host".into(),
+                                       main_instruction: "Event-loop thread".into(),
+                                       message: "Show a progress dialog?".into(),
+                                       icon: XDialogIcon::Information,
+                                       buttons: vec!["No".into(), "Yes".into()] };
+        self.question = Some(show_message(options));
     }
 }
 
@@ -88,7 +106,7 @@ fn worker(proxy: EventLoopProxy<UserEvent>) {
 fn main() {
     let event_loop = EventLoop::<UserEvent>::with_user_event().build().unwrap();
     let waker = event_loop.create_proxy();
-    let mut app = XDialogBuilder::new().into_host_app(App { window: None, progress: None }, move || {
+    let mut app = XDialogBuilder::new().into_host_app(App { window: None, question: None, progress: None }, move || {
                                            let _ = waker.send_event(UserEvent::XDialog);
                                        })
                                        .unwrap();
