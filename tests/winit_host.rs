@@ -223,6 +223,7 @@ fn run() {
     pump(&mut el, &mut app, 50, &|_| false);
     app.test_inject(d.id, button(false));
     pump(&mut el, &mut app, 2_000, &|_| worker.is_finished());
+    assert!(worker.is_finished(), "the click answered the dialog");
     assert!(matches!(worker.join().unwrap(), Ok(true)));
 
     // Escape closes a message.
@@ -231,6 +232,7 @@ fn run() {
     let escape = Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
     app.test_inject(d.id, escape);
     pump(&mut el, &mut app, 2_000, &|_| worker.is_finished());
+    assert!(worker.is_finished(), "Escape answered the dialog");
     assert!(matches!(worker.join().unwrap(), Ok(XDialogResult::WindowClosed)));
     assert!(app.inner().resumes.is_empty(), "the host app never sees xdialog's deadline as its own");
 

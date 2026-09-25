@@ -334,6 +334,9 @@ impl Dialog {
                         self.egui_events.push(ev);
                     }
                 }
+                // Only changes count: X11 reports a new window's focus state some time after it
+                // is shown, and a press made meanwhile must not be cancelled by it.
+                Event::WindowFocused(focused) if focused == self.window_focused => {}
                 Event::WindowFocused(focused) => {
                     self.window_focused = focused;
                     if focused {
