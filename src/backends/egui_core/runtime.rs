@@ -309,6 +309,10 @@ impl Runtime {
                                     clock: DialogClock::new(),
                                     sender: Some(tx) };
         let mut dialog = Dialog::new(theme::new(self.backend), params);
+        if no_activate() {
+            // Never activated: unfocused from the first frame.
+            dialog.handle_events([egui::Event::WindowFocused(false)]);
+        }
 
         let size = dialog.desired_size();
         let dark = dialog.dark_titlebar();
