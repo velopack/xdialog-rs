@@ -108,10 +108,10 @@ impl XDialogBuilder {
             BackendKind::Win32 => crate::backends::win32::Win32Backend::run_loop(receiver, theme),
             #[cfg(target_os = "macos")]
             BackendKind::AppKit => crate::backends::appkit::AppKitBackend::run_loop(receiver, theme),
-            #[cfg(all(xd_own_loop, xd_theme_linux))]
-            BackendKind::LinuxEgui => Self::run_egui(crate::backends::linux_egui::LinuxTheme::new(), receiver, theme),
+            #[cfg(all(xd_own_loop, xd_theme_ubuntu))]
+            BackendKind::EguiUbuntu => Self::run_egui(crate::backends::egui_ubuntu::UbuntuTheme::new(), receiver, theme),
             #[cfg(all(xd_own_loop, xd_theme_fluent))]
-            BackendKind::FluentEgui => Self::run_egui(crate::backends::fluent_egui::FluentTheme::new(), receiver, theme),
+            BackendKind::EguiFluent => Self::run_egui(crate::backends::egui_fluent::FluentTheme::new(), receiver, theme),
             BackendKind::None => {
                 let _ = theme;
                 crate::backends::drain_with_error(receiver, || crate::XDialogError::NoBackendAvailable);

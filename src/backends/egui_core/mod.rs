@@ -7,7 +7,7 @@
 //! mode, `xdialog::host`, the test hooks) or from one theme, so partial feature sets leave some of
 //! them unused. The lint is therefore only relaxed for partial builds; the full build (both themes,
 //! own loop, direct, host and test hooks, i.e. `--all-features`) must stay free of dead code.
-#![cfg_attr(not(all(xd_own_loop, xd_theme_linux, xd_theme_fluent, xd_linux_direct, xd_winit_host, xd_test_hooks)),
+#![cfg_attr(not(all(xd_own_loop, xd_theme_ubuntu, xd_theme_fluent, xd_linux_direct, xd_winit_host, xd_test_hooks)),
             allow(dead_code))]
 
 pub(crate) mod anim;

@@ -14,9 +14,9 @@
 
 #[path = "../examples/egui_gallery/model.rs"]
 mod model;
-#[path = "../examples/egui_gallery/linux.rs"]
-mod linux;
-#[cfg(feature = "fluent-egui")]
+#[path = "../examples/egui_gallery/ubuntu.rs"]
+mod ubuntu;
+#[cfg(feature = "egui-fluent")]
 #[path = "../examples/egui_gallery/fluent.rs"]
 mod fluent;
 
@@ -43,10 +43,10 @@ fn assert_deterministic(theme: &str, variants: &[Variant]) {
 
 #[test]
 fn linux_is_deterministic() {
-    assert_deterministic("linux", &linux::variants());
+    assert_deterministic("ubuntu", &ubuntu::variants());
 }
 
-#[cfg(feature = "fluent-egui")]
+#[cfg(feature = "egui-fluent")]
 #[test]
 fn fluent_is_deterministic() {
     assert_deterministic("fluent", &fluent::variants());
@@ -122,10 +122,10 @@ fn harness_behaviour(theme: &str) {
 
 #[test]
 fn linux_harness_behaviour() {
-    harness_behaviour("linux");
+    harness_behaviour("ubuntu");
 }
 
-#[cfg(feature = "fluent-egui")]
+#[cfg(feature = "egui-fluent")]
 #[test]
 fn fluent_harness_behaviour() {
     harness_behaviour("fluent");
@@ -133,7 +133,7 @@ fn fluent_harness_behaviour() {
 
 #[test]
 fn progress_and_text_changes() {
-    let mut d = OffscreenDialog::new("linux", look(false), 1.0, TestKind::Progress, opts("p", "Working", "Short.", XDialogIcon::Information, &[])).unwrap();
+    let mut d = OffscreenDialog::new("ubuntu", look(false), 1.0, TestKind::Progress, opts("p", "Working", "Short.", XDialogIcon::Information, &[])).unwrap();
     let a = d.render_at(1.0);
     d.set_progress(TestProgress::Value(1.0));
     d.render_at(1.0);
@@ -203,11 +203,11 @@ fn check_goldens(theme: &str, variants: &[Variant]) -> (Vec<String>, Vec<String>
 
 #[test]
 fn linux_goldens() {
-    let (done, _) = check_goldens("linux", &linux::variants());
+    let (done, _) = check_goldens("ubuntu", &ubuntu::variants());
     println!("linux: {} goldens {}", done.len(), if seeding() { "seeded" } else { "compared" });
 }
 
-#[cfg(feature = "fluent-egui")]
+#[cfg(feature = "egui-fluent")]
 #[test]
 fn fluent_goldens() {
     let Ok(meta) = std::fs::metadata(r"C:\Windows\Fonts\SegUIVar.ttf") else {
@@ -228,7 +228,7 @@ fn fluent_goldens() {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Linux theme design tokens (sampled away from corners: the shapes may change, the colours not)
+// Ubuntu theme design tokens (sampled away from corners: the shapes may change, the colours not)
 // ---------------------------------------------------------------------------------------------
 
 const BG: ([u8; 3], [u8; 3]) = ([0xFA, 0xFA, 0xFA], [0x2D, 0x2D, 0x2D]);
@@ -304,7 +304,7 @@ fn assert_border(what: &str, s: &Shot, i: usize, want: [u8; 3]) {
 }
 
 fn states_dialog(appearance: TestAppearance) -> OffscreenDialog {
-    OffscreenDialog::new("linux", appearance, 1.0, TestKind::Message, two_buttons()).unwrap()
+    OffscreenDialog::new("ubuntu", appearance, 1.0, TestKind::Message, two_buttons()).unwrap()
 }
 
 const NO: usize = 0;
@@ -353,7 +353,7 @@ fn linux_accent_overlay() {
         assert_colour("hover fill", hover.fill(NO), ORANGE);
 
         // Progress: the bar takes the accent, the track is 35% accent over the background.
-        let mut p = OffscreenDialog::new("linux", accented, 1.0, TestKind::Progress, opts("p", "Working", "Short.", XDialogIcon::Information, &[])).unwrap();
+        let mut p = OffscreenDialog::new("ubuntu", accented, 1.0, TestKind::Progress, opts("p", "Working", "Short.", XDialogIcon::Information, &[])).unwrap();
         p.set_progress(TestProgress::Value(0.5));
         let s = Shot::take(&mut p, 1.0);
         let bg = pick(BG, dark);

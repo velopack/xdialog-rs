@@ -569,12 +569,12 @@ pub(crate) fn translate(ev: &WindowEvent) -> Option<HostEvent> {
 }
 
 /// Real-window check of builder mode: run with
-/// `cargo test --lib --features linux-egui,fluent-egui,_test-hooks live_builder -- --ignored`
+/// `cargo test --lib --features egui-ubuntu,egui-fluent,_test-hooks live_builder -- --ignored`
 /// (`XDIALOG_LIVE_THEME=fluent` for the Fluent theme; one event loop per process;
 /// `XDIALOG_LIVE_OUT=<dir>` saves the captures). Windows are shown without activation in the
 /// bottom-right corner (or at `XDIALOG_TEST_POS`), captured with `PrintWindow`, driven only through
 /// the test-hook registry; the foreground window must never become one of ours.
-#[cfg(all(test, windows, xd_test_hooks, xd_theme_linux, xd_theme_fluent))]
+#[cfg(all(test, windows, xd_test_hooks, xd_theme_ubuntu, xd_theme_fluent))]
 mod live_tests {
     use std::sync::mpsc::channel;
     use std::time::{Duration, Instant};
@@ -731,7 +731,7 @@ mod live_tests {
             let (sx, sy) = (r[0] + 6.0, cy); // fill, left of the label
             let shot = |name: &str| {
                 let img = capture(d.raw_window);
-                save(&img, &format!("live_{}_{name}.png", if fluent { "fluent" } else { "linux" }));
+                save(&img, &format!("live_{}_{name}.png", if fluent { "fluent" } else { "ubuntu" }));
                 rgb_at(&img, sx, sy)
             };
             // DWM fills the redirection surface of a freshly shown, never-activated window a few
@@ -775,9 +775,9 @@ mod live_tests {
         });
 
         let res = if fluent {
-            run_builder(crate::backends::fluent_egui::FluentTheme::new(), rx, XDialogTheme::Light)
+            run_builder(crate::backends::egui_fluent::FluentTheme::new(), rx, XDialogTheme::Light)
         } else {
-            run_builder(crate::backends::linux_egui::LinuxTheme::new(), rx, XDialogTheme::Light)
+            run_builder(crate::backends::egui_ubuntu::UbuntuTheme::new(), rx, XDialogTheme::Light)
         };
         assert!(res.is_ok(), "event loop failed to build");
         worker.join().unwrap();

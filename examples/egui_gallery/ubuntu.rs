@@ -32,7 +32,7 @@ fn progress_opts(title: &str, buttons: &[&str]) -> XDialogOptions {
     opts(title, "Downloading updates", "Downloading package 1 of 3...", XDialogIcon::Information, buttons)
 }
 
-/// All variants for the linux theme.
+/// All variants for the Ubuntu theme.
 pub fn variants() -> Vec<Variant> {
     let mut v = Vec::new();
     for dark in [false, true] {

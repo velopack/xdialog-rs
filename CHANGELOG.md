@@ -12,13 +12,13 @@ font, colours, metrics, animations and keyboard behaviour.
 - **Rust 1.95** is now required on Linux, and on Windows with any egui feature (egui 0.36's
   MSRV). Windows and macOS builds with default features are unaffected.
 - **New default feature `builtin-winit`.** It lets xdialog own a winit 0.30 event loop (the Linux
-  `XDialogBuilder` backend, `linux-direct`, `fluent-egui`). If you build with
-  `default-features = false` on Linux, add `builtin-winit` (or `linux-direct`/`fluent-egui`,
+  `XDialogBuilder` backend, `linux-direct`, `egui-fluent`). If you build with
+  `default-features = false` on Linux, add `builtin-winit` (or `linux-direct`/`egui-fluent`,
   which imply it) to keep the builder backend; without it `XDialogBuilder` has no backend on
   Linux and dialog functions return `XDialogError::NoBackendAvailable`. `default-features = false`
   plus `winit-host` is the new way to build xdialog with no winit at all. Cargo features can't
   be per-target, so with default features Windows builds also compile winit 0.30 (nothing uses or
-  links it unless `fluent-egui` / `linux-egui` is on); `default-features = false` avoids that.
+  links it unless `egui-fluent` / `egui-ubuntu` is on); `default-features = false` avoids that.
 - **New error variant `XDialogError::BlockingCallOnUiThread`.** A blocking dialog call
   (`show_message*`) made on xdialog's UI thread, e.g. from a progress button callback of the
   egui or AppKit backends, used to deadlock; it now returns this error. (Win32 TaskDialog
@@ -34,7 +34,7 @@ font, colours, metrics, animations and keyboard behaviour.
 
 ### Added
 
-- `fluent-egui` feature: on Windows, `XDialogBuilder` shows WinUI 3 ContentDialog-style dialogs
+- `egui-fluent` feature: on Windows, `XDialogBuilder` shows WinUI 3 ContentDialog-style dialogs
   (Segoe UI Variable, system accent colour, light/dark) drawn with egui instead of Win32
   TaskDialog. It is a graph-wide switch: any crate in the dependency graph enabling it changes the
   Windows builder backend of the whole binary. If the egui event loop can't start, xdialog falls
@@ -47,7 +47,7 @@ font, colours, metrics, animations and keyboard behaviour.
   toolkit with raw-window-handle 0.6 handles). xdialog creates windows through your
   `HostWindows` implementation (including `set_dark` for the title bar) and never depends on
   winit in this mode. On macOS the module is a stub. See `examples/winit_host`.
-- `linux-egui` feature: compiles the Linux backend on Windows for development and testing.
+- `egui-ubuntu` feature: compiles the Linux backend on Windows for development and testing.
 - Right-to-left text (Arabic, Hebrew) is reordered per line (unicode-bidi).
 - System font fallback for characters the bundled font lacks, including the family's bold face
   for headings, placed on the primary font's baseline. Linux scans fonts with fontdb on a
@@ -77,7 +77,7 @@ font, colours, metrics, animations and keyboard behaviour.
   backend didn't either). Win32 TaskDialog (the Windows default) and AppKit are unaffected.
 - **One winit loop per process:** applications with their own winit event loop must use
   `winit-host` instead of `linux-direct` / the Linux builder backend.
-- `winit-host` on Windows shows the Linux look; use `win32-direct` for native Windows dialogs.
+- `winit-host` on Windows shows the Ubuntu look; use `win32-direct` for native Windows dialogs.
 - Text rendering differs slightly from 3.x (egui's rasterizer instead of cosmic-text).
 
 ### Tests and CI
@@ -88,6 +88,6 @@ font, colours, metrics, animations and keyboard behaviour.
 - **The `linux` and `linux_wayland` screenshot references still come from the removed skia
   renderer and must be re-seeded on Linux** (`tests/image_seed.sh`, or the CI failure artifact).
   Until then the Linux visual-regression CI jobs are allowed to fail.
-- CI: feature matrix (`fluent-egui`, `linux-direct`, `--no-default-features --features
+- CI: feature matrix (`egui-fluent`, `linux-direct`, `--no-default-features --features
   winit-host`) on Windows, Linux and macOS, the `examples/winit_host` package (winit 0.29; its
   `cargo tree` must not contain winit 0.30), and an egui render benchmark replacing the skia one.

@@ -18,7 +18,7 @@ fn main() {
 fn emit_cfg_aliases() {
     const ALIASES: &[&str] = &["xd_egui",
                                "xd_own_loop",
-                               "xd_theme_linux",
+                               "xd_theme_ubuntu",
                                "xd_theme_fluent",
                                "xd_linux_direct",
                                "xd_winit_host",
@@ -35,10 +35,10 @@ fn emit_cfg_aliases() {
     let macos = os == "macos";
     let desktop = linux || windows;
 
-    // `_egui` -> CARGO_FEATURE__EGUI, `_linux-theme` -> CARGO_FEATURE__LINUX_THEME, etc.
+    // `_egui` -> CARGO_FEATURE__EGUI, `_ubuntu-theme` -> CARGO_FEATURE__UBUNTU_THEME, etc.
     let feature = |name: &str| std::env::var_os(format!("CARGO_FEATURE_{}", name)).is_some();
     let f_egui = feature("_EGUI");
-    let f_linux_theme = feature("_LINUX_THEME");
+    let f_ubuntu_theme = feature("_UBUNTU_THEME");
     let f_fluent_theme = feature("_FLUENT_THEME");
     let f_builtin_winit = feature("BUILTIN_WINIT");
     let f_linux_direct = feature("LINUX_DIRECT");
@@ -46,8 +46,8 @@ fn emit_cfg_aliases() {
     let f_test_hooks = feature("_TEST_HOOKS");
 
     let xd_egui = desktop && (linux || f_egui);
-    let xd_own_loop = desktop && f_builtin_winit && (linux || f_linux_theme || f_fluent_theme);
-    let xd_theme_linux = desktop && (linux || f_linux_theme);
+    let xd_own_loop = desktop && f_builtin_winit && (linux || f_ubuntu_theme || f_fluent_theme);
+    let xd_theme_ubuntu = desktop && (linux || f_ubuntu_theme);
     let xd_theme_fluent = desktop && f_fluent_theme;
     let xd_linux_direct = xd_own_loop && f_linux_direct;
     let xd_winit_host = desktop && f_winit_host;
@@ -61,7 +61,7 @@ fn emit_cfg_aliases() {
     };
     set(xd_egui, "xd_egui");
     set(xd_own_loop, "xd_own_loop");
-    set(xd_theme_linux, "xd_theme_linux");
+    set(xd_theme_ubuntu, "xd_theme_ubuntu");
     set(xd_theme_fluent, "xd_theme_fluent");
     set(xd_linux_direct, "xd_linux_direct");
     set(xd_winit_host, "xd_winit_host");

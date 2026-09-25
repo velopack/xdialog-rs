@@ -1,4 +1,4 @@
-//! The Linux theme's widgets: the outlined button and the progress bar (icons are in `icons.rs`).
+//! The Ubuntu theme's widgets: the outlined button and the progress bar (icons are in `icons.rs`).
 
 use egui::{Color32, Id, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2, Widget};
 
@@ -34,7 +34,7 @@ pub(crate) struct Button<'a> {
     pub index: usize,
     pub label: &'a TextBlock,
     pub view: &'a DialogView<'a>,
-    pub tk: &'a LinuxTokens,
+    pub tk: &'a UbuntuTokens,
     /// The focus border is hidden while the pointer is over any button (see `focus_suppressed`).
     pub focus_suppressed: bool,
 }
@@ -84,7 +84,7 @@ impl Button<'_> {
 pub(crate) struct ProgressBar<'a> {
     pub progress: ProgressView,
     pub width: f32,
-    pub tk: &'a LinuxTokens,
+    pub tk: &'a UbuntuTokens,
 }
 
 /// Stable id: the value tween must survive indeterminate phases (the next value animates from

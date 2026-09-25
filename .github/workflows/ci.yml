@@ -19,8 +19,8 @@ env:
 
 jobs:
   # Build + unit/integration tests for every supported feature set.
-  #   default                               Win32 TaskDialog / AppKit / Linux egui (own winit loop)
-  #   fluent-egui                           Windows builder -> Fluent (egui) backend
+  #   default                               Win32 TaskDialog / AppKit / egui Ubuntu (own winit loop)
+  #   egui-fluent                           Windows builder -> Fluent (egui) backend
   #   linux-direct                          init_linux_direct(): own winit loop on an xdialog thread
   #   --no-default-features winit-host      xdialog::host, no winit compiled at all
   build:
@@ -34,8 +34,8 @@ jobs:
             name: Windows
 
           - os: windows-latest
-            name: Windows (fluent-egui)
-            cargo-args: --features fluent-egui
+            name: Windows (egui-fluent)
+            cargo-args: --features egui-fluent
 
           - os: windows-latest
             name: Windows (linux-direct)
@@ -92,7 +92,7 @@ jobs:
         run: cargo test --locked --lib --tests ${{ matrix.cargo-args }}
 
   # Deterministic offscreen goldens of both egui themes (tests/visual_references/egui/). The
-  # Linux theme uses its bundled font and runs everywhere; the Fluent goldens are local-only and
+  # Ubuntu theme uses its bundled font and runs everywhere; the Fluent goldens are local-only and
   # skip themselves unless the runner's Segoe UI Variable matches FONT_ID.
   egui-offscreen:
     name: egui offscreen goldens (${{ matrix.name }})
@@ -121,7 +121,7 @@ jobs:
           key: egui-offscreen-${{ matrix.name }}
 
       - name: Offscreen goldens
-        run: cargo test --locked --release --features _test-hooks,linux-egui,fluent-egui --test egui_offscreen
+        run: cargo test --locked --release --features _test-hooks,egui-ubuntu,egui-fluent --test egui_offscreen
 
   clippy:
     name: Clippy (${{ matrix.name }})
@@ -455,7 +455,7 @@ jobs:
           path: tests/visual_output/
 
   # Software-rendering performance: one offscreen frame per case (static, hover fade,
-  # indeterminate progress, 2x HiDPI, construction) for the Linux theme.
+  # indeterminate progress, 2x HiDPI, construction) for the Ubuntu theme.
   egui-bench:
     name: egui Bench
     runs-on: ubuntu-latest
@@ -474,7 +474,7 @@ jobs:
           key: egui-bench
 
       - name: Run benchmark
-        run: cargo bench --locked --bench render --features _test-hooks,linux-egui -- --quick
+        run: cargo bench --locked --bench render --features _test-hooks,egui-ubuntu -- --quick
 
   supply-chain:
     name: Supply Chain

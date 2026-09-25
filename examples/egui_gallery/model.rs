@@ -1,7 +1,7 @@
 //! Gallery variant model + deterministic script runner.
 //!
 //! Shared by the gallery driver (`main.rs`) and the offscreen tests (`tests/egui_offscreen.rs`),
-//! which include this file with `#[path]`. `linux.rs` / `fluent.rs` build `Vec<Variant>` from it.
+//! which include this file with `#[path]`. `ubuntu.rs` / `fluent.rs` build `Vec<Variant>` from it.
 //!
 //! Coordinates are LOGICAL px (client-relative); the runner converts to physical px with the
 //! variant's `ppp`.

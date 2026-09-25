@@ -137,7 +137,7 @@ pub struct OffscreenDialog {
 }
 
 impl OffscreenDialog {
-    /// Build a dialog with theme `"linux"` or `"fluent"`, rendered at `ppp`. Runs the measure
+    /// Build a dialog with theme `"ubuntu"` or `"fluent"`, rendered at `ppp`. Runs the measure
     /// pass, the keyboard on-open step and the open frame at `t = 0` (scripts should use `t > 0`).
     pub fn new(theme: &str, look: TestAppearance, ppp: f32, kind: TestKind, options: XDialogOptions) -> Result<Self, String> {
         if !(ppp.is_finite() && ppp > 0.0 && ppp <= 8.0) {
@@ -149,11 +149,11 @@ impl OffscreenDialog {
             TestKind::Progress => DialogKind::Progress,
         };
         let inner: Box<dyn OffscreenDyn> = match theme {
-            #[cfg(xd_theme_linux)]
-            "linux" => Box::new(Inner::new(crate::backends::linux_egui::LinuxTheme::new(), appearance, ppp, kind, options)),
+            #[cfg(xd_theme_ubuntu)]
+            "ubuntu" => Box::new(Inner::new(crate::backends::egui_ubuntu::UbuntuTheme::new(), appearance, ppp, kind, options)),
             #[cfg(xd_theme_fluent)]
-            "fluent" => Box::new(Inner::new(crate::backends::fluent_egui::FluentTheme::new(), appearance, ppp, kind, options)),
-            other => return Err(format!("theme {other:?} is not compiled into this build (features linux-egui / fluent-egui)")),
+            "fluent" => Box::new(Inner::new(crate::backends::egui_fluent::FluentTheme::new(), appearance, ppp, kind, options)),
+            other => return Err(format!("theme {other:?} is not compiled into this build (features egui-ubuntu / egui-fluent)")),
         };
         Ok(OffscreenDialog { inner, queue: Vec::new(), ppp, last_t: 0.0, last: Vec::new(), last_size: (0, 0) })
     }

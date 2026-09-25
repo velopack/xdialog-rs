@@ -121,7 +121,7 @@ pub(crate) fn font_definitions(fonts: &ThemeFonts, fallbacks: &[Fallback]) -> eg
     defs
 }
 
-/// Fonts bundled with the crate (the Linux theme's faces and the Fluent theme's last resort).
+/// Fonts bundled with the crate (the Ubuntu theme's faces and the Fluent theme's last resort).
 pub(crate) mod bundled {
     use super::FaceRef;
 
