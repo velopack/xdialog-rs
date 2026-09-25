@@ -2,11 +2,8 @@
 //!
 //! There is no core tween store: a theme widget animates its own state with
 //! [`animate`] (state lives in egui's `IdTypeMap`, keyed by the widget's `Id`) or with egui's own
-//! `ctx.animate_value_with_time` / `animate_bool_with_time_and_easing`.
-//!
-//! [`animate`] is a pure function of the egui input time (`RawInput::time`, which core sets from
-//! the dialog clock), never of frame counts, so dropped frames never change the motion and the
-//! offscreen harness is deterministic.
+//! `ctx.animate_value_with_time` / `animate_bool_with_time_and_easing`. [`animate`] is a pure
+//! function of the dialog clock (see `clock.rs`).
 
 use egui::{Color32, Id};
 
@@ -16,7 +13,7 @@ pub(crate) enum Easing {
     Linear,
     /// CSS `cubic-bezier(x1, y1, x2, y2)` / XAML KeySpline semantics.
     CubicBezier(f32, f32, f32, f32),
-    /// `1 - (1 - t)^3` (skia progress value animation, mina `OutCubic`).
+    /// `1 - (1 - t)^3` (mina `OutCubic`).
     OutCubic,
 }
 
@@ -37,10 +34,7 @@ impl Easing {
         }
         match self {
             Easing::Linear => t,
-            Easing::OutCubic => {
-                let u = 1.0 - t;
-                1.0 - u * u * u
-            }
+            Easing::OutCubic => egui::emath::easing::cubic_out(t),
             Easing::CubicBezier(x1, y1, x2, y2) => cubic_bezier(x1, y1, x2, y2, t),
         }
     }
@@ -125,8 +119,7 @@ impl Transition {
 // ------------------------------------------------------------------------------------------------
 
 /// Values a widget-local tween can interpolate. Implement it for a theme's own "look" structs
-/// (e.g. a button's border/fill/text colours) to fade all of them with one tween, as the skia
-/// backend's `animator!` did.
+/// (e.g. a button's border/fill/text colours) to fade all of them with one tween.
 pub(crate) trait Lerp: Clone + PartialEq + Send + Sync + 'static {
     /// `a` at `t == 0`, `b` at `t == 1`.
     fn lerp(a: &Self, b: &Self, t: f32) -> Self;
@@ -186,8 +179,7 @@ fn generation(ctx: &egui::Context) -> u64 {
 ///
 /// - The first call for `id` snaps to `target` (no animation on open).
 /// - When `target` changes, the value animates from the *currently displayed* value to the new
-///   target over `tr` (skia `blend_next_timeline` semantics: an interrupted fade reverses
-///   smoothly). On the pass of the change the old displayed value is returned (elapsed = 0).
+///   target over `tr` (an interrupted fade reverses smoothly). On the pass of the change the old displayed value is returned (elapsed = 0).
 /// - Time is `ctx.input(|i| i.time)` (the injected dialog clock). While the transition runs it
 ///   calls `ctx.request_repaint()`; core turns that into frames at the animation cadence.
 /// - Calling it again in the same pass with the same target is idempotent.

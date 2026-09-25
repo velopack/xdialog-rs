@@ -3,7 +3,7 @@
 
 use egui::Color32;
 
-use crate::backends::egui_core::appearance::{AccentSource, Appearance};
+use crate::backends::egui_core::appearance::Appearance;
 use crate::backends::egui_core::color::rgb;
 
 /// Outer padding, vertical gap between stacked items and icon/text gap.
@@ -87,7 +87,7 @@ impl UbuntuTokens {
                           pressed: look(0x1E5FAF, 0x1E5FAF, 0xFFFFFF),
                           focused: look(0x2A7DE3, 0xFFFFFF, 0x3D3D3D) }
         };
-        if let Some(accent) = appearance.accent.filter(|a| matches!(a.source, AccentSource::Portal | AccentSource::Test)) {
+        if let Some(accent) = appearance.accent {
             tk.apply_accent(accent.base);
         }
         tk
@@ -95,7 +95,6 @@ impl UbuntuTokens {
 
     /// Accent overlay: progress, hover / pressed buttons and the focus border.
     fn apply_accent(&mut self, accent: Color32) {
-        let accent = Color32::from_rgb(accent.r(), accent.g(), accent.b());
         let pressed = accent.lerp_to_gamma(Color32::BLACK, 0.25);
         self.progress_fg = accent;
         // blend(accent, bg, 0.65): 35% accent + 65% background.

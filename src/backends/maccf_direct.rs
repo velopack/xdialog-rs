@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 
 use core_foundation::base::TCFType;
 use core_foundation::dictionary::CFDictionary;
@@ -173,7 +173,7 @@ impl DialogRequestHandler for MacCfDirectHandler {
         match message {
             DialogMessageRequest::ShowMessageWindow(id, options, creation_sender) => {
                 let active = Arc::clone(&self.active);
-                let (dialog_sender, dialog_receiver) = oneshot::channel();
+                let (dialog_sender, dialog_receiver) = mpsc::channel();
                 let _ = creation_sender.send(Ok(dialog_receiver));
 
                 std::thread::spawn(move || {
@@ -356,7 +356,7 @@ fn run_progress_dialog(
     let shared = Arc::new(ProgressShared { state: Mutex::new(state) });
     active.lock().unwrap().insert(id, Active::Progress(Arc::clone(&shared)));
 
-    let (dialog_sender, dialog_receiver) = oneshot::channel();
+    let (dialog_sender, dialog_receiver) = mpsc::channel();
     let _ = creation_sender.send(Ok(dialog_receiver));
 
     let result = run_progress_loop(&shared, &mut on_button, id);
@@ -424,7 +424,7 @@ fn run_progress_loop(
         let keep_open = match on_button {
             Some(cb) => {
                 let proxy = ProgressDialogProxy::non_owning(id);
-                (cb.0)(button_index, &proxy)
+                cb(button_index, &proxy)
             }
             None => false,
         };

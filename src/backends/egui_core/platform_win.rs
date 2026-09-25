@@ -1,18 +1,14 @@
-//! Windows specifics for the egui backends: thread DPI awareness, DWM
-//! window attributes, registry reads, locale, virtual-screen metrics.
+//! Windows specifics for the egui backends: thread DPI awareness, the dark title bar, registry
+//! reads, locale, OS version.
 //!
 //! Never mutates process-wide state: DPI awareness is set per thread and restored by a guard.
 //! No WinRT (see the MTA factory-cache crash note), so the accent comes from the registry.
 
-use windows::core::PCWSTR;
+use windows::core::HSTRING;
 use windows::Win32::Foundation::{ERROR_SUCCESS, HWND};
-use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND};
+use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
 use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, REG_ROUTINE_FLAGS, RRF_RT_REG_BINARY, RRF_RT_REG_DWORD};
 use windows::Win32::UI::HiDpi::{SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2};
-
-fn wide(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
-}
 
 /// Sets the calling thread's DPI awareness to per-monitor v2 and restores the previous context
 /// when dropped (builder mode runs on the user's main thread).
@@ -40,41 +36,27 @@ impl Drop for ThreadDpiGuard {
     }
 }
 
-/// Apply dialog DWM attributes: dark title bar (DWMWA_USE_IMMERSIVE_DARK_MODE) and rounded corners
-/// (DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND). Failures (older Windows) are ignored.
-pub(crate) fn apply_dwm_attributes(hwnd: isize, dark: bool) {
-    if hwnd == 0 {
-        return;
-    }
-    let hwnd = HWND(hwnd as *mut core::ffi::c_void);
+/// Dark or light title bar (DWMWA_USE_IMMERSIVE_DARK_MODE). Failures (older Windows) are ignored.
+pub(crate) fn set_dark_titlebar(window: &winit::window::Window, dark: bool) {
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    let Ok(RawWindowHandle::Win32(h)) = window.window_handle().map(|h| h.as_raw()) else { return };
     let dark: i32 = dark as i32;
-    let corner = DWMWCP_ROUND;
-    // SAFETY: the attribute pointers reference locals of the documented sizes; `hwnd` is a live
-    // window owned by the caller.
+    // SAFETY: the attribute pointer references a local of the documented size; `h.hwnd` is the
+    // live window borrowed from the caller.
     unsafe {
-        let _ = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, (&dark as *const i32).cast(), 4);
-        let _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &corner as *const _ as *const core::ffi::c_void, 4);
+        let _ = DwmSetWindowAttribute(HWND(h.hwnd.get() as *mut core::ffi::c_void), DWMWA_USE_IMMERSIVE_DARK_MODE, (&dark as *const i32).cast(), 4);
     }
 }
 
+/// A registry value of at most 64 bytes (the values read here: a DWORD, the 32-byte accent palette).
 fn reg_get(subkey: &str, value: &str, flags: REG_ROUTINE_FLAGS) -> Option<Vec<u8>> {
-    let (k, v) = (wide(subkey), wide(value));
-    let mut size: u32 = 0;
-    // SAFETY: size query with no data buffer; the strings are NUL-terminated and outlive the call.
-    let err = unsafe { RegGetValueW(HKEY_CURRENT_USER, PCWSTR(k.as_ptr()), PCWSTR(v.as_ptr()), flags, None, None, Some(&mut size)) };
-    if err != ERROR_SUCCESS || size == 0 || size > 4096 {
-        return None;
-    }
-    let mut buf = vec![0u8; size as usize];
-    // SAFETY: `buf` has `size` writable bytes, which is what we report.
-    let err = unsafe {
-        RegGetValueW(HKEY_CURRENT_USER, PCWSTR(k.as_ptr()), PCWSTR(v.as_ptr()), flags, None, Some(buf.as_mut_ptr().cast()), Some(&mut size))
-    };
-    if err != ERROR_SUCCESS {
-        return None;
-    }
-    buf.truncate(size as usize);
-    Some(buf)
+    let (k, v) = (HSTRING::from(subkey), HSTRING::from(value));
+    let mut buf = [0u8; 64];
+    let mut size = buf.len() as u32;
+    // SAFETY: `buf` has `size` writable bytes, which is what we report; the HSTRINGs are
+    // NUL-terminated and outlive the call.
+    let err = unsafe { RegGetValueW(HKEY_CURRENT_USER, &k, &v, flags, None, Some(buf.as_mut_ptr().cast()), Some(&mut size)) };
+    (err == ERROR_SUCCESS).then(|| buf[..size as usize].to_vec())
 }
 
 /// A DWORD under HKCU.
@@ -99,11 +81,19 @@ pub(crate) fn user_locale() -> Option<String> {
     Some(String::from_utf16_lossy(&buf[..(n as usize - 1)]))
 }
 
-/// Left edge of the virtual screen (all monitors), physical px.
-pub(crate) fn virtual_screen_left() -> i32 {
-    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_XVIRTUALSCREEN};
-    // SAFETY: plain metrics query.
-    unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) }
+/// Windows 10 or later, from `RtlGetVersion` (not subject to the manifest's version lie). Cached.
+pub(crate) fn windows_10_or_later() -> bool {
+    static WIN10: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *WIN10.get_or_init(|| {
+              let mut info = windows::Win32::System::SystemInformation::OSVERSIONINFOW {
+                  dwOSVersionInfoSize: size_of::<windows::Win32::System::SystemInformation::OSVERSIONINFOW>() as u32,
+                  ..Default::default()
+              };
+              // SAFETY: `info` is a writable OSVERSIONINFOW with its size field set, as required.
+              // On failure the struct stays zeroed (reads as < 10: the TaskDialog side).
+              let _ = unsafe { windows::Wdk::System::SystemServices::RtlGetVersion(&mut info) };
+              info.dwMajorVersion >= 10
+          })
 }
 
 #[cfg(test)]
@@ -118,6 +108,12 @@ mod tests {
         assert!(read_hkcu_dword(r"Software\xdialog-does-not-exist", "Nope").is_none());
         let loc = user_locale();
         assert!(loc.as_deref().is_none_or(|l| !l.is_empty() && !l.contains('\0')));
+    }
+
+    #[test]
+    fn windows_version_is_read() {
+        // CI and dev machines run Windows 10+ (Rust's tier-1 MSVC std requires it).
+        assert!(windows_10_or_later());
     }
 
     #[test]

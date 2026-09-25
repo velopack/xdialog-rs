@@ -1,7 +1,13 @@
 use xdialog::{show_progress, XDialogIcon};
 
+/// Optional argument: `light` or `dark` (default: follow the system).
 fn main() {
-    xdialog::XDialogBuilder::new().run(run);
+    let theme = match std::env::args().nth(1).as_deref() {
+        Some("light") => xdialog::XDialogTheme::Light,
+        Some("dark") => xdialog::XDialogTheme::Dark,
+        _ => xdialog::XDialogTheme::SystemDefault,
+    };
+    xdialog::XDialogBuilder::new().with_theme(theme).run(run);
 }
 
 fn run() {
@@ -23,6 +29,13 @@ fn run() {
     data.message = medium_text.to_string();
     let _ = xdialog::show_message(data.clone(), None);
 
+    // Taller than the height limit: the body scrolls.
+    data.message = medium_text.repeat(3);
+    let _ = xdialog::show_message(data.clone(), None);
+
+    data.message = "Hello World\n\nThis is a multi-line dialog with wrapping text and\n\nSome\nElement\nOf\nNewline\nBehavior".to_string();
+    let _ = xdialog::show_message(data.clone(), None);
+
     data.message = small_text.to_string();
     data.main_instruction = long_instruction.to_string();
     let _ = xdialog::show_message(data.clone(), None);
@@ -33,6 +46,28 @@ fn run() {
     data.message = medium_text.to_string();
     data.title = "".to_string();
     let _ = xdialog::show_message(data.clone(), None);
+
+    // Unicode: many scripts and emoji, right-to-left and mixed text, complex emoji sequences.
+    let _ = xdialog::show_message_ok_cancel(
+        "🌍 Unicode Test",
+        "Hello from around the world! 👋",
+        "English: Hello\nGerman: Grüße\nJapanese: こんにちは\nChinese: 你好世界\nKorean: 안녕하세요\nThai: สวัสดี\nHindi: नमस्ते\nRussian: Привет мир",
+        XDialogIcon::Information,
+    );
+    let _ = xdialog::show_message_ok_cancel(
+        "🔄 Bidirectional Text",
+        "مرحبا بالعالم",
+        "This is an English paragraph.\nשלום עולם, זהו טקסט בעברית.\nMixed: The word شمس means sun",
+        XDialogIcon::Information,
+    );
+    let data = xdialog::XDialogOptions {
+        icon: XDialogIcon::Information,
+        title: "👨‍👩‍👧‍👦 Complex Emoji".to_string(),
+        main_instruction: "Family & Skin Tone Modifiers 🏽".to_string(),
+        message: "Skin tones: 👋🏻👋🏼👋🏽👋🏾👋🏿\nFamilies: 👨‍👩‍👧‍👦 👩‍👩‍👦‍👦\nCompound: 🏳️‍🌈 🏴‍☠️ 🐻‍❄️\nKeycaps: 0️⃣1️⃣2️⃣🔟".to_string(),
+        buttons: vec!["Looks Good! 👍".to_string(), "Broken 💔".to_string()],
+    };
+    let _ = xdialog::show_message(data, None);
 
     let d = show_progress("Title", "This is an instruction", small_text, XDialogIcon::None).unwrap();
     d.set_indeterminate().unwrap();
@@ -53,5 +88,4 @@ fn run() {
     d.set_indeterminate().unwrap();
     std::thread::sleep(std::time::Duration::from_secs(3));
     d.close().unwrap();
-
 }

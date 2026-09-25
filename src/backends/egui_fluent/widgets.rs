@@ -8,7 +8,7 @@ use egui::{Id, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2, Widget
 use super::tokens::{ButtonColors, FluentTokens};
 use crate::backends::egui_core::anim::{self, Easing, Transition};
 use crate::backends::egui_core::text::TextBlock;
-use crate::backends::egui_core::theme::{ButtonInteraction, DialogView, ProgressView};
+use crate::backends::egui_core::theme::{unsnapped_rect, ButtonInteraction, DialogView, ProgressView};
 use crate::model::XDialogIcon;
 
 /// Button height (padding 5/6 + one text line + 1 px borders).
@@ -120,6 +120,8 @@ impl Widget for FluentProgress<'_> {
         let id = Id::new("fluent.progress");
         let painter = ui.painter_at(r);
         let tk = self.tk;
+        // Fully rounded fill.
+        let pill = |rect: Rect| painter.add(unsnapped_rect(rect, rect.height() / 2.0, tk.progress_fill));
         match self.progress {
             ProgressView::Determinate { value } => {
                 let v = anim::animate(&ctx, id, value.clamp(0.0, 1.0), PROGRESS_VALUE);
@@ -127,7 +129,7 @@ impl Widget for FluentProgress<'_> {
                 painter.rect_filled(track, 0.5, tk.progress_track);
                 let w = r.width() * v;
                 if w > 0.0 {
-                    pill(&painter, Rect::from_min_size(r.min, Vec2::new(w, PROGRESS_H)), tk.progress_fill);
+                    pill(Rect::from_min_size(r.min, Vec2::new(w, PROGRESS_H)));
                 }
             }
             ProgressView::Indeterminate { since, .. } => {
@@ -141,18 +143,13 @@ impl Widget for FluentProgress<'_> {
                 for (x, w) in indeterminate_bars(t, r.width()) {
                     let (x0, x1) = (x.max(0.0), (x + w).min(r.width()));
                     if x1 > x0 {
-                        pill(&painter, Rect::from_x_y_ranges(r.min.x + x0..=r.min.x + x1, r.y_range()), tk.progress_fill);
+                        pill(Rect::from_x_y_ranges(r.min.x + x0..=r.min.x + x1, r.y_range()));
                     }
                 }
             }
         }
         response
     }
-}
-
-/// A fully rounded bar, not snapped to whole pixels, so moving ends glide instead of stepping.
-fn pill(painter: &egui::Painter, rect: Rect, color: egui::Color32) {
-    painter.add(egui::epaint::RectShape::filled(rect, rect.height() / 2.0, color).with_round_to_pixels(false));
 }
 
 /// `(x offset, width)` of the visible indeterminate bars at loop time `t` (0..2 s) for a bar of
@@ -184,16 +181,6 @@ pub(crate) struct FluentIcon<'a> {
     pub tk: &'a FluentTokens,
 }
 
-impl Widget for FluentIcon<'_> {
-    fn ui(self, ui: &mut Ui) -> Response {
-        let (rect, response) = ui.allocate_exact_size(Vec2::splat(ICON_SIZE), Sense::hover());
-        if ui.is_rect_visible(rect) {
-            paint_icon(ui.painter(), rect, self.icon, self.tk);
-        }
-        response
-    }
-}
-
 /// Symbol geometry (px of the 32 px box, relative to the circle centre): dots at y -5.5 (i) /
 /// +5.5 (!), 2 px bars (i: -0.94..5.94, !: -5.94..0.94), X = two 2 px diagonals in a 10 px square.
 const BAR_ENDS: (f32, f32) = (0.94, 5.94);
@@ -201,37 +188,42 @@ const DOT_Y: f32 = 5.5;
 const DOT_R: f32 = 1.6;
 const X_HALF: f32 = 4.95;
 
-fn paint_icon(painter: &egui::Painter, rect: Rect, icon: &XDialogIcon, tk: &FluentTokens) {
-    let s = rect.width() / ICON_SIZE;
-    let c = rect.min + Vec2::new(15.0, 17.0) * s;
-    let p = |x: f32, y: f32| c + Vec2::new(x, y) * s;
-    let circle = match icon {
-        XDialogIcon::Information => tk.sev_info,
-        XDialogIcon::Warning => tk.sev_warning,
-        XDialogIcon::Error => tk.sev_error,
-        XDialogIcon::None => return,
-    };
-    // The symbol colour is translucent in dark mode: pre-blend it over the circle so overlapping
-    // parts (the X's crossing) don't darken.
-    let g = circle.blend(tk.sev_glyph);
-    painter.circle_filled(c, 15.0 * s, circle);
-    let (b0, b1) = BAR_ENDS;
-    let bar = |y0: f32, y1: f32| painter.rect_filled(Rect::from_min_max(p(-1.0, y0), p(1.0, y1)), 0.0, g);
-    match icon {
-        XDialogIcon::Information => {
-            painter.circle_filled(p(0.0, -DOT_Y), DOT_R * s, g);
-            bar(-b0, b1);
+impl Widget for FluentIcon<'_> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        let (rect, response) = ui.allocate_exact_size(Vec2::splat(ICON_SIZE), Sense::hover());
+        let (painter, tk) = (ui.painter(), self.tk);
+        let s = rect.width() / ICON_SIZE;
+        let c = rect.min + Vec2::new(15.0, 17.0) * s;
+        let p = |x: f32, y: f32| c + Vec2::new(x, y) * s;
+        let circle = match self.icon {
+            XDialogIcon::Information => tk.sev_info,
+            XDialogIcon::Warning => tk.sev_warning,
+            XDialogIcon::Error => tk.sev_error,
+            XDialogIcon::None => return response,
+        };
+        // The symbol colour is translucent in dark mode: pre-blend it over the circle so overlapping
+        // parts (the X's crossing) don't darken.
+        let g = circle.blend(tk.sev_glyph);
+        painter.circle_filled(c, 15.0 * s, circle);
+        let (b0, b1) = BAR_ENDS;
+        let bar = |y0: f32, y1: f32| painter.rect_filled(Rect::from_min_max(p(-1.0, y0), p(1.0, y1)), 0.0, g);
+        match self.icon {
+            XDialogIcon::Information => {
+                painter.circle_filled(p(0.0, -DOT_Y), DOT_R * s, g);
+                bar(-b0, b1);
+            }
+            XDialogIcon::Warning => {
+                bar(-b1, b0);
+                painter.circle_filled(p(0.0, DOT_Y), DOT_R * s, g);
+            }
+            XDialogIcon::Error => {
+                let (a, stroke) = (X_HALF, Stroke::new(2.0 * s, g));
+                painter.line_segment([p(-a, -a), p(a, a)], stroke);
+                painter.line_segment([p(a, -a), p(-a, a)], stroke);
+            }
+            XDialogIcon::None => {}
         }
-        XDialogIcon::Warning => {
-            bar(-b1, b0);
-            painter.circle_filled(p(0.0, DOT_Y), DOT_R * s, g);
-        }
-        XDialogIcon::Error => {
-            let (a, stroke) = (X_HALF, Stroke::new(2.0 * s, g));
-            painter.line_segment([p(-a, -a), p(a, a)], stroke);
-            painter.line_segment([p(a, -a), p(-a, a)], stroke);
-        }
-        XDialogIcon::None => {}
+        response
     }
 }
 

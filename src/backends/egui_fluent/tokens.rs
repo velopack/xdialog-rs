@@ -4,15 +4,24 @@
 //! surfaces behind every element are fixed here (content area, button bar), so fills and borders
 //! are pre-composited into OPAQUE colours (they interpolate cleanly). Text and focus colours stay
 //! translucent and blend over the surface when painted.
+//!
+//! Fonts: WinUI resolves `XamlAutoFontFamily` to **Segoe UI Variable** (`SegUIVar.ttf`, axes
+//! `wght` and `opsz`): body/buttons `wght 400`, the 20 px SemiBold title `wght 600`, each with the
+//! automatic optical size, i.e. the same bytes with different coordinates. Fallbacks: `segoeui.ttf`
+//! + `seguisb.ttf` (Windows 10), then the bundled Ubuntu Regular/Bold (other platforms).
 
+use std::sync::OnceLock;
+
+use egui::epaint::text::VariationCoords;
 use egui::Color32;
 
-use crate::backends::egui_core::appearance::{AccentSource, Appearance};
+use crate::backends::egui_core::appearance::Appearance;
 use crate::backends::egui_core::color::{argb, rgb};
+use crate::backends::egui_core::fonts::{bundled, FontRegistry, ThemeFace, ThemeFonts};
 
-/// Windows 11 default (blue) accent palette `[L3, L2, L1, A, D1, D2, D3]`: the fallback
-/// when neither the registry nor a test override provides one (e.g. the fluent theme on Linux).
-pub(crate) const DEFAULT_PALETTE: [u32; 7] = [0x99EBFF, 0x4CC2FF, 0x0091F8, 0x0078D4, 0x0067C0, 0x003E92, 0x001A68];
+/// Windows 11 default (blue) accent palette `[L3, L2, L1, A, D1, D2, D3]`: the fallback when the
+/// system provides no accent.
+const DEFAULT_PALETTE: [u32; 7] = [0x99EBFF, 0x4CC2FF, 0x0091F8, 0x0078D4, 0x0067C0, 0x003E92, 0x001A68];
 
 const L2: usize = 1;
 const A: usize = 3;
@@ -66,13 +75,10 @@ pub(crate) struct FluentTokens {
     pub scroll_thumb: Color32,
 }
 
-/// The accent palette the fluent theme uses for `appearance`: the Windows registry or a test
-/// override, else the Windows 11 default blue. A test accent without a palette gets a derived one.
-pub(crate) fn palette(appearance: &Appearance) -> [Color32; 7] {
-    match appearance.accent {
-        Some(a) if matches!(a.source, AccentSource::WindowsRegistry | AccentSource::Test) => a.win_palette.unwrap_or_else(|| derive_palette(a.base)),
-        _ => DEFAULT_PALETTE.map(rgb),
-    }
+/// The accent palette for `appearance`: the system's (Windows registry), one derived from an
+/// accent colour without a palette (portal, test override), else the Windows 11 default blue.
+fn palette(appearance: &Appearance) -> [Color32; 7] {
+    appearance.accent.map_or(DEFAULT_PALETTE.map(rgb), |a| a.win_palette.unwrap_or_else(|| derive_palette(a.base)))
 }
 
 /// Approximate `[L3, L2, L1, A, D1, D2, D3]` from a single accent colour (only used when an
@@ -143,6 +149,40 @@ impl FluentTokens {
                        sev_glyph: t(0xFFFFFFFF, 0xE4000000),
                        scroll_thumb: t(0x72000000, 0x8BFFFFFF) }
     }
+}
+
+// ------------------------------------------------------------------------------------------------
+// Fonts
+// ------------------------------------------------------------------------------------------------
+
+/// Line height / font size of Segoe UI (`(ascent + descent) / unitsPerEm` = (2210 + 514) / 2048):
+/// 14 px -> 18.62, 20 px -> 26.6.
+pub(crate) const LINE_RATIO: f32 = 2724.0 / 2048.0;
+
+/// Body / button font size and title font size (ControlContentThemeFontSize, ContentDialog title).
+pub(crate) const BODY_SIZE: f32 = 14.0;
+pub(crate) const TITLE_SIZE: f32 = 20.0;
+
+/// Optical size for a font size in DIPs (automatic `opsz` = size in points).
+fn opsz(size_px: f32) -> f32 {
+    size_px * 0.75
+}
+
+/// The body (regular) and title (bold) faces, resolved once per process (the files are read once
+/// and kept by the registry).
+pub(crate) fn theme_fonts(reg: &FontRegistry) -> ThemeFonts {
+    static FONTS: OnceLock<ThemeFonts> = OnceLock::new();
+    FONTS.get_or_init(|| {
+             if let Some(face) = reg.windows_font("SegUIVar.ttf", 0) {
+                 let at = |w: f32, size: f32| ThemeFace { face, coords: VariationCoords::new([(b"wght", w), (b"opsz", opsz(size))]) };
+                 return ThemeFonts { regular: at(400.0, BODY_SIZE), bold: at(600.0, TITLE_SIZE) };
+             }
+             match (reg.windows_font("segoeui.ttf", 0), reg.windows_font("seguisb.ttf", 0)) {
+                 (Some(regular), Some(semibold)) => ThemeFonts::new(regular, semibold),
+                 _ => ThemeFonts::new(bundled::UBUNTU_REGULAR, bundled::UBUNTU_BOLD),
+             }
+         })
+         .clone()
 }
 
 #[cfg(test)]

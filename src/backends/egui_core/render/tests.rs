@@ -1,10 +1,7 @@
 //! Renderer tests: exact pixels for trivially predictable shapes, analytic coverage for
 //! antialiased ones, cross-checks between the raster's SIMD / optimised paths, presenter
-//! contracts (zero-size skip, delta hygiene, alpha masking) and a deterministic golden scene.
-//!
-//! Re-bless the goldens with `XDIALOG_BLESS=1 cargo test --lib --features egui-ubuntu render::`.
-
-use std::path::PathBuf;
+//! contracts (zero-size skip, delta hygiene, alpha masking). The dialogs' pixels are pinned by the
+//! offscreen goldens (`tests/egui_offscreen.rs`).
 
 use egui::{
     pos2, vec2, Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Pos2, Rect, Stroke, StrokeKind, TexturesDelta, Vec2,
@@ -20,7 +17,7 @@ const CLEAR: Color32 = Color32::from_rgb(0xFA, 0xFA, 0xFA);
 fn ctx_with_font() -> egui::Context {
     let ctx = egui::Context::default();
     let mut defs = FontDefinitions::empty();
-    defs.font_data.insert("ubuntu".into(), std::sync::Arc::new(FontData::from_static(UBUNTU_REGULAR)));
+    defs.font_data.insert("ubuntu".into(), std::sync::Arc::new(FontData::from_static(UBUNTU_REGULAR.bytes)));
     defs.families.insert(FontFamily::Proportional, vec!["ubuntu".into()]);
     defs.families.insert(FontFamily::Monospace, vec!["ubuntu".into()]);
     ctx.set_fonts(defs);
@@ -50,8 +47,8 @@ fn render_with(raster: EguiSoftwareRender, size_pts: Vec2, ppp: f32, paint: impl
     let (prims, mut textures) = frame(&ctx, size_pts, ppp, paint);
     let mut p = MemoryPresenter::with_raster(raster);
     let size = size_px(size_pts, ppp);
-    p.present(RenderFrame { prims: &prims, textures: &mut textures, size_px: size, ppp, clear: CLEAR }).unwrap();
-    assert!(textures.is_empty(), "presenter must clear the delta");
+    p.present(RenderFrame { prims: &prims, textures: &textures, size_px: size, ppp, clear: CLEAR }).unwrap();
+    textures.clear();
     let (w, h, px) = p.read_rgba().unwrap();
     assert_eq!([w, h], size);
     Image { w, h, px: px.to_vec() }
@@ -139,7 +136,8 @@ fn antialiased_circle_coverage_matches_area() {
         });
         let mut p = MemoryPresenter::new();
         let px = size_px(size, ppp);
-        p.present(RenderFrame { prims: &prims, textures: &mut textures, size_px: px, ppp, clear: Color32::WHITE }).unwrap();
+        p.present(RenderFrame { prims: &prims, textures: &textures, size_px: px, ppp, clear: Color32::WHITE }).unwrap();
+        textures.clear();
         let (_, _, rgba) = p.read_rgba().unwrap();
         let covered: f64 = rgba.as_chunks::<4>().0.iter().map(|p| (255 - p[1]) as f64 / 255.0).sum();
         let expected = std::f64::consts::PI * (r * ppp) as f64 * (r * ppp) as f64;
@@ -170,7 +168,7 @@ fn softbuffer_words_have_zero_top_byte() {
 }
 
 #[test]
-fn zero_size_frame_applies_and_clears_textures() {
+fn zero_size_frame_applies_textures() {
     let ctx = ctx_with_font();
     let size = vec2(120.0, 30.0);
     let text = |p: &egui::Painter| {
@@ -182,19 +180,16 @@ fn zero_size_frame_applies_and_clears_textures() {
     let (prims, mut textures) = frame(&ctx, size, 1.0, text);
     assert!(!textures.set.is_empty(), "first frame uploads the font atlas");
     for zero in [[0, 30], [120, 0], [0, 0]] {
-        let mut t = textures.clone();
-        p.present(RenderFrame { prims: &prims, textures: &mut t, size_px: zero, ppp: 1.0, clear: CLEAR }).unwrap();
-        assert!(t.is_empty(), "zero-size present must clear the delta");
+        p.present(RenderFrame { prims: &prims, textures: &textures, size_px: zero, ppp: 1.0, clear: CLEAR }).unwrap();
     }
-    p.present(RenderFrame { prims: &prims, textures: &mut textures, size_px: [0, 0], ppp: 1.0, clear: CLEAR }).unwrap();
-    assert!(textures.is_empty());
+    textures.clear();
     assert!(p.read_rgba().is_none(), "nothing presented yet");
 
     // Second pass carries no (full) atlas; the text must still render from the atlas applied above.
     let (prims, mut textures) = frame(&ctx, size, 1.0, text);
     assert!(textures.set.iter().all(|(_, d)| d.iter().all(|d| d.pos.is_some())), "no full re-upload");
-    p.present(RenderFrame { prims: &prims, textures: &mut textures, size_px: [120, 30], ppp: 1.0, clear: CLEAR }).unwrap();
-    assert!(textures.is_empty());
+    p.present(RenderFrame { prims: &prims, textures: &textures, size_px: [120, 30], ppp: 1.0, clear: CLEAR }).unwrap();
+    textures.clear();
     let (_, _, rgba) = p.read_rgba().unwrap();
     let dark = rgba.as_chunks::<4>().0.iter().filter(|p| p[0] < 100).count();
     assert!(dark > 30, "text drawn from the previously applied atlas ({dark} dark px)");
@@ -265,34 +260,5 @@ fn optimised_paths_match_plain_triangles() {
         let (max, over) = fast.diff(&plain, 2);
         let total = (fast.w * fast.h) as usize;
         assert!(over * 1000 <= total, "ppp {ppp}: max diff {max}, {over}/{total} px > 2");
-    }
-}
-
-fn golden_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/backends/egui_core/render/testdata").join(name)
-}
-
-#[test]
-fn golden_scene() {
-    let bless = std::env::var_os("XDIALOG_BLESS").is_some();
-    for (ppp, name) in [(1.0, "raster_scene_1x.png"), (1.5, "raster_scene_1.5x.png"), (2.0, "raster_scene_2x.png")] {
-        let img = render(SCENE, ppp, scene);
-        // Deterministic: a second render is byte-identical.
-        assert_eq!(img.px, render(SCENE, ppp, scene).px, "non-deterministic output @ppp {ppp}");
-        let path = golden_path(name);
-        if bless {
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            image::save_buffer(&path, &img.px, img.w, img.h, image::ColorType::Rgba8).unwrap();
-            continue;
-        }
-        let golden = image::open(&path).unwrap_or_else(|e| panic!("{}: {e} (bless with XDIALOG_BLESS=1)", path.display())).to_rgba8();
-        let golden = Image { w: golden.width(), h: golden.height(), px: golden.into_raw() };
-        // Tolerance covers SIMD-vs-generic rounding on other CPUs; shapes moving would exceed it.
-        let (max, over) = img.diff(&golden, 2);
-        if over > 0 {
-            let out = std::env::temp_dir().join(format!("xdialog_{name}"));
-            let _ = image::save_buffer(&out, &img.px, img.w, img.h, image::ColorType::Rgba8);
-            panic!("{name}: {over} px differ by > 2 (max {max}); actual saved to {}", out.display());
-        }
     }
 }

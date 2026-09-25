@@ -68,112 +68,98 @@ impl TextBlock {
         self.size == Vec2::ZERO
     }
 
-    /// The text starts right-to-left.
-    pub(crate) fn is_rtl(&self) -> bool {
-        self.rtl
-    }
-
     /// Paint the block with its top-left corner at `top_left` in `color`.
     pub(crate) fn paint(&self, painter: &Painter, top_left: Pos2, color: Color32) {
         painter.galley(top_left - self.galley.rect.min.to_vec2(), self.galley.clone(), color);
     }
 }
 
-/// A [`TextBlock`] as an `egui::Widget`: allocates `width` (default: the block width) x the block
-/// height and paints the block there, right-aligned when it is right-to-left.
+/// A [`TextBlock`] as an `egui::Widget`: allocates `width` x the block height and paints the block
+/// there, right-aligned when it is right-to-left.
 pub(crate) struct TextBlockWidget<'a> {
     pub block: &'a TextBlock,
     pub color: Color32,
-    pub width: Option<f32>,
+    pub width: f32,
 }
 
 impl Widget for TextBlockWidget<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let size = Vec2::new(self.width.unwrap_or(self.block.size.x), self.block.size.y);
+        let size = Vec2::new(self.width, self.block.size.y);
         let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
         if ui.is_rect_visible(rect) {
-            let x = if self.block.is_rtl() { rect.right() - self.block.size.x } else { rect.left() };
+            let x = if self.block.rtl { rect.right() - self.block.size.x } else { rect.left() };
             self.block.paint(ui.painter(), Pos2::new(x, rect.top()), self.color);
         }
         response
     }
 }
 
-/// Text layout context for themes (`TextCtx::new(ui.ctx())`). Only valid inside an egui pass (fonts exist).
-pub(crate) struct TextCtx<'a> {
-    ctx: &'a egui::Context,
+// Layout functions for themes; only valid inside an egui pass (fonts exist).
+
+/// Width of the widest line when only explicit `\n` break lines (no wrapping).
+pub(crate) fn natural_width(ctx: &egui::Context, text: &str, style: &TextStyle) -> f32 {
+    layout(ctx, text, style, f32::INFINITY, None).size.x
 }
 
-impl<'a> TextCtx<'a> {
-    pub(crate) fn new(ctx: &'a egui::Context) -> Self {
-        TextCtx { ctx }
-    }
-
-    /// Width of the widest line when only explicit `\n` break lines (no wrapping).
-    pub(crate) fn natural_width(&self, text: &str, style: &TextStyle) -> f32 {
-        self.layout(text, style, f32::INFINITY, None).size.x
-    }
-
-    /// Wrap `text` at `wrap_width` (logical px; `f32::INFINITY` = no wrapping) into at most
-    /// `max_lines` lines (ellipsis on the last one when cut).
-    pub(crate) fn layout(&self, text: &str, style: &TextStyle, wrap_width: f32, max_lines: Option<usize>) -> TextBlock {
-        let max_lines = max_lines.map(|n| n.max(1));
-        let needs_bidi = bidi::needs_bidi(text);
-        let job = if needs_bidi {
-            let lines = self.wrap_bidi(text, style, wrap_width, max_lines);
-            let widths: Vec<f32> = lines.iter().map(|(line, _)| self.line_width(line, style)).collect();
-            let block_w = widths.iter().copied().fold(0.0, f32::max);
-            let mut job = LayoutJob::default();
-            for (i, ((line, rtl), w)) in lines.iter().zip(widths).enumerate() {
-                let line = if i + 1 < lines.len() { format!("{line}\n") } else { line.clone() };
-                job.append(&line, if *rtl { block_w - w } else { 0.0 }, style.format());
-            }
-            job
-        } else {
-            let mut job = style.job(text.to_owned());
-            job.wrap.max_width = wrap_width;
-            if let Some(n) = max_lines {
-                job.wrap.max_rows = n;
-                job.wrap.overflow_character = Some(ELLIPSIS);
-            }
-            job
-        };
-        let galley = self.ctx.fonts_mut(|f| f.layout_job(job));
-        let size = if text.is_empty() { Vec2::ZERO } else { Vec2::new(text_width(&galley), galley.rect.height()) };
-        TextBlock { galley, size, rtl: needs_bidi && bidi::paragraph_is_rtl(text) }
-    }
-
-    /// Width of one unwrapped line.
-    fn line_width(&self, line: &str, style: &TextStyle) -> f32 {
-        if line.is_empty() {
-            return 0.0;
+/// Wrap `text` at `wrap_width` (logical px; `f32::INFINITY` = no wrapping) into at most
+/// `max_lines` lines (ellipsis on the last one when cut).
+pub(crate) fn layout(ctx: &egui::Context, text: &str, style: &TextStyle, wrap_width: f32, max_lines: Option<usize>) -> TextBlock {
+    let max_lines = max_lines.map(|n| n.max(1));
+    let needs_bidi = bidi::needs_bidi(text);
+    let job = if needs_bidi {
+        let lines = wrap_bidi(ctx, text, style, wrap_width, max_lines);
+        let widths: Vec<f32> = lines.iter().map(|(line, _)| line_width(ctx, line, style)).collect();
+        let block_w = widths.iter().copied().fold(0.0, f32::max);
+        let mut job = LayoutJob::default();
+        for (i, ((line, rtl), w)) in lines.iter().zip(widths).enumerate() {
+            let line = if i + 1 < lines.len() { format!("{line}\n") } else { line.clone() };
+            job.append(&line, if *rtl { block_w - w } else { 0.0 }, style.format());
         }
-        self.ctx.fonts_mut(|f| f.layout_job(style.job(line.to_owned()))).rect.width()
-    }
-
-    /// Text with right-to-left content: greedy word wrap in logical order, measured in visual
-    /// order, then each line reordered. Returns the visual lines, each with whether its paragraph
-    /// is right-to-left.
-    fn wrap_bidi(&self, text: &str, style: &TextStyle, wrap_width: f32, max_lines: Option<usize>) -> Vec<(String, bool)> {
-        let block_rtl = bidi::paragraph_is_rtl(text);
-        let mut out: Vec<(String, bool)> = Vec::new();
-        let paragraphs: Vec<&str> = text.split('\n').collect();
-        for (pi, para) in paragraphs.iter().enumerate() {
-            let rtl = paragraph_rtl(para, block_rtl);
-            let fits = |s: &str| self.line_width(&bidi::visual_line(s, rtl), style) <= wrap_width + 0.01;
-            let logical = wrap_logical(para, &fits);
-            for (li, line) in logical.iter().enumerate() {
-                if max_lines.is_some_and(|n| out.len() + 1 == n) && (li + 1 < logical.len() || pi + 1 < paragraphs.len()) {
-                    // Cut here: everything that remains goes on this last line, elided.
-                    let rest = &para[line_offset(para, line)..];
-                    out.push((bidi::visual_line(&elide(rest, &fits), rtl), rtl));
-                    return out;
-                }
-                out.push((bidi::visual_line(line, rtl), rtl));
-            }
+        job
+    } else {
+        let mut job = style.job(text.to_owned());
+        job.wrap.max_width = wrap_width;
+        if let Some(n) = max_lines {
+            job.wrap.max_rows = n;
+            job.wrap.overflow_character = Some(ELLIPSIS);
         }
-        out
+        job
+    };
+    let galley = ctx.fonts_mut(|f| f.layout_job(job));
+    let size = if text.is_empty() { Vec2::ZERO } else { Vec2::new(text_width(&galley), galley.rect.height()) };
+    TextBlock { galley, size, rtl: needs_bidi && bidi::paragraph_is_rtl(text) }
+}
+
+/// Width of one unwrapped line.
+fn line_width(ctx: &egui::Context, line: &str, style: &TextStyle) -> f32 {
+    if line.is_empty() {
+        return 0.0;
     }
+    ctx.fonts_mut(|f| f.layout_job(style.job(line.to_owned()))).rect.width()
+}
+
+/// Text with right-to-left content: greedy word wrap in logical order, measured in visual order,
+/// then each line reordered. Returns the visual lines, each with whether its paragraph is
+/// right-to-left.
+fn wrap_bidi(ctx: &egui::Context, text: &str, style: &TextStyle, wrap_width: f32, max_lines: Option<usize>) -> Vec<(String, bool)> {
+    let block_rtl = bidi::paragraph_is_rtl(text);
+    let mut out: Vec<(String, bool)> = Vec::new();
+    let paragraphs: Vec<&str> = text.split('\n').collect();
+    for (pi, para) in paragraphs.iter().enumerate() {
+        let rtl = paragraph_rtl(para, block_rtl);
+        let fits = |s: &str| line_width(ctx, &bidi::visual_line(s, rtl), style) <= wrap_width + 0.01;
+        let logical = wrap_logical(para, &fits);
+        for (li, line) in logical.iter().enumerate() {
+            if max_lines.is_some_and(|n| out.len() + 1 == n) && (li + 1 < logical.len() || pi + 1 < paragraphs.len()) {
+                // Cut here: everything that remains goes on this last line, elided.
+                let rest = &para[line_offset(para, line)..];
+                out.push((bidi::visual_line(&elide(rest, &fits), rtl), rtl));
+                return out;
+            }
+            out.push((bidi::visual_line(line, rtl), rtl));
+        }
+    }
+    out
 }
 
 /// Width of the widest row of `galley` without its trailing whitespace (a wrapped row keeps the
@@ -283,15 +269,14 @@ mod tests {
     use super::*;
     use crate::backends::egui_core::fonts::bundled;
 
-    fn with_ctx(f: impl FnMut(&TextCtx<'_>)) {
-        let mut f = f;
+    fn with_ctx(mut f: impl FnMut(&egui::Context)) {
         let ctx = egui::Context::default();
         let mut defs = egui::FontDefinitions::empty();
-        defs.font_data.insert("r".into(), Arc::new(bundled::ubuntu_regular().font_data()));
+        defs.font_data.insert("r".into(), Arc::new(bundled::UBUNTU_REGULAR.font_data()));
         defs.families.insert(FontFamily::Proportional, vec!["r".into()]);
         defs.families.insert(FontFamily::Monospace, vec!["r".into()]);
         ctx.set_fonts(defs);
-        let mut full = ctx.run_ui(egui::RawInput::default(), |ui| f(&TextCtx::new(ui.ctx())));
+        let mut full = ctx.run_ui(egui::RawInput::default(), |ui| f(ui.ctx()));
         full.textures_delta.clear();
     }
 
@@ -301,9 +286,9 @@ mod tests {
         with_ctx(|t| {
             let style = TextStyle::regular(14.0, 17.0);
             let text = "The quick brown fox jumps over the lazy dog, again and again and again.";
-            let natural = t.natural_width(text, &style);
-            let block = t.layout(text, &style, 150.0, None);
-            let cut = t.layout(text, &style, 150.0, Some(2));
+            let natural = natural_width(t, text, &style);
+            let block = layout(t, text, &style, 150.0, None);
+            let cut = layout(t, text, &style, 150.0, Some(2));
             out = Some((natural, block.galley.rows.len(), block.size, cut.galley.rows.len(), cut.galley.elided));
         });
         let (natural, lines, size, cut_lines, elided) = out.unwrap();
@@ -320,14 +305,14 @@ mod tests {
         let mut out = None;
         with_ctx(|t| {
             let style = TextStyle::regular(14.0, 17.0);
-            let ltr = t.layout("one\ntwo\n\nfour", &style, f32::INFINITY, None);
+            let ltr = layout(t, "one\ntwo\n\nfour", &style, f32::INFINITY, None);
             // Hebrew is not in Ubuntu (tofu), but the layout path still runs and reorders.
             let text = "שלום עולם שלום עולם שלום עולם שלום עולם";
-            let rtl = t.layout(text, &style, 80.0, None);
-            let rtl_cut = t.layout(text, &style, 80.0, Some(2));
+            let rtl = layout(t, text, &style, 80.0, None);
+            let rtl_cut = layout(t, text, &style, 80.0, Some(2));
             out = Some((ltr.galley.rows.len(),
-                        ltr.is_rtl(),
-                        rtl.is_rtl(),
+                        ltr.rtl,
+                        rtl.rtl,
                         rtl.galley.rows.len(),
                         rtl.size.x,
                         rtl_cut.galley.rows.len(),
@@ -348,9 +333,9 @@ mod tests {
         let mut out = None;
         with_ctx(|t| {
             let style = TextStyle::regular(14.0, 17.0);
-            let block = t.layout("This is an English paragraph.\n\u{05e9}\u{05dc}\u{05d5}\u{05dd}", &style, f32::INFINITY, None);
+            let block = layout(t, "This is an English paragraph.\n\u{05e9}\u{05dc}\u{05d5}\u{05dd}", &style, f32::INFINITY, None);
             let rows: Vec<(f32, f32)> = block.galley.rows.iter().map(|r| (r.pos.x + r.row.glyphs[0].pos.x, r.pos.x + r.row.glyphs.last().unwrap().max_x())).collect();
-            out = Some((block.is_rtl(), block.size.x, rows));
+            out = Some((block.rtl, block.size.x, rows));
         });
         let (rtl, w, rows) = out.unwrap();
         assert!(!rtl);

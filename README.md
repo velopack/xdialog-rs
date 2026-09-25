@@ -2,12 +2,11 @@
 [![Version](https://img.shields.io/crates/v/xdialog?style=flat-square)](https://crates.io/crates/xdialog)
 [![License](https://img.shields.io/crates/l/xdialog?style=flat-square)](https://github.com/velopack/xdialog/blob/master/LICENSE)
 
-A cross-platform library for displaying native dialogs in Rust. On Windows and macOS, this
-library uses native system dialogs (Win32 TaskDialog and AppKit). On Linux, the backend is a
-pure Rust software renderer ([egui](https://github.com/emilk/egui) drawn by a CPU rasterizer and
-presented through winit + softbuffer) with no C/C++ build dependencies, making it fully
-compatible with static musl builds. This allows for a simplified API and consistent behavior
-across platforms.
+A cross-platform library for displaying native dialogs in Rust: message boxes and progress
+dialogs from any thread, with one API on Windows, macOS and Linux. The Windows and Linux looks
+are drawn with [egui](https://github.com/emilk/egui) by a pure Rust software renderer (winit +
+softbuffer, no GPU and no C/C++ build dependencies, static musl compatible); Win32 TaskDialog
+and AppKit are the native backends.
 
 This is not a replacement for a proper GUI framework. It is meant to be used for CLI / background
 applications which occasionally need to show dialogs (such as alerts, or progress) to the user.
@@ -17,11 +16,11 @@ update framework.
 
 ## Features
 - Cross-platform: works on Windows, macOS, and Linux
-- Native backends on Windows (Win32) and macOS (AppKit), with no C/C++ build dependencies
-- Pure Rust software-rendered backend on Linux (no C/C++ dependencies, static musl compatible)
+- A WinUI 3 (Fluent) look on Windows 10+, the classic xdialog look on Linux, native Win32
+  TaskDialog and AppKit; the backend is chosen at runtime
+- Pure Rust software rendering (no GPU, no C/C++ dependencies, static musl compatible)
 - Embedded font (Ubuntu) - no system font dependencies on Linux
-- Optional: a WinUI 3 (Fluent) look on Windows, xdialog running on its own thread without a
-  builder, or integration into an event loop your application already runs
+- Runs its own event loop, or inside a winit event loop your application already runs
 - Simple and consistent API across all platforms
 
 ## Installation
@@ -37,13 +36,13 @@ Or, run the following command:
 cargo add xdialog
 ```
 
-Rust 1.95 or newer is required on Linux (and on Windows with an egui feature), because of egui 0.36.
+Rust 1.95 or newer is required (egui 0.36).
 
 ## Usage
 Since some platforms require UI to be run on the main thread, xdialog expects to own the
 main thread, and will launch your core application logic in another thread.
 
-```rust
+```rust,no_run
 use xdialog::*;
 
 fn main() {
@@ -99,114 +98,72 @@ cargo run --example various_options
 
 ## Backends
 
-| Platform | `XDialogBuilder` (default) | Optional |
-|---|---|---|
-| Windows | Win32 TaskDialog | `egui-fluent`: WinUI 3 (Fluent) look drawn with egui. `win32-direct`: `init_win32_direct()`, no builder |
-| macOS | AppKit | `maccf-direct`: `init_maccf_direct()`, no builder |
-| Linux | egui, the classic xdialog look (Ubuntu font, blue accent), own winit 0.30 loop | `linux-direct`: `init_linux_direct()`, no builder. `winit-host`: runs inside your event loop |
-| Linux, no display | every dialog function returns `XDialogError::NoBackendAvailable`; your program keeps running | |
+The backend is chosen at runtime with `XDialogBuilder::with_backend`. The default,
+`XDialogBackend::Auto`, picks:
 
-The egui backends follow the system light/dark preference (Windows registry, the XDG desktop
-portal on Linux) unless `XDialogBuilder::with_theme` forces one, and the Fluent look uses the
-Windows accent colour. They render in software only; there is no GPU dependency.
+| Platform | `XDialogBackend::Auto` |
+|---|---|
+| Windows 10 and later | `Fluent` (the WinUI 3 look, Segoe UI Variable, system accent colour), falling back to Win32 TaskDialog if the egui backend fails (its event loop, a window or its first frame can't be created) |
+| Older Windows | `Win32` TaskDialog |
+| Linux | `Ubuntu` (the classic xdialog look, bundled Ubuntu font) |
+| Linux, no display server | every dialog function returns `XDialogError::NoBackendAvailable`; your program keeps running |
+| macOS | `AppKit` |
+
+`Fluent` and `Ubuntu` can be chosen on any platform where winit runs; `Win32` and `AppKit` only on
+their own. A backend that can't run here gives `NoBackendAvailable`; if the backend runs but a
+dialog's window can't be created, that call returns `SystemError` (except where `Auto` falls back
+to TaskDialog). The egui backends follow the
+system light/dark preference (the Windows registry, the XDG desktop portal on Linux) unless
+`XDialogBuilder::with_theme` forces one.
 
 ## Cargo features
 
-| Feature | Default | What it does |
-|---|---|---|
-| `builtin-winit` | yes | Lets xdialog own a winit 0.30 event loop: the Linux builder backend, `linux-direct` and `egui-fluent` need it. On Windows it also compiles winit 0.30 (Cargo features can't be per-target), but nothing uses or links it unless `egui-fluent` / `egui-ubuntu` is on; `default-features = false` avoids it. On macOS it does nothing. |
-| `egui-fluent` | | Windows: `XDialogBuilder` uses the Fluent (WinUI 3 look) egui backend instead of Win32 TaskDialog. See the note below. |
-| `egui-ubuntu` | | Compiles the Ubuntu egui theme on Windows too, for development and testing (it doesn't change the Windows default). On Linux the theme is always compiled; this feature only adds `builtin-winit` (the builder's own loop). |
-| `linux-direct` | | `init_linux_direct()`: no `XDialogBuilder` needed; xdialog starts its own UI thread with a winit 0.30 loop on the first dialog. Linux and Windows. |
-| `winit-host` | | `xdialog::host` + `init_winit_host()`: xdialog renders into windows your application creates in its own event loop (winit 0.29, 0.30, 0.31, or anything with raw-window-handle 0.6). |
-| `win32-direct` | | `init_win32_direct()` (Windows) |
-| `maccf-direct` | | `init_maccf_direct()` (macOS) |
+None are on by default.
 
-**`egui-fluent` is a graph-wide switch.** Cargo unifies features, so if *any* crate in your
-dependency graph enables `egui-fluent`, every `XDialogBuilder` in the final binary uses the Fluent
-backend on Windows. Libraries should leave this choice to the application.
+| Feature | What it does |
+|---|---|
+| `winit-host` | `XDialogBuilder::into_host_app` and `xdialog::host` (with `xdialog::host::winit`, a re-export of xdialog's winit 0.30): run the dialogs inside a winit event loop your application owns |
+| `win32-direct` | `init_win32_direct()` (Windows): Win32 TaskDialog without an `XDialogBuilder` |
+| `maccf-direct` | `init_maccf_direct()` (macOS): CFUserNotification without an `XDialogBuilder` |
 
-Only depend on the egui backends where you need them; resolver 2 ignores features of
-target-specific dependencies on other targets, so Windows and macOS don't compile egui:
+### Using your own winit event loop
 
-```toml
-[dependencies]
-xdialog = { version = "4" }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-xdialog = { version = "4", features = ["linux-direct"] }
-```
-
-### Using your own event loop (no built-in winit)
-
-An application that already runs a winit event loop can't also run xdialog's (winit allows one
-loop per process). Turn the default features off so xdialog compiles no winit at all, and enable
-`winit-host`:
-
-```toml
-[dependencies]
-xdialog = { version = "4", default-features = false, features = ["winit-host"] }
-```
-
-Then call `xdialog::init_winit_host(theme, waker)` once, forward your xdialog windows' events to
-`xdialog::host::handle_event` / `redraw`, call `xdialog::host::pump` in every loop iteration and
-`xdialog::host::shutdown` before your loop exits. The `xdialog::host` module documentation lists
-the full contract and glue for winit 0.29, 0.30 and 0.31, and
-[`examples/winit_host`](examples/winit_host) is a complete winit 0.29 host.
-
-With `default-features = false` and no handler installed, `XDialogBuilder` on Linux has no
-backend: dialog functions return `XDialogError::NoBackendAvailable` (your `main` still runs).
-Host mode always uses the Ubuntu look, on Windows too; use `win32-direct` for native Windows
-dialogs. On macOS `xdialog::host` is a stub (`init_winit_host` returns `NoBackendAvailable`).
+winit allows one event loop per process, and `XDialogBuilder::run` runs one for the egui
+backends. An application with its own winit loop enables `winit-host`, wraps its
+`ApplicationHandler` with `XDialogBuilder::into_host_app` on its event-loop thread instead of
+calling `run`, and passes the wrapper to `run_app`. The handler needs no xdialog code: the wrapper
+handles the dialog windows' events, merges their wake-up deadline into your control flow and
+closes the dialogs on exit. On macOS `Auto` uses the `Ubuntu` look there, since AppKit needs its
+own loop. See the
+[`xdialog::host`](https://docs.rs/xdialog/latest/xdialog/host/index.html) documentation and
+[`examples/winit_host.rs`](https://github.com/velopack/xdialog/blob/master/examples/winit_host.rs),
+a complete host.
 
 ### Threads
 
 Dialog functions can be called from any thread. A *blocking* call (`show_message*`) made on
-xdialog's own UI thread would deadlock, so it returns `XDialogError::BlockingCallOnUiThread`
-instead. `show_progress*` there returns immediately and the window appears on the next loop
-iteration. The UI thread is the event-loop thread of the egui backends (where their progress
-button callbacks run), the host event-loop thread in `winit-host` mode, and on macOS the thread
-running the AppKit loop (where AppKit button callbacks run). With Win32 TaskDialog (the Windows
-default and `win32-direct`) every dialog runs on its own thread, so a callback may call any
-dialog function, including `show_message*`.
+xdialog's UI thread would deadlock, so it returns `XDialogError::BlockingCallOnUiThread`
+instead (only direct calls are detected: a UI thread waiting on another thread that is inside
+`show_message` still deadlocks). `show_progress*` there returns `Ok` immediately and the window
+appears on the next loop iteration; if it then can't be created, the error is only logged and the
+proxy does nothing. The UI thread is the egui event-loop thread (where progress button callbacks run), the
+host's event-loop thread in `winit-host` mode, and on macOS the thread running the AppKit loop.
+With Win32 TaskDialog every dialog runs on its own thread, so its callbacks may call any dialog
+function.
 
 ## Limitations of the egui backends
 
+- **Accessibility:** the egui backends expose nothing to screen readers yet. Win32 TaskDialog and
+  AppKit are accessible: choose `XDialogBackend::Win32` on Windows if you need that.
 - **Emoji** are drawn as monochrome outlines on Windows (Segoe UI Emoji). On Linux only outline
   emoji fonts can be used; most distributions ship only the bitmap *Noto Color Emoji*, so emoji
-  show as empty boxes there. The previous (skia) Linux renderer drew colour emoji. Colour emoji
-  should return with egui 0.37.
-- **Accessibility:** the egui backends expose nothing to screen readers yet (the previous Linux
-  renderer didn't either). The default Win32 TaskDialog and AppKit backends are accessible; on
-  Windows `egui-fluent` is an opt-in trade-off.
-- **One winit loop per process:** `XDialogBuilder` on Linux, `egui-fluent` and `linux-direct` own a
-  winit 0.30 event loop. An application with its own winit loop must use `winit-host` instead
-  (`linux-direct` reports a `SystemError` if the process already created a winit 0.30 loop, and
-  from its first dialog on the application can't create one).
+  show as empty boxes there. Colour emoji should return with egui 0.37.
 - **Complex scripts:** right-to-left text (Arabic, Hebrew) is reordered correctly, but shaping is
   limited to what egui's text engine does. Glyphs come from the system's fonts (fontconfig
   directories on Linux, a known list of Windows fonts on Windows).
-- **Host mode shows the Ubuntu look on Windows**, see above.
 
-## Development
+## More
 
-The egui backends share one core (`src/backends/egui_core/`: event loops, windows, input, fonts,
-software presenter) and each look is a small theme built from egui's own layout, painting, text and
-animation, driven by design tokens (colours, sizes, spacing, radii, timings).
-
-- `cargo test` runs the unit and integration tests; `--features egui-fluent`, `linux-direct`,
-  `_test-hooks` enable more. On Windows set `XDIALOG_TEST_NO_ACTIVATE=1` and
-  `XDIALOG_TEST_POS=offscreen` so test windows never take focus.
-- `cargo test --release --features _test-hooks,egui-ubuntu,egui-fluent --test egui_offscreen` checks
-  the deterministic offscreen renders in `tests/visual_references/egui/`
-  (`XDIALOG_VISUAL_SEED=1` re-seeds them; the Fluent ones apply only when the local Segoe UI
-  Variable has the byte length recorded in `tests/visual_references/egui/fluent/FONT_ID`).
-- `cargo run --release --example egui_gallery --features _test-hooks,egui-fluent,egui-ubuntu -- --theme all`
-  renders every dialog variant of both looks to `target/egui_gallery/<theme>/` plus a contact
-  sheet (`--out <dir>`, `--filter <substr>`, `--list`).
-- `tests/image_seed.sh` re-seeds the screenshot references of `tests/visual_regression.rs`.
-- Hidden environment variables (testing only): `XDIALOG_BACKEND=win32|fluent|ubuntu` picks among the
-  compiled builder backends; `XDIALOG_TEST_NO_ACTIVATE`, and in debug builds `XDIALOG_TEST_POS` and
-  `XDIALOG_TEST_ACCENT`.
-
-See [CHANGELOG.md](CHANGELOG.md) for what changed in 4.0.
+See [CHANGELOG.md](https://github.com/velopack/xdialog/blob/master/CHANGELOG.md) for what changed in 4.0,
+and [CONTRIBUTING.md](https://github.com/velopack/xdialog/blob/master/CONTRIBUTING.md) for how the
+crate is built and tested.

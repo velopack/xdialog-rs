@@ -1,4 +1,3 @@
-use objc2::msg_send;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::sel;
@@ -24,16 +23,12 @@ const TITLE_FONT_SIZE: f64 = 13.0;
 const BODY_FONT_SIZE: f64 = 11.0;
 
 pub struct AppKitDialog {
-    #[allow(dead_code)]
-    id: usize,
     window: Retained<NSWindow>,
     title_field: Option<Retained<NSTextField>>,
     body_field: Option<Retained<NSTextField>>,
     progress: Option<Retained<NSProgressIndicator>>,
     icon_view: Option<Retained<NSImageView>>,
     buttons: Vec<Retained<NSButton>>,
-    has_progress: bool,
-    options: XDialogOptions,
 }
 
 impl AppKitDialog {
@@ -142,76 +137,40 @@ impl AppKitDialog {
         }
         buttons.reverse(); // put back in original order
 
-        let mut dialog = Self {
-            id,
-            window,
-            title_field,
-            body_field,
-            progress,
-            icon_view,
-            buttons,
-            has_progress,
-            options,
-        };
-
+        let dialog = Self { window, title_field, body_field, progress, icon_view, buttons };
         dialog.layout();
         dialog
     }
 
-    fn layout(&mut self) {
+    fn layout(&self) {
         let has_icon = self.icon_view.is_some();
-        let icon_size = if self.has_progress { ICON_PROGRESS_SIZE } else { ICON_SIZE };
-
-        let mut content_width = WINDOW_MIN_WIDTH - WINDOW_PADDING * 2.0;
+        let has_progress = self.progress.is_some();
+        let icon_size = if has_progress { ICON_PROGRESS_SIZE } else { ICON_SIZE };
 
         // When icon is present (any dialog type), text area is narrower
-        let text_area_width = if has_icon {
-            content_width - icon_size - WINDOW_PADDING
-        } else {
-            content_width
+        let text_width = |content_width: f64| if has_icon { content_width - icon_size - WINDOW_PADDING } else { content_width };
+        // Title and body heights at a text width, measured with the actual field cells (accounts
+        // for wrapping/padding)
+        let measure = |width: f64| {
+            let height = |field: &Option<Retained<NSTextField>>| field.as_ref().map_or(0.0, |f| measure_field_height(f, width));
+            (height(&self.title_field), height(&self.body_field))
         };
 
-        // Measure text using actual field cells (accounts for wrapping/padding)
-        let title_height = if let Some(ref tf) = self.title_field {
-            measure_field_height(tf, text_area_width)
-        } else {
-            0.0
-        };
-        let body_height = if let Some(ref bf) = self.body_field {
-            measure_field_height(bf, text_area_width)
-        } else {
-            0.0
-        };
-
-        // Widen if text is very tall
+        // Widen if text is very tall, then re-measure at the final width
+        let mut content_width = WINDOW_MIN_WIDTH - WINDOW_PADDING * 2.0;
+        let (title_height, body_height) = measure(text_width(content_width));
         if title_height + body_height > 150.0 {
             content_width = (content_width + 100.0).min(WINDOW_MAX_WIDTH - WINDOW_PADDING * 2.0);
         }
-
-        let text_area_width = if has_icon {
-            content_width - icon_size - WINDOW_PADDING
-        } else {
-            content_width
-        };
-
-        // Re-measure at final width
-        let title_height = if let Some(ref tf) = self.title_field {
-            measure_field_height(tf, text_area_width)
-        } else {
-            0.0
-        };
-        let body_height = if let Some(ref bf) = self.body_field {
-            measure_field_height(bf, text_area_width)
-        } else {
-            0.0
-        };
+        let text_area_width = text_width(content_width);
+        let (title_height, body_height) = measure(text_area_width);
 
         // Compute text block height
         let mut text_block_height = 0.0;
         if title_height > 0.0 {
             text_block_height += title_height + TEXT_SPACING;
         }
-        if self.has_progress {
+        if has_progress {
             text_block_height += PROGRESS_HEIGHT + TEXT_SPACING;
         }
         if body_height > 0.0 {
@@ -226,7 +185,7 @@ impl AppKitDialog {
         };
 
         let mut total_height = WINDOW_PADDING + main_area_height;
-        if !self.options.buttons.is_empty() {
+        if !self.buttons.is_empty() {
             total_height += BUTTON_PANEL_HEIGHT;
         }
         total_height += WINDOW_PADDING;
@@ -363,8 +322,6 @@ impl AppKitDialog {
     }
 
     pub fn set_body_text(&mut self, text: &str) {
-        self.options.message = text.to_string();
-
         if let Some(ref bf) = self.body_field {
             bf.setStringValue(&NSString::from_str(text));
         } else if !text.is_empty() {
@@ -404,37 +361,22 @@ fn create_label(text: &str, bold: bool, mtm: MainThreadMarker) -> Retained<NSTex
     }
 
     // Enable word wrapping
-    unsafe {
-        let cell: Option<Retained<AnyObject>> = msg_send![&field, cell];
-        if let Some(cell) = cell {
-            let () = msg_send![&*cell, setWraps: true];
-            let () = msg_send![&*cell, setLineBreakMode: 0u64]; // NSLineBreakByWordWrapping
-        }
+    if let Some(cell) = field.cell() {
+        cell.setWraps(true);
+        cell.setLineBreakMode(NSLineBreakMode::ByWordWrapping);
     }
 
     field
 }
 
 fn measure_field_height(field: &NSTextField, width: f64) -> f64 {
-    unsafe {
-        let cell: Option<Retained<AnyObject>> = msg_send![field, cell];
-        if let Some(cell) = cell {
-            let bounds = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, 1e7));
-            let size: NSSize = msg_send![&*cell, cellSizeForBounds: bounds];
-            size.height.ceil()
-        } else {
-            0.0
-        }
-    }
+    let bounds = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, 1e7));
+    field.cell().map_or(0.0, |cell| cell.cellSizeForBounds(bounds).height.ceil())
 }
 
 fn measure_button_width(btn: &NSButton) -> f64 {
-    unsafe {
-        let title: Retained<NSString> = msg_send![btn, title];
-        let font = NSFont::systemFontOfSize(BODY_FONT_SIZE);
-        let font_obj: Retained<AnyObject> = msg_send![&*font, self];
-        let attrs = NSDictionary::from_slices(&[NSFontAttributeName], &[&*font_obj]);
-        let size = title.sizeWithAttributes(Some(&attrs));
-        size.width
-    }
+    let font = NSFont::systemFontOfSize(BODY_FONT_SIZE);
+    let font: &AnyObject = &font;
+    // SAFETY: the NSFontAttributeName value is an NSFont, as `sizeWithAttributes:` expects.
+    unsafe { btn.title().sizeWithAttributes(Some(&NSDictionary::from_slices(&[NSFontAttributeName], &[font]))).width }
 }

@@ -6,14 +6,10 @@ use crate::*;
 /// The proxy object can be used to update the progress value, text, or close the dialog.
 /// The progress bar can be set to a specific value, or set to indeterminate mode.
 ///
-/// This progress dialog has no buttons. On platforms which require a button to be present
-/// (Windows), a default button is shown. See [`show_progress_ex`] to customize the buttons,
+/// This progress dialog has no buttons (Win32 TaskDialog shows a default button). See [`show_progress_ex`] to customize the buttons,
 /// or [`show_progress_with_callback`] to also react when a button is clicked.
 ///
-/// When called on the xdialog UI thread (from an egui or AppKit progress callback, or on the host
-/// thread in `winit-host` mode), this returns `Ok` immediately; if the window later fails to be created
-/// (for example `NoBackendAvailable`), the error is only logged and the proxy's methods have no
-/// effect.
+/// On xdialog's UI thread this returns `Ok` at once (see [Threads](crate#threads)).
 ///
 /// ### Example
 /// ```rust,no_run
@@ -63,13 +59,10 @@ pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
 /// notified when a button is clicked (eg. to cancel an operation), use
 /// [`show_progress_with_callback`].
 ///
-/// This is useful to relabel the button that Windows always displays on a progress dialog (eg.
-/// to a localized "Hide"), or to offer a "Cancel" button on all platforms.
+/// This is useful to relabel the button that Win32 TaskDialog always displays on a progress
+/// dialog (eg. to a localized "Hide"), or to offer a "Cancel" button on all platforms.
 ///
-/// When called on the xdialog UI thread (from an egui or AppKit progress callback, or on the host
-/// thread in `winit-host` mode), this returns `Ok` immediately; if the window later fails to be created
-/// (for example `NoBackendAvailable`), the error is only logged and the proxy's methods have no
-/// effect.
+/// On xdialog's UI thread this returns `Ok` at once (see [Threads](crate#threads)).
 pub fn show_progress_ex(options: XDialogOptions) -> Result<ProgressDialogProxy, XDialogError> {
     show_progress_internal(options, None)
 }
@@ -86,18 +79,13 @@ pub fn show_progress_ex(options: XDialogOptions) -> Result<ProgressDialogProxy, 
 /// close it immediately.
 ///
 /// Note: the callback is never invoked in silent mode. Pair callbacks with a non-empty `buttons`
-/// list — with an empty list only Windows shows a (default) button and its index will not map to
-/// your `buttons` array.
+/// list — with an empty list only Win32 TaskDialog shows a (default) button and its index will not
+/// map to your `buttons` array.
 ///
-/// On the egui backends and on macOS (AppKit) the callback runs on xdialog's UI thread: it may
-/// open another progress dialog (see below) but must not call a blocking function such as
-/// `show_message*`, which returns [`XDialogError::BlockingCallOnUiThread`] there. With Win32
-/// TaskDialog the callback runs on the dialog's own thread and may call any dialog function.
+/// Except with Win32 TaskDialog, the callback runs on xdialog's UI thread: it may open another
+/// progress dialog but not wait for a message box (see [Threads](crate#threads)).
 ///
-/// When called on the xdialog UI thread (from an egui or AppKit progress callback, or on the host
-/// thread in `winit-host` mode), this returns `Ok` immediately; if the window later fails to be created
-/// (for example `NoBackendAvailable`), the error is only logged and the proxy's methods have no
-/// effect.
+/// On xdialog's UI thread this returns `Ok` at once (see [Threads](crate#threads)).
 ///
 /// ### Example
 /// ```rust,no_run
@@ -129,45 +117,28 @@ pub fn show_progress_with_callback<F>(options: XDialogOptions, on_button: F) -> 
 where
     F: FnMut(usize, &ProgressDialogProxy) -> bool + Send + 'static,
 {
-    show_progress_internal(options, Some(ProgressButtonCallback(Box::new(on_button))))
+    show_progress_internal(options, Some(Box::new(on_button)))
 }
 
 fn show_progress_internal(options: XDialogOptions, on_button: Option<ProgressButtonCallback>) -> Result<ProgressDialogProxy, XDialogError> {
-    let id = get_next_id();
-
-    if get_silent() {
-        return Ok(ProgressDialogProxy { id, silent: true, owned: true });
+    let (id, silent) = (get_next_id(), get_silent());
+    if !silent {
+        let (creation_sender, creation_receiver) = std::sync::mpsc::channel();
+        send_request(DialogMessageRequest::ShowProgressWindow(id, options, creation_sender, on_button))?;
+        // On xdialog's UI thread, waiting here would deadlock the loop that creates the window.
+        // Requests are handled in order, so the proxy's later updates apply once the window
+        // exists; the backend's answer into the dropped receiver is harmless. Creation errors are
+        // logged by the backend.
+        if !is_ui_thread() {
+            // Wait for creation confirmation, discard the dialog result receiver
+            let _ = creation_receiver.recv().map_err(XDialogError::NoResult)??;
+        }
     }
-
-    let (creation_sender, creation_receiver) = oneshot::channel();
-    send_request(DialogMessageRequest::ShowProgressWindow(id, options, creation_sender, on_button))?;
-    if is_ui_thread() {
-        // Waiting here would deadlock the loop that creates the window. Requests
-        // are handled in order, so the proxy's later updates apply once the window exists; the
-        // backend's answer into the dropped receiver is harmless. Creation errors are logged by
-        // the backend.
-        drop(creation_receiver);
-        return Ok(ProgressDialogProxy { id, silent: false, owned: true });
-    }
-    // Wait for creation confirmation, discard the dialog result receiver
-    let _ = creation_receiver.recv().map_err(XDialogError::NoResult)??;
-    Ok(ProgressDialogProxy { id, silent: false, owned: true })
+    Ok(ProgressDialogProxy { id, silent, owned: true })
 }
 
-/// The boxed closure type behind [`ProgressButtonCallback`].
-type ProgressButtonCallbackFn = Box<dyn FnMut(usize, &ProgressDialogProxy) -> bool + Send + 'static>;
-
-/// A boxed callback invoked when a button on a progress dialog is clicked. Returns `true` to keep
-/// the dialog open or `false` to close it. This type is public only because it appears in
-/// [`DialogMessageRequest`]; callers pass a closure to [`show_progress_with_callback`] rather than
-/// constructing this directly.
-pub struct ProgressButtonCallback(pub(crate) ProgressButtonCallbackFn);
-
-impl std::fmt::Debug for ProgressButtonCallback {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("<callback>")
-    }
-}
+/// A progress dialog button callback (see [`show_progress_with_callback`]).
+pub(crate) type ProgressButtonCallback = Box<dyn FnMut(usize, &ProgressDialogProxy) -> bool + Send>;
 
 /// A proxy object to control a progress dialog. See `show_progress` for more information.
 pub struct ProgressDialogProxy {
@@ -185,29 +156,33 @@ impl ProgressDialogProxy {
         ProgressDialogProxy { id, silent: false, owned: false }
     }
 
+    fn send(&self, request: DialogMessageRequest) -> Result<(), XDialogError> {
+        if self.silent {
+            Ok(())
+        } else {
+            send_request(request)
+        }
+    }
+
     /// Sets the progress bar to indeterminate mode.
     pub fn set_indeterminate(&self) -> Result<(), XDialogError> {
-        if self.silent { return Ok(()); }
-        send_request(DialogMessageRequest::SetProgressIndeterminate(self.id))
+        self.send(DialogMessageRequest::SetProgressIndeterminate(self.id))
     }
 
     /// Sets the progress bar to a specific value between 0.0 and 1.0. Values outside that range
     /// are clamped (e.g. `50.0` becomes `1.0`), matching the native progress controls.
     pub fn set_value(&self, value: f32) -> Result<(), XDialogError> {
-        if self.silent { return Ok(()); }
-        send_request(DialogMessageRequest::SetProgressValue(self.id, value.clamp(0.0, 1.0)))
+        self.send(DialogMessageRequest::SetProgressValue(self.id, value.clamp(0.0, 1.0)))
     }
 
     /// Sets the text displayed below the progress bar.
     pub fn set_text<P: AsRef<str>>(&self, text: P) -> Result<(), XDialogError> {
-        if self.silent { return Ok(()); }
-        send_request(DialogMessageRequest::SetProgressText(self.id, text.as_ref().to_string()))
+        self.send(DialogMessageRequest::SetProgressText(self.id, text.as_ref().to_string()))
     }
 
     /// Closes the progress dialog.
     pub fn close(&self) -> Result<(), XDialogError> {
-        if self.silent { return Ok(()); }
-        send_request(DialogMessageRequest::CloseWindow(self.id))
+        self.send(DialogMessageRequest::CloseWindow(self.id))
     }
 }
 

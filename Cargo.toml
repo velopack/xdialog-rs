@@ -8,105 +8,77 @@ authors = ["Caelan Sayler <git@caesay.com>"]
 repository = "https://github.com/velopack/xdialog"
 keywords = ["dialog", "message-box", "messagebox", "cross-platform"]
 categories = ["graphics", "gui", "visualization"]
+rust-version = "1.95"
 
 [features]
-default = ["builtin-winit"]
+default = []
+# `init_win32_direct()` (Windows): Win32 TaskDialog without an XDialogBuilder.
 win32-direct = []
+# `init_maccf_direct()` (macOS).
 maccf-direct = ["dep:core-foundation", "dep:core-foundation-sys"]
-
-# xdialog may own a winit 0.30 event loop: the Linux XDialogBuilder backend, `linux-direct`, and
-# `egui-fluent`. Turn default features off (and enable `winit-host`) to build xdialog with no winit.
-# Cargo features can't be per-target and a renamed second `winit` dependency is rejected ("depends
-# on crate winit multiple times with different names"), so on Windows this also compiles winit
-# (never used, nothing linked from it, unless `egui-fluent` / `egui-ubuntu` is on).
-builtin-winit = ["dep:winit"]
-# Windows: XDialogBuilder uses the Fluent (WinUI 3 look) egui backend instead of Win32 TaskDialog.
-# Linux: compiles the fluent theme too (dev only; selectable via XDIALOG_BACKEND=fluent). macOS: no-op.
-# NOT additive in behaviour: any crate in the graph enabling it switches the Windows builder backend.
-egui-fluent = ["builtin-winit", "_egui", "_fluent-theme"]
-# Compiles the Linux (egui) theme + own winit loop on Windows for development/testing.
-# On Linux this is always on (no-op). Does NOT change the Windows default (use XDIALOG_BACKEND=ubuntu).
-egui-ubuntu = ["builtin-winit", "_egui", "_ubuntu-theme"]
-# `init_linux_direct()`: xdialog owns a persistent UI thread with its own winit 0.30 loop,
-# started lazily on the first dialog request.
-linux-direct = ["egui-ubuntu"]
-# `xdialog::host` + `init_winit_host()`: integrate into the host application's own event loop
-# (any winit >= 0.29 via raw-window-handle 0.6, or no winit at all). Never uses xdialog's winit.
-# With `default-features = false` winit is not compiled at all (the "turn off built-in winit" mode).
-winit-host = ["_egui", "_ubuntu-theme"]
+# `XDialogBuilder::into_host_app` + `xdialog::host` (incl. `xdialog::host::winit`, a re-export of the
+# winit 0.30 xdialog uses): run xdialog's dialogs inside an event loop your application owns.
+# Purely additive: it only exposes API; nothing changes for XDialogBuilder::run.
+winit-host = []
 
 # ---- private (underscore = not part of the public contract) ----
-_egui = ["dep:egui", "dep:softbuffer", "dep:strength_reduce", "dep:skrifa", "dep:unicode-bidi", "dep:ahash"]
-_ubuntu-theme = ["_egui"]
-_fluent-theme = ["_egui"]
-# Offscreen renderer, live input injection and introspection (`xdialog::__test`, doc(hidden)).
-# Implies the Ubuntu theme so that `--features _test-hooks` alone has a concrete Theme (no dead code).
-_test-hooks = ["_egui", "_ubuntu-theme"]
+# Offscreen renderer (`xdialog::__test`) and `XDialogApp::test_*` (doc(hidden)).
+_test-hooks = []
 
 [dependencies]
 log = "0.4"
-oneshot = { version = "0.2", features = ["std"] }
 thiserror = "2.0"
-# Public dependency of `xdialog::host` (feature `winit-host`). Pure Rust, no dependencies; kept
-# non-optional so the macOS `host` stub and the Linux/Windows egui backends share one declaration.
-raw-window-handle = "0.6.2"
-
-# AppKit Backend
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = [
-    "NSString",
-    "NSDate",
-    "NSRunLoop",
-    "NSObject",
-    "NSDictionary",
-    "NSAttributedString",
-    "NSGeometry",
-    "NSValue",
-    "NSArray",
-] }
-objc2-app-kit = { version = "0.3", features = [
-    "NSApplication",
-    "NSWindow",
-    "NSView",
-    "NSTextField",
-    "NSButton",
-    "NSImageView",
-    "NSImage",
-    "NSProgressIndicator",
-    "NSFont",
-    "NSColor",
-    "NSScreen",
-    "NSEvent",
-    "NSControl",
-    "NSResponder",
-    "NSCell",
-    "NSButtonCell",
-    "NSRunningApplication",
-    "NSGraphics",
-    "NSText",
-    "NSPanel",
-] }
-block2 = "0.6"
-core-foundation = { version = "0.10", optional = true }
-core-foundation-sys = { version = "0.8", optional = true }
-
-# Linux: egui backend (always compiled on Linux)
-[target.'cfg(target_os = "linux")'.dependencies]
+# egui backends (all platforms). winit's / softbuffer's default features are what Linux needs
+# (x11, wayland, rwh_06); their platform deps are target-gated inside those crates, so one entry
+# each serves every OS.
 egui = { version = "0.36.2", default-features = false }
+egui-winit = { version = "0.36.2", default-features = false }
+winit = "0.30.13"
 softbuffer = "0.4.8"
-winit = { version = "0.30.13", optional = true }
-zbus = "5"
-fontdb = "0.24"
 skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 unicode-bidi = "0.3.18"
 strength_reduce = "0.2.4"
 ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"] }
 
-# Win32 Backend (+ optional egui backends: `egui-fluent`, `egui-ubuntu`, `linux-direct`, `winit-host`)
+# AppKit Backend
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSDate", "NSDictionary", "NSGeometry", "NSRunLoop", "NSString"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "objc2-core-foundation",
+    "NSApplication",
+    "NSAttributedString",
+    "NSButton",
+    "NSButtonCell",
+    "NSCell",
+    "NSControl",
+    "NSEvent",
+    "NSFont",
+    "NSGraphics",
+    "NSImage",
+    "NSImageCell",
+    "NSImageView",
+    "NSParagraphStyle",
+    "NSProgressIndicator",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSStringDrawing",
+    "NSTextField",
+    "NSView",
+    "NSWindow",
+] }
+core-foundation = { version = "0.10", optional = true }
+core-foundation-sys = { version = "0.8", optional = true }
+
+# Linux: system fonts and the XDG desktop portal (appearance)
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+fontdb = "0.24"
+
+# Win32 Backend
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
-    "Win32_System",
     "Win32_Foundation",
     "Win32_UI_Controls",
     "Win32_UI_WindowsAndMessaging",
@@ -115,16 +87,9 @@ windows = { version = "0.62", features = [
     "Win32_System_Registry",
     "Win32_UI_HiDpi",
     "Win32_Globalization",
-    "Win32_Graphics_Gdi",
+    "Wdk_System_SystemServices",
+    "Win32_System_SystemInformation",
 ] }
-widestring = "1.2"
-egui = { version = "0.36.2", default-features = false, optional = true }
-softbuffer = { version = "0.4.8", default-features = false, optional = true }
-winit = { version = "0.30.13", default-features = false, features = ["rwh_06"], optional = true }
-skrifa = { version = "0.44.0", default-features = false, features = ["std"], optional = true }
-unicode-bidi = { version = "0.3.18", optional = true }
-strength_reduce = { version = "0.2.4", optional = true }
-ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"], optional = true }
 
 [[example]]
 name = "win32_direct"
@@ -135,16 +100,20 @@ name = "maccf_direct"
 required-features = ["maccf-direct"]
 
 [[example]]
-name = "linux_direct"
-required-features = ["linux-direct"]
+name = "winit_host"
+required-features = ["winit-host"]
 
 [[example]]
 name = "egui_gallery"
 path = "examples/egui_gallery/main.rs"
-required-features = ["_test-hooks", "egui-fluent", "egui-ubuntu"]
+required-features = ["_test-hooks"]
 
 [[test]]
-name = "macos_ui"
+name = "headless"
+harness = false
+
+[[test]]
+name = "lifecycle"
 harness = false
 
 [[test]]
@@ -153,27 +122,19 @@ harness = false
 
 [[test]]
 name = "egui_offscreen"
-required-features = ["_test-hooks", "egui-ubuntu"]
+required-features = ["_test-hooks"]
 
 [[test]]
-name = "egui_direct"
-required-features = ["linux-direct"]
-
-[[test]]
-name = "egui_direct_recreate"
+name = "winit_host"
 harness = false
-required-features = ["linux-direct"]
-
-[[bench]]
-name = "render"
-harness = false
-required-features = ["_test-hooks", "egui-ubuntu"]
+required-features = ["winit-host", "_test-hooks"]
 
 [dev-dependencies]
-ntest = "=0.9.5"
 image = "=0.25.10"
+
+# Window captures for tests/visual_regression.rs (Windows uses GDI directly).
+[target.'cfg(target_os = "macos")'.dev-dependencies]
 xcap = "=0.9.8"
-criterion = { version = "=0.8.2", default-features = false, features = ["cargo_bench_support"] }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows = { version = "=0.62.2", features = [
@@ -183,6 +144,6 @@ windows = { version = "=0.62.2", features = [
 ] }
 
 [package.metadata.docs.rs]
-features = ["linux-direct", "winit-host"]
+features = ["winit-host", "win32-direct", "maccf-direct"]
 targets = ["x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc", "aarch64-apple-darwin"]
 rustdoc-args = ["--cfg", "docsrs"]

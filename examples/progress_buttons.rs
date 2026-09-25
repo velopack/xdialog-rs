@@ -3,8 +3,9 @@
 //! - `show_progress_with_callback` adds a "Cancel" button and reacts to clicks, keeping the dialog
 //!   open to show a "Cancelling..." message until the work loop tears it down.
 //! - `show_progress_ex` adds a "Hide" button with no callback (clicking it simply closes the
-//!   dialog). On Windows this relabels the button that is always present on a progress dialog.
-//! - `show_progress` shows the original button-less dialog (unchanged behavior).
+//!   dialog). With Win32 TaskDialog this relabels the button that is always present on a progress
+//!   dialog.
+//! - `show_progress` shows the original button-less dialog; a longer text reflows it.
 //!
 //! Run with: cargo run --example progress_buttons
 
@@ -65,9 +66,12 @@ fn run() {
     std::thread::sleep(Duration::from_secs(3));
     hide.close().unwrap();
 
-    // 3. The original button-less progress dialog (unchanged behavior).
+    // 3. The original button-less progress dialog; a longer text reflows (and resizes) the window.
     let plain = show_progress("Finishing", "Almost done", "No buttons here.", XDialogIcon::None).unwrap();
     plain.set_value(0.5).unwrap();
+    std::thread::sleep(Duration::from_secs(2));
+    plain.set_value(1.0).unwrap();
+    plain.set_text("This is some long text which should wrap and cause the window size to be re-calculated.").unwrap();
     std::thread::sleep(Duration::from_secs(2));
     plain.close().unwrap();
 }
