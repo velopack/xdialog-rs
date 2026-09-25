@@ -355,6 +355,17 @@ impl Runtime {
                                                     .with_visible(false)
                                                     .with_active(!no_activate())
                                                     .with_theme((!follow_system).then_some(winit_theme(dark)));
+        if let Some(file) = dialog.icon_file() {
+            // Windows: the title bar (small) and taskbar / Alt+Tab (big) icons at the system
+            // metrics' sizes; X11: one image the window manager scales (_NET_WM_ICON). Wayland and
+            // macOS have no window icons.
+            #[cfg(windows)]
+            {
+                use winit::platform::windows::WindowAttributesExtWindows;
+                attrs = attrs.with_taskbar_icon(window_icon(file, 32.0 * ppp));
+            }
+            attrs = attrs.with_window_icon(window_icon(file, if cfg!(windows) { 16.0 } else { 64.0 } * ppp));
+        }
         #[cfg(windows)]
         {
             // Rounded corners (Windows 11). No drag and drop: winit's default registers an OLE drop
@@ -552,6 +563,12 @@ fn request_id(msg: &DialogMessageRequest) -> Option<usize> {
         | DialogMessageRequest::SetProgressText(id, _) => Some(*id),
         DialogMessageRequest::None | DialogMessageRequest::ExitEventLoop => None,
     }
+}
+
+/// `file` as a winit window icon of `size` physical px.
+fn window_icon(file: &crate::icon::IconFile, size: f32) -> Option<winit::window::Icon> {
+    let img = file.render(size.round() as u32)?;
+    winit::window::Icon::from_rgba(img.rgba, img.size, img.size).map_err(|e| warn!("xdialog: window icon: {e}")).ok()
 }
 
 fn winit_theme(dark: bool) -> winit::window::Theme {

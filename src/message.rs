@@ -86,6 +86,7 @@ fn show_message_internal<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
         main_instruction: main_instruction.as_ref().to_string(),
         message: message.as_ref().to_string(),
         icon,
+        icon_source: None,
         buttons,
     };
     // Checked before showing: the dialog would only flash.
@@ -114,6 +115,7 @@ fn show_message_internal<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
 ///     main_instruction: "Save changes before closing?".to_string(),
 ///     message: "Your changes will be lost if you don't save them.".to_string(),
 ///     icon: XDialogIcon::Warning,
+///     icon_source: None,
 ///     buttons: vec!["Don't save".to_string(), "Save".to_string()],
 /// };
 /// let dialog = show_message(options);

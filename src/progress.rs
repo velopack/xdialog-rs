@@ -49,6 +49,7 @@ pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
         main_instruction: main_instruction.as_ref().to_string(),
         message: message.as_ref().to_string(),
         icon,
+        icon_source: None,
         buttons: vec![],
     };
     show_progress_internal(data, None)
@@ -102,6 +103,7 @@ pub fn show_progress_ex(options: XDialogOptions) -> Result<ProgressDialogProxy, 
 ///         main_instruction: "Please wait".to_string(),
 ///         message: "Crunching numbers...".to_string(),
 ///         icon: XDialogIcon::Information,
+///         icon_source: None,
 ///         buttons: vec!["Cancel".to_string()],
 ///     },
 ///     move |_button_index, proxy| {

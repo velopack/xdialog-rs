@@ -116,6 +116,28 @@ to TaskDialog). The egui backends follow the
 system light/dark preference (the Windows registry, the XDG desktop portal on Linux) unless
 `XDialogBuilder::with_theme` forces one.
 
+## Custom icons
+
+`XDialogOptions::icon_source` takes an `.ico`, `.png` or `.icns` image, as a file
+(`XDialogIconSource::File`) or its bytes (`XDialogIconSource::Bytes`); the format is read from the
+content, so any of the three works on every platform. With the egui backends (Fluent, Ubuntu) it
+becomes the dialog's window and taskbar icon where the platform has one (Windows, and X11 on
+Linux; Wayland and macOS have no per-window icons), and with `XDialogIcon::Custom` it is shown in
+the dialog instead of the information, warning or error icon. `Custom` without an icon source (or
+with one that can't be loaded) shows no icon; it is never an error. Win32 TaskDialog, AppKit and
+`maccf-direct` ignore the icon source (`Custom` shows no icon there).
+
+```rust,no_run
+# use xdialog::*;
+let options = XDialogOptions { title: "My App".into(),
+                               main_instruction: "Update available".into(),
+                               message: "Version 2.0 is ready to install.".into(),
+                               icon: XDialogIcon::Custom,
+                               icon_source: Some(XDialogIconSource::File("assets/app.ico".into())),
+                               buttons: vec!["Later".into(), "Install".into()] };
+let result = show_message(options).wait();
+```
+
 ## Cargo features
 
 None are on by default.

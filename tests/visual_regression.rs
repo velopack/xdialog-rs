@@ -178,6 +178,7 @@ fn run_all_captures() -> Vec<(&'static str, RgbaImage)> {
                                    main_instruction: "Information".to_string(),
                                    message: "This is a test message for visual regression testing.".to_string(),
                                    icon: XDialogIcon::Information,
+                                   icon_source: None,
                                    buttons: vec!["OK".to_string()] };
     let _ = show_message(options).wait_timeout(Duration::from_secs(15));
     let message = capturing.join().unwrap();

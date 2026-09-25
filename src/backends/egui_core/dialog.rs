@@ -14,6 +14,7 @@
 //! [`Dialog::take_accesskit_update`]. AccessKit action requests arrive as `egui::Event`s.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use egui::{Event, PointerButton, Pos2, Rect, Vec2, ViewportId};
@@ -26,6 +27,7 @@ use super::fonts::{font_definitions, FontRegistry};
 use super::keyboard::{KeyAction, KeyboardState};
 use super::render::{Presenter, RenderFrame};
 use super::theme::{button_id, core_options, install_style, DialogKind, DialogUiOutput, DialogView, ProgressView, Theme};
+use crate::icon::IconFile;
 use crate::model::{ResultSender, XDialogIcon, XDialogOptions, XDialogResult, XDialogTheme};
 use crate::{ProgressButtonCallback, ProgressDialogProxy};
 
@@ -43,17 +45,28 @@ pub(crate) struct DialogContent {
     pub heading: String,
     pub body: String,
     pub icon: XDialogIcon,
+    /// `options.icon_source`, loaded (`None`: none, or it couldn't be loaded).
+    pub icon_file: Option<Arc<IconFile>>,
     pub buttons: Vec<String>,
     pub progress: Option<ProgressView>,
 }
 
 impl DialogContent {
     /// Content of a message (`Message`) or progress (`Progress`, starting determinate at 0) dialog.
+    /// Reads the icon, if any.
     pub(crate) fn new(kind: DialogKind, options: XDialogOptions) -> Self {
+        let icon_file = options.icon_source.as_ref().and_then(|source| match IconFile::load(source) {
+                                                        Ok(f) => Some(Arc::new(f)),
+                                                        Err(e) => {
+                                                            warn!("xdialog: ignoring the icon: {e}");
+                                                            None
+                                                        }
+                                                    });
         DialogContent { title: options.title,
                         heading: options.main_instruction,
                         body: options.message,
                         icon: options.icon,
+                        icon_file,
                         buttons: options.buttons,
                         progress: (kind == DialogKind::Progress).then_some(ProgressView::Determinate { value: 0.0 }) }
     }
@@ -141,6 +154,9 @@ pub(crate) struct Dialog {
     pointer_gone: bool,
     /// The last frame's AccessKit tree (only while AccessKit output is on), not taken yet.
     accesskit_update: Option<egui::accesskit::TreeUpdate>,
+    /// The custom icon's side in physical px and its texture (`None`: no frame decoded), rendered
+    /// again when the scale changes.
+    icon_texture: Option<(u32, Option<egui::TextureHandle>)>,
 }
 
 impl Dialog {
@@ -176,7 +192,8 @@ impl Dialog {
                              frames: 0,
                              fonts: FontState::default(),
                              pointer_gone: false,
-                             accesskit_update: None };
+                             accesskit_update: None,
+                             icon_texture: None };
         d.ctx.options_mut(core_options);
         install_style(&d.ctx, &*d.theme, d.appearance.dark);
         d.update_fonts(true);
@@ -221,10 +238,12 @@ impl Dialog {
                                        ..Default::default() };
         raw.viewports.entry(ViewportId::ROOT).or_default().native_pixels_per_point = Some(self.ppp);
 
+        let custom_icon = self.custom_icon_texture();
         let c = &self.content;
         let view = DialogView { heading: &c.heading,
                                 body: &c.body,
                                 icon: &c.icon,
+                                custom_icon,
                                 buttons: &c.buttons,
                                 progress: c.progress,
                                 max_height: self.max_height,
@@ -237,6 +256,24 @@ impl Dialog {
                            });
         self.out = out;
         full
+    }
+
+    /// The `Custom` icon's texture at the current scale (rendered on first use and when the scale
+    /// changes); `None` without an icon file or for the other icons.
+    fn custom_icon_texture(&mut self) -> Option<egui::TextureId> {
+        if self.content.icon != XDialogIcon::Custom {
+            return None;
+        }
+        let file = self.content.icon_file.as_ref()?;
+        let px = (self.theme.icon_size() * self.ppp).round().max(1.0) as u32;
+        if self.icon_texture.as_ref().is_none_or(|(size, _)| *size != px) {
+            let texture = file.render(px).map(|img| {
+                                             let image = egui::ColorImage::from_rgba_unmultiplied([px as usize; 2], &img.rgba);
+                                             self.ctx.load_texture("xdialog.custom_icon", image, egui::TextureOptions::LINEAR)
+                                         });
+            self.icon_texture = Some((px, texture));
+        }
+        self.icon_texture.as_ref()?.1.as_ref().map(egui::TextureHandle::id)
     }
 
     /// Client size in logical px (the requested size until the window reports one).
@@ -564,6 +601,11 @@ impl Dialog {
         &self.content.title
     }
 
+    /// The loaded `options.icon_source` (the window icon).
+    pub(crate) fn icon_file(&self) -> Option<&IconFile> {
+        self.content.icon_file.as_deref()
+    }
+
     /// Logical client size the content wants (measure pass / last pass).
     pub(crate) fn desired_size(&self) -> Vec2 {
         self.out.desired_size
@@ -677,6 +719,9 @@ mod tests {
         fn keyboard_policy(&self) -> KeyboardPolicy {
             crate::backends::egui_ubuntu::KEYBOARD
         }
+        fn icon_size(&self) -> f32 {
+            32.0
+        }
         fn fonts(&self) -> ThemeFonts {
             ThemeFonts::new(bundled::UBUNTU_REGULAR, bundled::UBUNTU_BOLD)
         }
@@ -716,6 +761,7 @@ mod tests {
                                            main_instruction: String::new(),
                                            message: "Hello world, this is a body text.".into(),
                                            icon: XDialogIcon::None,
+                                           icon_source: None,
                                            buttons: buttons.iter().map(|s| s.to_string()).collect() };
             let (tx, rx) = crate::oneshot::channel();
             let params = DialogParams { id: 7,
@@ -944,6 +990,7 @@ mod tests {
                                        main_instruction: "Heading".into(),
                                        message: "Body text".into(),
                                        icon: XDialogIcon::Warning,
+                                       icon_source: None,
                                        buttons: buttons.iter().map(|s| s.to_string()).collect() };
         let (tx, rx) = crate::oneshot::channel();
         let params = DialogParams { id: 3,
@@ -1025,6 +1072,60 @@ mod tests {
             let bar = t.nodes.iter().map(|(_, n)| n).find(|n| n.role() == Role::ProgressIndicator).expect("progress bar");
             assert_eq!(bar.numeric_value(), None, "{backend:?}");
         }
+    }
+
+    /// A real theme's `Custom` icon dialog at `ppp`, one frame presented.
+    fn custom_icon(backend: crate::XDialogBackend, icon_source: Option<crate::XDialogIconSource>, ppp: f32) -> Dialog {
+        let options = XDialogOptions { title: "Title".into(),
+                                       message: "A body text wide enough to set the window width.".into(),
+                                       icon: XDialogIcon::Custom,
+                                       icon_source,
+                                       buttons: vec!["OK".into()],
+                                       ..Default::default() };
+        let params = DialogParams { id: 4,
+                                    content: DialogContent::new(DialogKind::Message, options),
+                                    appearance: Appearance::default(),
+                                    system_appearance: None,
+                                    ppp,
+                                    max_height: 800.0,
+                                    clock: DialogClock::frozen(0.0),
+                                    sender: None };
+        let mut d = Dialog::new(crate::backends::egui_core::theme::new(backend), params);
+        let size = d.physical_size(ppp);
+        d.attach(Box::new(MemoryPresenter::new()), ppp, size);
+        d.frame().unwrap();
+        d
+    }
+
+    #[test]
+    fn custom_icon_shows_the_icon_source() {
+        use crate::XDialogIconSource::{Bytes, File};
+        let dir = std::env::temp_dir().join(format!("xdialog-icon-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let ico = dir.join("app.ico");
+        std::fs::write(&ico, crate::icon::tests::ico_bytes(16, 256)).unwrap();
+        for backend in [crate::XDialogBackend::Fluent, crate::XDialogBackend::Ubuntu] {
+            let without = custom_icon(backend, None, 1.0);
+            let missing = custom_icon(backend, Some(File(dir.join("missing.ico"))), 1.0);
+            let garbage = custom_icon(backend, Some(Bytes(b"garbage".as_slice().into())), 1.0);
+            assert_eq!(without.desired_size(), garbage.desired_size(), "{backend:?}");
+            // No file, or one that can't be read: laid out as without an icon.
+            assert_eq!(without.desired_size(), missing.desired_size(), "{backend:?}");
+            assert!(without.icon_file().is_none() && without.icon_texture.is_none());
+
+            for (ppp, source) in [(1.0, File(ico.clone())), (2.0, Bytes(crate::icon::tests::ico_bytes(16, 256).into()))] {
+                let d = custom_icon(backend, Some(source), ppp);
+                assert_ne!(d.desired_size(), without.desired_size(), "{backend:?}: room for the icon");
+                // Rendered at one texel per physical pixel.
+                let size = (d.theme.icon_size() * ppp) as u32;
+                assert_eq!(d.icon_texture.as_ref().map(|(px, t)| (*px, t.as_ref().map(|t| t.size()))),
+                           Some((size, Some([size as usize; 2]))));
+                // Some pixel of the window is the icon's red.
+                let (_, _, px) = d.presenter().unwrap().read_rgba().unwrap();
+                assert!(px.chunks_exact(4).any(|p| p[0] > 240 && p[1] < 16 && p[2] < 16), "{backend:?} at {ppp}x: no red icon pixel");
+            }
+        }
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

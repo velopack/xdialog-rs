@@ -26,6 +26,7 @@ fn message_timeout() {
                                    main_instruction: "Testing timeout".to_string(),
                                    message: "This dialog should auto-close after 1 second".to_string(),
                                    icon: XDialogIcon::Information,
+                                   icon_source: None,
                                    buttons: vec!["OK".to_string()] };
     let result = show_message(options).wait_timeout(timeout).unwrap();
     assert_eq!(result, XDialogResult::TimeoutElapsed);

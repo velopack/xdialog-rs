@@ -97,6 +97,7 @@ pub fn opts(title: &str, heading: &str, body: &str, icon: XDialogIcon, buttons: 
                      main_instruction: heading.into(),
                      message: body.into(),
                      icon,
+                     icon_source: None,
                      buttons: buttons.iter().map(|s| s.to_string()).collect() }
 }
 

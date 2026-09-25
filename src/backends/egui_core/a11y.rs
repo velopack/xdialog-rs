@@ -127,10 +127,11 @@ pub(crate) fn describe_progress(response: &Response, progress: ProgressView) {
 }
 
 /// Describe a severity icon widget as the severity word ("Information", "Warning", "Error"; nothing
-/// for `None`). A text element, not an image: screen readers read just the word, with no "image".
+/// for `None`, and for `Custom`, which is decorative). A text element, not an image: screen
+/// readers read just the word, with no "image".
 pub(crate) fn describe_icon(response: &Response, icon: &XDialogIcon) {
     let label = match icon {
-        XDialogIcon::None => return,
+        XDialogIcon::None | XDialogIcon::Custom => return,
         XDialogIcon::Information => "Information",
         XDialogIcon::Warning => "Warning",
         XDialogIcon::Error => "Error",

@@ -45,6 +45,10 @@ const MAX_H: f32 = 756.0;
 /// ContentDialogTitleMargin bottom, icon column gap, progress StackPanel spacing.
 const TITLE_GAP: f32 = 12.0;
 const ICON_GAP: f32 = 12.0;
+/// `XDialogIcon::Custom`: a bigger image at the top left, left of the title, body and progress
+/// bar (which share one left edge), and its gap to them.
+const CUSTOM_ICON_SIZE: f32 = 48.0;
+const CUSTOM_ICON_GAP: f32 = 16.0;
 const PROGRESS_GAP: f32 = 12.0;
 /// The progress body StackPanel's MinWidth.
 const PROGRESS_MIN_W: f32 = 300.0;
@@ -85,6 +89,10 @@ impl Theme for FluentTheme {
         KEYBOARD
     }
 
+    fn icon_size(&self) -> f32 {
+        CUSTOM_ICON_SIZE
+    }
+
     fn fonts(&self) -> ThemeFonts {
         theme_fonts(FontRegistry::global())
     }
@@ -120,9 +128,12 @@ impl Theme for FluentTheme {
         let title_style = TextStyle::bold(TITLE_SIZE, TITLE_SIZE * LINE_RATIO);
 
         // ---- measure (wrap once at the maximum column, then shrink to the widest line) ----
-        let has_icon = *view.icon != XDialogIcon::None;
+        // A custom image leads the whole content column; a severity icon sits left of the body.
+        let custom = view.has_icon() && *view.icon == XDialogIcon::Custom;
+        let lead = if custom { CUSTOM_ICON_SIZE + CUSTOM_ICON_GAP } else { 0.0 };
+        let has_icon = view.has_icon() && !custom;
         let icon_col = if has_icon { ICON_SIZE + ICON_GAP } else { 0.0 };
-        let col_max = MAX_W - 2.0 * PAD;
+        let col_max = MAX_W - 2.0 * PAD - lead;
         let title = (!view.heading.is_empty()).then(|| text::layout(&ctx, view.heading, &title_style, col_max, Some(2)));
         let body = text::layout(&ctx, view.body, &body_style, col_max - icon_col, None);
         let n = view.buttons.len();
@@ -133,6 +144,7 @@ impl Theme for FluentTheme {
         if view.progress.is_some() {
             need = need.max(PROGRESS_MIN_W);
         }
+        need += lead;
         // Equal button columns: the buttons fill the last `n` of `slots`.
         let slots = n.max(2) as f32;
         if n > 0 {
@@ -162,47 +174,19 @@ impl Theme for FluentTheme {
             if n > 0 {
                 ui.set_min_height(MIN_H - bar_h - 2.0 * PAD);
             }
-            if let Some(t) = &title {
-                ui.add(TextBlockWidget { block: t, color: tk.text, width: col_w });
-                if has_row || view.progress.is_some() {
-                    ui.add_space(TITLE_GAP);
-                }
-            }
-            if has_row {
-                // Whatever the rest of the dialog leaves of the height limit.
-                let viewport = (max_h - ui.cursor().top() - progress_h - PAD - bar_h).max(MIN_VIEWPORT);
-                let mut area = egui::ScrollArea::vertical().id_salt("fluent.body").auto_shrink([false, true]).max_height(viewport);
-                if view.frame.scroll_request != 0.0 {
-                    // Keyboard scroll: set the offset BEFORE `show` so this pass lays the content
-                    // out at it (`scroll_with_delta` inside the area only moves the content on the
-                    // next pass). Same id as `ScrollArea::show`.
-                    let id = ui.make_persistent_id("fluent.body");
-                    let offset = egui::scroll_area::State::load(ui.ctx(), id).map_or(0.0, |s| s.offset.y);
-                    area = area.vertical_scroll_offset((offset + view.frame.scroll_request).clamp(0.0, (row_h - viewport).max(0.0)));
-                }
-                // The viewport reaches into the right padding, so the (overlay) scroll bar sits
-                // next to the text, as WinUI's ScrollViewer around the padded content.
-                let into_padding = Margin { right: -(PAD - SCROLLBAR_INSET) as i8, ..Margin::ZERO };
-                Frame::new().outer_margin(into_padding).show(ui, |ui| {
-                    area.show(ui, |ui| {
-                            ui.set_max_width(col_w);
-                            ui.horizontal(|ui| {
-                                  if has_icon {
-                                      ui.add(FluentIcon { icon: view.icon, tk });
-                                      if !body.is_empty() {
-                                          ui.add_space(ICON_GAP);
-                                      }
-                                  }
-                                  if !body.is_empty() {
-                                      ui.add(TextBlockWidget { block: &body, color: tk.text, width: col_w - icon_col });
-                                  }
-                              });
+            if custom {
+                ui.horizontal_top(|ui| {
+                      // Decorative: no accessibility label.
+                      let (rect, _) = ui.allocate_exact_size(Vec2::splat(CUSTOM_ICON_SIZE), Sense::hover());
+                      view.paint_custom_icon(ui.painter(), rect);
+                      ui.add_space(CUSTOM_ICON_GAP);
+                      ui.vertical(|ui| {
+                            ui.set_width(col_w - lead);
+                            self.content_column(view, ui, ContentColumn { title: &title, body: &body, width: col_w - lead, icon_col, row_h, progress_h, progress_gap, bar_h, max_h });
                         });
-                });
-            }
-            if let Some(p) = view.progress {
-                ui.add_space(progress_gap);
-                ui.add(FluentProgress { progress: p, tk });
+                  });
+            } else {
+                self.content_column(view, ui, ContentColumn { title: &title, body: &body, width: col_w, icon_col, row_h, progress_h, progress_gap, bar_h, max_h });
             }
         });
         let mut win_h = content.response.rect.bottom();
@@ -248,6 +232,77 @@ impl Theme for FluentTheme {
         }
         out.desired_size = Vec2::new(win_w, win_h);
         out
+    }
+}
+
+/// What [`FluentTheme::content_column`] lays out, measured by [`Theme::ui`].
+struct ContentColumn<'a> {
+    title: &'a Option<TextBlock>,
+    body: &'a TextBlock,
+    /// Column width.
+    width: f32,
+    /// Severity icon + gap left of the body (0: none).
+    icon_col: f32,
+    /// Height of the body row (body, or the severity icon if taller).
+    row_h: f32,
+    progress_h: f32,
+    progress_gap: f32,
+    /// Button bar height (0: none).
+    bar_h: f32,
+    /// Height limit of the whole dialog.
+    max_h: f32,
+}
+
+impl FluentTheme {
+    /// Title, body (with the severity icon, scrolling past the height limit) and progress bar,
+    /// top to bottom in one column.
+    fn content_column(&self, view: &DialogView<'_>, ui: &mut Ui, c: ContentColumn<'_>) {
+        let tk = &self.tokens;
+        let (col_w, body) = (c.width, c.body);
+        let has_icon = c.icon_col > 0.0;
+        let has_row = has_icon || !body.is_empty();
+        if let Some(t) = c.title {
+            ui.add(TextBlockWidget { block: t, color: tk.text, width: col_w });
+            if has_row || view.progress.is_some() {
+                ui.add_space(TITLE_GAP);
+            }
+        }
+        if has_row {
+            // Whatever the rest of the dialog leaves of the height limit.
+            let viewport = (c.max_h - ui.cursor().top() - c.progress_h - PAD - c.bar_h).max(MIN_VIEWPORT);
+            let mut area = egui::ScrollArea::vertical().id_salt("fluent.body").auto_shrink([false, true]).max_height(viewport);
+            if view.frame.scroll_request != 0.0 {
+                // Keyboard scroll: set the offset BEFORE `show` so this pass lays the content
+                // out at it (`scroll_with_delta` inside the area only moves the content on the
+                // next pass). Same id as `ScrollArea::show`.
+                let id = ui.make_persistent_id("fluent.body");
+                let offset = egui::scroll_area::State::load(ui.ctx(), id).map_or(0.0, |s| s.offset.y);
+                area = area.vertical_scroll_offset((offset + view.frame.scroll_request).clamp(0.0, (c.row_h - viewport).max(0.0)));
+            }
+            // The viewport reaches into the right padding, so the (overlay) scroll bar sits
+            // next to the text, as WinUI's ScrollViewer around the padded content.
+            let into_padding = Margin { right: -(PAD - SCROLLBAR_INSET) as i8, ..Margin::ZERO };
+            Frame::new().outer_margin(into_padding).show(ui, |ui| {
+                area.show(ui, |ui| {
+                        ui.set_max_width(col_w);
+                        ui.horizontal(|ui| {
+                              if has_icon {
+                                  ui.add(FluentIcon { icon: view.icon, tk });
+                                  if !body.is_empty() {
+                                      ui.add_space(ICON_GAP);
+                                  }
+                              }
+                              if !body.is_empty() {
+                                  ui.add(TextBlockWidget { block: body, color: tk.text, width: col_w - c.icon_col });
+                              }
+                          });
+                    });
+            });
+        }
+        if let Some(p) = view.progress {
+            ui.add_space(c.progress_gap);
+            ui.add(FluentProgress { progress: p, tk });
+        }
     }
 }
 

@@ -36,6 +36,7 @@ pub mod __test {
     pub use egui;
 }
 
+mod icon;
 mod message;
 mod model;
 mod oneshot;

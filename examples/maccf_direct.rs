@@ -20,6 +20,7 @@ fn main() {
             main_instruction: "Hello from maccf-direct!".to_string(),
             message: "This dialog was shown without any event loop.\nPick an option:".to_string(),
             icon: xdialog::XDialogIcon::Information,
+            icon_source: None,
             buttons: vec!["Save".to_string(), "Discard".to_string(), "Cancel".to_string()],
         },
     )

@@ -66,6 +66,9 @@ pub(crate) struct DialogView<'a> {
     /// `options.message`, or the latest `set_text` for progress dialogs ("" = none).
     pub body: &'a str,
     pub icon: &'a XDialogIcon,
+    /// The image of [`XDialogIcon::Custom`], [`Theme::icon_size`] logical px square (drawn at
+    /// exactly one texel per physical pixel); `None` without a usable icon source.
+    pub custom_icon: Option<egui::TextureId>,
     /// Button labels in API order. Every button index in this contract is an index into this slice.
     pub buttons: &'a [String],
     /// `Some` for progress dialogs.
@@ -74,6 +77,24 @@ pub(crate) struct DialogView<'a> {
     /// known). A theme may ignore it or put the body in an `egui::ScrollArea`.
     pub max_height: f32,
     pub frame: FrameInfo,
+}
+
+impl DialogView<'_> {
+    /// Whether an icon is shown: any severity icon, or `Custom` when its image loaded.
+    pub(crate) fn has_icon(&self) -> bool {
+        match self.icon {
+            XDialogIcon::None => false,
+            XDialogIcon::Custom => self.custom_icon.is_some(),
+            _ => true,
+        }
+    }
+
+    /// Paint the custom icon image into `rect` (nothing if there is none).
+    pub(crate) fn paint_custom_icon(&self, painter: &egui::Painter, rect: Rect) {
+        if let Some(tex) = self.custom_icon {
+            painter.image(tex, rect, Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::WHITE);
+        }
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -176,6 +197,9 @@ pub(crate) trait Theme {
     fn set_appearance(&mut self, appearance: &Appearance);
 
     fn keyboard_policy(&self) -> KeyboardPolicy;
+
+    /// Side of the dialog icon, logical px (the size core renders [`DialogView::custom_icon`] at).
+    fn icon_size(&self) -> f32;
 
     /// The theme's regular and bold faces. Core binds `Proportional`/`Monospace` to the regular
     /// face and [`super::fonts::bold_family`] to the bold one, and appends fallback faces.
@@ -335,6 +359,7 @@ pub(crate) mod test_support {
         DialogView { heading: "",
                      body: "",
                      icon: &XDialogIcon::None,
+                     custom_icon: None,
                      buttons,
                      progress: None,
                      max_height: 800.0,

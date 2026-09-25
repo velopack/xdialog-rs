@@ -16,6 +16,7 @@ fn message() -> XDialogOptions {
                      main_instruction: "New version available".into(),
                      message: "Would you like to update to the new version now?".into(),
                      icon: XDialogIcon::Warning,
+                     icon_source: None,
                      buttons: vec!["No".into(), "Yes".into()] }
 }
 

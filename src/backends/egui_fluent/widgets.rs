@@ -202,7 +202,8 @@ impl Widget for FluentIcon<'_> {
             XDialogIcon::Information => tk.sev_info,
             XDialogIcon::Warning => tk.sev_warning,
             XDialogIcon::Error => tk.sev_error,
-            XDialogIcon::None => return response,
+            // `Custom` is drawn by the theme itself (a bigger image, top left).
+            XDialogIcon::None | XDialogIcon::Custom => return response,
         };
         // The symbol colour is translucent in dark mode: pre-blend it over the circle so overlapping
         // parts (the X's crossing) don't darken.
@@ -224,7 +225,7 @@ impl Widget for FluentIcon<'_> {
                 painter.line_segment([p(-a, -a), p(a, a)], stroke);
                 painter.line_segment([p(a, -a), p(-a, a)], stroke);
             }
-            XDialogIcon::None => {}
+            XDialogIcon::None | XDialogIcon::Custom => {}
         }
         response
     }

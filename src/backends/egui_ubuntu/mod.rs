@@ -21,7 +21,6 @@ use crate::backends::egui_core::appearance::Appearance;
 use crate::backends::egui_core::fonts::bundled;
 use crate::backends::egui_core::text::{self, TextBlock, TextBlockWidget, TextStyle};
 use crate::backends::egui_core::theme::*;
-use crate::model::XDialogIcon;
 
 mod tokens;
 mod widgets;
@@ -87,6 +86,10 @@ impl Theme for UbuntuTheme {
         KEYBOARD
     }
 
+    fn icon_size(&self) -> f32 {
+        ICON_SIZE
+    }
+
     fn fonts(&self) -> ThemeFonts {
         ThemeFonts::new(bundled::UBUNTU_REGULAR, bundled::UBUNTU_BOLD)
     }
@@ -105,7 +108,7 @@ impl Theme for UbuntuTheme {
         // The window width follows the natural (unwrapped) width of the title and body.
         let natural = text::natural_width(&ctx, view.heading, &title_style).max(text::natural_width(&ctx, view.body, &body_style));
         let win_w = window_width(natural);
-        let has_icon = *view.icon != XDialogIcon::None;
+        let has_icon = view.has_icon();
         let col_w = win_w - 2.0 * MARGIN - if has_icon { ICON_SIZE + MARGIN } else { 0.0 };
 
         // Content: the icon (top-aligned) left of a column of title / progress / body.
@@ -116,7 +119,7 @@ impl Theme for UbuntuTheme {
                                                  if has_icon {
                                                      let (r, response) = ui.allocate_exact_size(Vec2::splat(ICON_SIZE), Sense::hover());
                                                      a11y::describe_icon(&response, view.icon);
-                                                     widgets::draw_icon(ui.painter(), view.icon, r);
+                                                     widgets::draw_icon(ui.painter(), view, r);
                                                      ui.add_space(MARGIN);
                                                  }
                                                  ui.vertical(|ui| {
@@ -171,6 +174,7 @@ impl Theme for UbuntuTheme {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::XDialogIcon;
     use crate::backends::egui_core::anim::{self, Transition};
     use egui::Pos2;
     use crate::backends::egui_core::theme::test_support::{run_ui, theme_ctx, view};

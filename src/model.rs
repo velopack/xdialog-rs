@@ -46,6 +46,29 @@ pub enum XDialogIcon {
     Warning,
     /// Information icon
     Information,
+    /// The image of [`XDialogOptions::icon_source`] (egui backends; the others show no icon).
+    /// Without an icon source (or if it can't be loaded) the dialog shows no icon.
+    Custom,
+}
+
+/// An `.ico`, `.png` or `.icns` image (the format is detected from the content), for
+/// [`XDialogOptions::icon_source`].
+#[derive(Clone, PartialEq, Eq)]
+pub enum XDialogIconSource {
+    /// A file, read when the dialog is shown.
+    File(std::path::PathBuf),
+    /// The file's content, e.g. `Bytes(include_bytes!("app.ico").as_slice().into())` or
+    /// `Bytes(vec.into())`.
+    Bytes(std::borrow::Cow<'static, [u8]>),
+}
+
+impl std::fmt::Debug for XDialogIconSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            XDialogIconSource::File(path) => f.debug_tuple("File").field(path).finish(),
+            XDialogIconSource::Bytes(bytes) => write!(f, "Bytes({} bytes)", bytes.len()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
@@ -59,6 +82,11 @@ pub struct XDialogOptions {
     pub message: String,
     /// The icon to display in the dialog, or None for no icon.
     pub icon: XDialogIcon,
+    /// An `.ico`, `.png` or `.icns` image. With the egui backends (Fluent, Ubuntu) it is the
+    /// window / taskbar icon where the platform has one (Windows, X11; not Wayland or macOS), and
+    /// the icon shown in the dialog with [`XDialogIcon::Custom`]. The other backends ignore it. An
+    /// image that can't be read or decoded is logged and ignored.
+    pub icon_source: Option<XDialogIconSource>,
     /// The buttons to display in the dialog. This can be an empty array to collapse the button panel.
     /// For progress dialogs the buttons are shown on every platform; an empty array shows no button
     /// except with Win32 TaskDialog, which shows a default button.

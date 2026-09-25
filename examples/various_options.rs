@@ -23,6 +23,7 @@ fn run() {
         buttons: vec!["OK".to_string()],
         main_instruction: "This is a main instruction".to_string(),
         title: "This is a title".to_string(),
+        icon_source: None,
     };
     let _ = xdialog::show_message(data.clone()).wait();
 
@@ -66,6 +67,7 @@ fn run() {
         main_instruction: "Family & Skin Tone Modifiers 🏽".to_string(),
         message: "Skin tones: 👋🏻👋🏼👋🏽👋🏾👋🏿\nFamilies: 👨‍👩‍👧‍👦 👩‍👩‍👦‍👦\nCompound: 🏳️‍🌈 🏴‍☠️ 🐻‍❄️\nKeycaps: 0️⃣1️⃣2️⃣🔟".to_string(),
         buttons: vec!["Looks Good! 👍".to_string(), "Broken 💔".to_string()],
+        icon_source: None,
     };
     let _ = xdialog::show_message(data).wait();
 

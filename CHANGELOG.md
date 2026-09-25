@@ -30,6 +30,9 @@ behaviour.
   the proxy's result. Replace `show_message(options, None)` with `show_message(options).wait()`.
   The `show_message_*` shortcuts still block. With `maccf-direct`, a message box that can't be
   created now returns `SystemError` instead of `WindowClosed`.
+- **`XDialogOptions` has a new field, `icon_source`, and `XDialogIcon` a new variant, `Custom`**
+  (see Added). Struct literals need `icon_source: None` (or `..Default::default()`), exhaustive
+  `match`es on `XDialogIcon` a `Custom` arm.
 - **`XDialogError` is now `#[non_exhaustive]`**, so future variants are not breaking changes.
   Exhaustive `match`es need a wildcard arm.
 - Dialog calls after the backend has shut down (the builder's event loop ended, or the
@@ -61,6 +64,14 @@ behaviour.
   `xdialog::host::winit` re-exports its winit 0.30 so your loop uses the same version. On macOS
   `Auto` uses the Ubuntu look in host mode (AppKit needs its own loop). See
   `examples/winit_host.rs`.
+- `XDialogOptions::icon_source` (`XDialogIconSource::File` or `::Bytes`: an `.ico`, `.png` or
+  `.icns` image) and `XDialogIcon::Custom`, for the egui backends (Fluent, Ubuntu): the image is
+  the dialog's window and taskbar icon (Windows, X11; not Wayland or macOS), and `Custom` shows it
+  in the dialog in place of the severity icon. `Custom` without a usable image shows no icon; an
+  image that can't be read or decoded is logged and ignored. Win32 TaskDialog, AppKit and
+  `maccf-direct` ignore the icon source and show no icon for `Custom`. Each use (title bar,
+  taskbar, dialog) gets the icon file's frame nearest its size. Adds the `ico` and `icns`
+  dependencies.
 - `XDialogTheme` is now `Copy` and `Default` (`SystemDefault`).
 - `XDialogError` is now `Clone`.
 - Right-to-left text (Arabic, Hebrew) is reordered per line (unicode-bidi).

@@ -337,7 +337,8 @@ impl AppKitDialog {
 
 fn get_icon_image(icon: &XDialogIcon) -> Option<Retained<NSImage>> {
     let name = match icon {
-        XDialogIcon::None => return None,
+        // `Custom` is only drawn by the egui backends.
+        XDialogIcon::None | XDialogIcon::Custom => return None,
         XDialogIcon::Error | XDialogIcon::Warning => "NSCaution",
         XDialogIcon::Information => "NSInfo",
     };

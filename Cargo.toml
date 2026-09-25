@@ -41,6 +41,9 @@ skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
 unicode-bidi = "0.3.18"
 strength_reduce = "0.2.4"
 ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"] }
+# `XDialogOptions::icon_source`: .ico / .png (ico) and .icns (icns) decoding.
+ico = "0.5.0"
+icns = { version = "0.5.0", default-features = false, features = ["pngio"] }
 
 # AppKit Backend
 [target.'cfg(target_os = "macos")'.dependencies]

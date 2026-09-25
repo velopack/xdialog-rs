@@ -103,7 +103,8 @@ pub fn init_win32_direct() {
 
 fn convert_icon(icon: &XDialogIcon) -> TASKDIALOGCONFIG_0 {
     match icon {
-        XDialogIcon::None => TASKDIALOGCONFIG_0::default(),
+        // `Custom` is only drawn by the egui backends.
+        XDialogIcon::None | XDialogIcon::Custom => TASKDIALOGCONFIG_0::default(),
         XDialogIcon::Error => TASKDIALOGCONFIG_0 { pszMainIcon: TD_ERROR_ICON },
         XDialogIcon::Warning => TASKDIALOGCONFIG_0 { pszMainIcon: TD_WARNING_ICON },
         XDialogIcon::Information => TASKDIALOGCONFIG_0 { pszMainIcon: TD_INFORMATION_ICON },

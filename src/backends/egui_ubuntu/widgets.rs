@@ -162,8 +162,8 @@ const ERROR: Color32 = rgb(0xD75A4A);
 const WARNING: Color32 = rgb(0xFFC107);
 const WARNING_GLYPH: Color32 = rgb(0x3D3D3D);
 
-/// Draw `icon` into the square `rect` (logical px).
-pub(crate) fn draw_icon(painter: &Painter, icon: &XDialogIcon, rect: Rect) {
+/// Draw the view's icon into the square `rect` (logical px).
+pub(crate) fn draw_icon(painter: &Painter, view: &DialogView<'_>, rect: Rect) {
     let s = rect.width();
     let c = rect.center();
     let disc = |col| painter.circle_filled(c, s / 2.0 - 1.0, col);
@@ -172,8 +172,9 @@ pub(crate) fn draw_icon(painter: &Painter, icon: &XDialogIcon, rect: Rect) {
         let w = s * 0.1;
         painter.rect_filled(Rect::from_min_size(Pos2::new(c.x - w / 2.0, c.y + top), Vec2::new(w, h)), w / 2.0, col);
     };
-    match icon {
+    match view.icon {
         XDialogIcon::None => {}
+        XDialogIcon::Custom => view.paint_custom_icon(painter, rect),
         XDialogIcon::Information => {
             disc(INFO);
             painter.circle_filled(c - Vec2::new(0.0, s * 0.2), s * 0.07, Color32::WHITE);

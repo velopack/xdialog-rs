@@ -30,6 +30,7 @@ fn run() {
             main_instruction: "Downloading updates".to_string(),
             message: "Starting...".to_string(),
             icon: XDialogIcon::Information,
+            icon_source: None,
             buttons: vec!["Cancel".to_string()],
         },
         move |button_index, proxy| {
@@ -59,6 +60,7 @@ fn run() {
         main_instruction: "Background task running".to_string(),
         message: "Click Hide to dismiss this window.".to_string(),
         icon: XDialogIcon::Information,
+        icon_source: None,
         buttons: vec!["Hide".to_string()],
     })
     .unwrap();
