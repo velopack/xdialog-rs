@@ -21,9 +21,9 @@ use crate::model::{DialogMessageRequest, DialogReply};
 use crate::{ProgressButtonCallback, ProgressDialogProxy, XDialogError, XDialogIcon, XDialogOptions, XDialogResult};
 
 /// Manages Win32 Task Dialogs. TaskDialogs need no event loop, so the manager serves requests
-/// itself: as the installed handler (builder `Win32`, `init_win32_direct`) and for the egui
-/// runtime's Win32 routing / fallback. `ExitEventLoop` closes every TaskDialog; unknown ids are
-/// ignored.
+/// itself: as the installed handler (builder `Win32`, `init_win32_direct`) and for the drawn
+/// dialogs' runtime (Win32 routing / fallback). `ExitEventLoop` closes every TaskDialog; unknown
+/// ids are ignored.
 pub(crate) struct TaskDialogManager {
     /// The request channel of each open dialog.
     open_dialogs: Arc<Mutex<HashMap<usize, Sender<DialogMessageRequest>>>>,
@@ -103,7 +103,7 @@ pub fn init_win32_direct() {
 
 fn convert_icon(icon: &XDialogIcon) -> TASKDIALOGCONFIG_0 {
     match icon {
-        // `Custom` is only drawn by the egui backends.
+        // `Custom` is only shown by the drawn backends (Fluent, Ubuntu).
         XDialogIcon::None | XDialogIcon::Custom => TASKDIALOGCONFIG_0::default(),
         XDialogIcon::Error => TASKDIALOGCONFIG_0 { pszMainIcon: TD_ERROR_ICON },
         XDialogIcon::Warning => TASKDIALOGCONFIG_0 { pszMainIcon: TD_WARNING_ICON },

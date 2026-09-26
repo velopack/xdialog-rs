@@ -84,7 +84,7 @@ impl Inbox {
     }
 }
 
-/// The installed request handler of builder mode for the egui and AppKit backends (and "no
+/// The installed request handler of builder mode for the drawn (Fluent, Ubuntu) and AppKit backends (and "no
 /// backend"), and of `into_host_app`; Win32 TaskDialog installs `TaskDialogManager` itself. Once
 /// the receiver is gone (host app exited or dropped, builder loop ended) requests are answered with
 /// `NoBackendAvailable`.
@@ -113,7 +113,7 @@ pub(crate) fn reject(message: DialogMessageRequest) {
 
 // ---- UI-thread marker (blocking-call detection) ----
 //
-// Set on the thread that runs xdialog's egui event loop (builder mode), the thread that created an
+// Set on the thread that runs xdialog's drawn-dialog event loop (builder mode), the thread that created an
 // `XDialogApp` (until it exits), and the AppKit loop thread (their button callbacks run there). Never set by
 // win32 / win32-direct / maccf-direct, whose dialogs run on their own threads.
 

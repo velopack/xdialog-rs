@@ -1,6 +1,6 @@
 //! On-screen captures vs `tests/visual_references/<windows|macos|linux|linux_wayland>/`: the native
-//! backends (Win32 TaskDialog: forced here; AppKit) and the Linux default (the egui Ubuntu look,
-//! X11 and Wayland); every egui look also has offscreen goldens (`tests/egui_offscreen.rs`).
+//! backends (Win32 TaskDialog: forced here; AppKit) and the Linux default (the drawn Ubuntu look,
+//! X11 and Wayland); every drawn look also has offscreen goldens (`tests/offscreen.rs`).
 //! Opt-in, it takes focus: `XDIALOG_VISUAL_TEST=1` compares,
 //! `XDIALOG_VISUAL_SEED=1 cargo test --test visual_regression` (re)writes the references. A failing
 //! capture and its diff are written to `target/tmp/visual_output/`. `harness = false`: one backend

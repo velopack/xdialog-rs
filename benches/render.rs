@@ -1,14 +1,16 @@
-//! Offscreen frame render benchmark per egui theme (software rendering performance).
+//! Offscreen frame render benchmark per drawn theme, through this platform's drawing backend
+//! (`xdialog::__test::RENDERER`: Direct2D on Windows, CoreGraphics on macOS, software elsewhere).
 //!
 //! `cargo bench --bench render --features _test-hooks`
 //!
-//! Each case measures one full frame through the real `Dialog` path (egui pass, tessellation,
-//! software raster into memory, RGBA copy): a static frame, a frame during the hover fade, an
-//! indeterminate progress frame, a 2× HiDPI frame, and dialog construction (fonts + measure pass).
+//! Each case measures one full frame through the real `Dialog` path (theme pass, drawing into
+//! memory, RGBA copy): a static frame, a frame during the hover fade, an indeterminate progress
+//! frame, a 2× HiDPI frame, and dialog construction (fonts + measure pass). Group names are
+//! unchanged from the previous renderer's benchmark, so `--save-baseline` / `--baseline` compare
+//! the two.
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use xdialog::__test::egui::{Event, Pos2};
-use xdialog::__test::{OffscreenDialog, TestAppearance, TestKind, TestProgress};
+use xdialog::__test::{Event, OffscreenDialog, Point, TestAppearance, TestKind, TestProgress};
 use xdialog::{XDialogBackend, XDialogIcon, XDialogOptions};
 
 fn message() -> XDialogOptions {
@@ -20,7 +22,7 @@ fn message() -> XDialogOptions {
                      buttons: vec!["No".into(), "Yes".into()] }
 }
 
-fn dialog(backend: XDialogBackend, ppp: f32, kind: TestKind) -> OffscreenDialog {
+fn dialog(backend: XDialogBackend, ppp: f64, kind: TestKind) -> OffscreenDialog {
     let mut o = message();
     if matches!(kind, TestKind::Progress) {
         o.buttons = vec!["Cancel".into()];
@@ -56,7 +58,7 @@ fn bench(c: &mut Criterion) {
         let mut d = dialog(backend, 1.0, TestKind::Message);
         d.render_at(0.5);
         let centre = d.button_centre(0).expect("button");
-        let away = Pos2::new(2.0, 2.0);
+        let away = Point::new(2.0, 2.0);
         let (mut t, mut n) = (1.0, 0u64);
         g.bench_function(BenchmarkId::new("hover_fade", "1x"), |b| {
              b.iter(|| {

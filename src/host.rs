@@ -72,7 +72,7 @@ use winit::event::{DeviceEvent, DeviceId, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::WindowId;
 
-use crate::backends::egui_core::runtime::Runtime;
+use crate::backends::gui::runtime::Runtime;
 use crate::channel::WakeFn;
 use crate::model::{XDialogBackend, XDialogTheme};
 use crate::XDialogError;
@@ -99,7 +99,7 @@ pub struct XDialogApp<A> {
 impl<A> XDialogApp<A> {
     pub(crate) fn new(app: A, requested: XDialogBackend, xtheme: XDialogTheme, waker: WakeFn) -> Result<Self, XDialogError> {
         let (backend, fallback) = match crate::backends::resolve(requested) {
-            // AppKit needs its own loop: `Auto` on macOS gets an egui look instead.
+            // AppKit needs its own loop: `Auto` on macOS gets a drawn look instead.
             Some((XDialogBackend::AppKit, _)) if requested == XDialogBackend::Auto => (XDialogBackend::Ubuntu, false),
             Some((XDialogBackend::AppKit, _)) | None => return Err(XDialogError::NoBackendAvailable),
             Some(chosen) => chosen,
@@ -228,22 +228,24 @@ pub struct LiveDialog {
     pub id: usize,
     /// Window title.
     pub title: String,
-    /// Button rects in points `[x, y, w, h]`, by API index.
-    pub button_rects: Vec<[f32; 4]>,
+    /// Button rects in logical px `[x, y, w, h]`, by API index.
+    pub button_rects: Vec<[f64; 4]>,
     /// Frames presented so far.
     pub frames: u64,
+    /// The accessibility tree, one node per line.
+    pub a11y: String,
 }
 
 #[cfg(feature = "_test-hooks")]
 #[doc(hidden)]
 impl<A> XDialogApp<A> {
-    /// The open egui dialogs.
+    /// The open drawn dialogs.
     pub fn test_dialogs(&self) -> Vec<LiveDialog> {
         self.rt.as_ref().map_or_else(Vec::new, Runtime::test_dialogs)
     }
 
-    /// Apply an input event (points) to dialog `id` now; its frame follows in `about_to_wait`.
-    pub fn test_inject(&mut self, id: usize, event: egui::Event) {
+    /// Apply an input event (logical px) to dialog `id` now; its frame follows in `about_to_wait`.
+    pub fn test_inject(&mut self, id: usize, event: crate::__test::Event) {
         if let Some(rt) = &mut self.rt {
             rt.test_inject(id, event);
         }

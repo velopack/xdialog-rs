@@ -20,9 +20,14 @@ jobs:
   # On every OS: clippy and every test, with the default and with all features.
   #   default        XDialogBuilder, backend chosen at runtime (Auto: Fluent/Win32, Ubuntu, AppKit)
   #   all features   + winit-host (xdialog::host), win32-direct / maccf-direct, and _test-hooks:
-  #                  the offscreen goldens of the egui themes (tests/egui_offscreen.rs) and the
-  #                  host test (tests/winit_host.rs)
-  # Linux also runs the doc tests and rustdoc.
+  #                  the offscreen goldens of the drawn looks (tests/offscreen.rs) through this
+  #                  OS's renderer (d2d on Windows, cg on macOS, soft elsewhere) and the host test
+  #                  (tests/winit_host.rs)
+  # The soft goldens are always compared; d2d/cg ones only when offscreen/<renderer>/FONT_ID
+  # matches the runner's fonts and OS version. Renders that were skipped or differ are uploaded
+  # from target/offscreen-actual/.
+  # Windows and macOS also check that the software stack isn't compiled there (bloat guard) and
+  # print the release size of an example. Linux also runs the doc tests and rustdoc.
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -58,6 +63,35 @@ jobs:
           cargo clippy --locked --all-targets -- -D warnings
           cargo clippy --locked --all-targets --all-features -- -D warnings
 
+      # Windows (Direct2D) and macOS (CoreGraphics) must never compile the software renderer, its
+      # text stack or the bundled fonts, not even for tests, benches or examples (-e all); Windows
+      # doesn't compile softbuffer either. The Linux tree is the control: it must list them, so a
+      # change in cargo tree's output can't make the guard pass vacuously.
+      - name: Bloat guard
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          crates() { cargo tree --locked --all-features -e all --target "$1" --prefix none -f '{p}' | cut -d' ' -f1 | sort -u; }
+          soft="vello_cpu vello_common glifo cosmic-text skrifa fontdb harfrust sys-locale egui epaint"
+          linux=$(crates x86_64-unknown-linux-gnu)
+          for c in vello_cpu cosmic-text skrifa; do
+            grep -qx "$c" <<<"$linux" || { echo "control failed: $c not in the Linux tree"; exit 1; }
+          done
+          fail=0
+          check() {
+            have=$(crates "$1")
+            for c in $2; do
+              if grep -qx "$c" <<<"$have"; then
+                echo "::error::$c leaked into $1"
+                cargo tree --locked --all-features -e all --target "$1" -i "$c" || true
+                fail=1
+              fi
+            done
+          }
+          check x86_64-pc-windows-msvc "$soft softbuffer"
+          check aarch64-apple-darwin "$soft"
+          exit $fail
+
       - name: Start virtual display
         if: runner.os == 'Linux'
         run: |
@@ -69,6 +103,25 @@ jobs:
         run: |
           cargo test --locked --lib --tests
           cargo test --locked --lib --tests --all-features
+
+      - name: Upload offscreen renders
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: offscreen-actual-${{ matrix.name }}
+          path: target/offscreen-actual/
+          if-no-files-found: ignore
+
+      - name: Release size
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          cargo build --locked --release --example various_options
+          bin=target/release/examples/various_options
+          [ -f "$bin.exe" ] && bin="$bin.exe"
+          size=$(wc -c < "$bin" | tr -d ' ')
+          echo "$bin: $size bytes"
+          echo "Release size of \`various_options\` (${{ matrix.name }}): $size bytes" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Doc tests and rustdoc (no warnings)
         if: runner.os == 'Linux'
@@ -146,9 +199,9 @@ jobs:
             /xdialog-headless-test
 
   # On-screen captures vs tests/visual_references/<platform>/: the native backends (Win32
-  # TaskDialog: the test forces it; AppKit) and the Linux default, the egui Ubuntu look, on X11
-  # (Xvfb + openbox) and Wayland (headless sway, captured with grim). The egui looks also have
-  # offscreen goldens (build job).
+  # TaskDialog: the test forces it; AppKit) and the Linux default, the drawn Ubuntu look (software
+  # renderer), on X11 (Xvfb + openbox) and Wayland (headless sway, captured with grim). The drawn
+  # looks also have offscreen goldens (build job).
   visual-regression:
     name: Visual Regression (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
@@ -226,10 +279,10 @@ jobs:
           name: visual-regression-output-${{ matrix.name }}
           path: target/tmp/visual_output/
 
-  # Software-rendering performance: one offscreen frame per case (static, hover fade,
-  # indeterminate progress, 2x HiDPI, construction) for each egui theme.
-  egui-bench:
-    name: egui Bench
+  # Rendering performance: one offscreen frame per case (static, hover fade, indeterminate
+  # progress, 2x HiDPI, construction) for each drawn look, on the Linux software renderer.
+  render-bench:
+    name: Render Bench
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -238,7 +291,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: egui-bench
+          key: render-bench
 
       - name: Run benchmark
         run: cargo bench --locked --bench render --features _test-hooks -- --quick

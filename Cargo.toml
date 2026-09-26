@@ -22,30 +22,45 @@ maccf-direct = ["dep:core-foundation", "dep:core-foundation-sys"]
 winit-host = []
 
 # ---- private (underscore = not part of the public contract) ----
-# Offscreen renderer (`xdialog::__test`) and `XDialogApp::test_*` (doc(hidden)).
+# Offscreen renderer (`xdialog::__test`) and `XDialogApp::test_*` (doc(hidden)). NEVER lists a
+# `dep:`: offscreen rendering uses the platform's own drawing backend.
 _test-hooks = []
 
 [dependencies]
 log = "0.4"
 thiserror = "2.0"
-# egui backends (all platforms). winit's / softbuffer's default features are what Linux needs
-# (x11, wayland, rwh_06); their platform deps are target-gated inside those crates, so one entry
-# each serves every OS.
-egui = { version = "0.36.2", default-features = false }
-# `accesskit`: every dialog window gets an AccessKit adapter (UIA / AT-SPI / NSAccessibility).
-# `x11` / `wayland`: egui-winit's Linux display-server code paths (target-gated: no-op elsewhere).
-egui-winit = { version = "0.36.2", default-features = false, features = ["accesskit", "x11", "wayland"] }
+# Drawn dialogs (Fluent, Ubuntu; all platforms): winit windows and AccessKit. winit's default
+# features are what Linux needs (x11, wayland, rwh_06); its platform deps are target-gated.
 winit = "0.30.13"
-softbuffer = "0.4.8"
-skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
+accesskit = "0.25"
+accesskit_winit = { version = "0.34", default-features = false, features = ["rwh_06", "accesskit_unix", "async-io"] }
+# Paragraph base direction only (`get_base_direction`); every drawing backend does bidi itself.
 unicode-bidi = "0.3.18"
-strength_reduce = "0.2.4"
-ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"] }
 # `XDialogOptions::icon_source`: .ico / .png (ico) and .icns (icns) decoding.
 ico = "0.5.0"
 icns = { version = "0.5.0", default-features = false, features = ["pngio"] }
 
-# AppKit Backend
+# Presenting drawn frames through a window buffer: the software backend (Linux and other Unix)
+# and the CoreGraphics backend (macOS). Windows presents with Direct2D.
+[target.'cfg(not(windows))'.dependencies]
+softbuffer = "0.4.8"
+
+# The software drawing backend (`backends/draw/soft`: vello_cpu + cosmic-text, no C deps, no
+# fontconfig). This cfg mirrors the `mod backend` switch in `backends/draw/mod.rs` literally:
+# Windows and macOS never compile these crates.
+[target.'cfg(not(any(windows, target_os = "macos")))'.dependencies]
+vello_cpu = { version = "0.2", default-features = false, features = ["std", "text", "u8_pipeline", "png"] }
+# `Tint` for vello_cpu's `set_tint` (vello_cpu does not re-export it).
+vello_common = { version = "0.2", default-features = false }
+cosmic-text = { version = "0.19", default-features = false, features = ["std", "peniko"] }
+skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
+sys-locale = "0.3"
+
+# Linux: the XDG desktop portal (appearance).
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+
+# AppKit Backend; CoreGraphics + CoreText drawing backend (`backends/draw/cg`).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSDate", "NSDictionary", "NSGeometry", "NSRunLoop", "NSString"] }
@@ -73,16 +88,16 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSView",
     "NSWindow",
 ] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std", "CFString", "CFAttributedString", "CFDictionary", "CFNumber", "CFArray", "CFCGTypes"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGContext", "CGBitmapContext", "CGColorSpace", "CGColor", "CGImage", "CGDataProvider", "CGPath", "CGAffineTransform"] }
+objc2-core-text = { version = "0.3.2", default-features = false, features = ["std", "objc2-core-graphics", "CTFont", "CTFontDescriptor", "CTFontTraits", "CTLine", "CTTypesetter", "CTStringAttributes", "CTParagraphStyle", "CTRun"] }
 core-foundation = { version = "0.10", optional = true }
 core-foundation-sys = { version = "0.8", optional = true }
 
-# Linux: system fonts and the XDG desktop portal (appearance)
-[target.'cfg(target_os = "linux")'.dependencies]
-zbus = "5"
-fontdb = "0.24"
-
-# Win32 Backend
+# Win32 Backend; Direct2D + DirectWrite drawing backend (`backends/draw/d2d`).
 [target.'cfg(windows)'.dependencies]
+# DrawLine / DrawTextLayout take `windows_numerics::Vector2` (not re-exported by `windows`).
+windows-numerics = "0.3.1"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_UI_Controls",
@@ -94,7 +109,18 @@ windows = { version = "0.62", features = [
     "Win32_Globalization",
     "Wdk_System_SystemServices",
     "Win32_System_SystemInformation",
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Dxgi_Common",
+    # WIC MemorySurface (offscreen renders); bindings only, the code is cfg'd to tests/_test-hooks.
+    "Win32_Graphics_Imaging",
+    "Win32_System_Com",
 ] }
+
+# The software text rasterizer is slow unoptimized; debug test runs render a lot of text.
+[profile.dev.package."*"]
+opt-level = 2
 
 [[example]]
 name = "win32_direct"
@@ -109,8 +135,8 @@ name = "winit_host"
 required-features = ["winit-host"]
 
 [[example]]
-name = "egui_gallery"
-path = "examples/egui_gallery/main.rs"
+name = "gallery"
+path = "examples/gallery/main.rs"
 required-features = ["_test-hooks"]
 
 [[test]]
@@ -126,7 +152,7 @@ name = "visual_regression"
 harness = false
 
 [[test]]
-name = "egui_offscreen"
+name = "offscreen"
 required-features = ["_test-hooks"]
 
 [[test]]

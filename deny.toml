@@ -6,13 +6,21 @@ db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 ignore = [
     "RUSTSEC-2024-0436", # paste unmaintained (dev-only: xcap -> image -> rav1e)
-    # ttf-parser unmaintained. Transitive only: winit 0.30 -> sctk-adwaita -> ab_glyph ->
-    # owned_ttf_parser (the Wayland client-side decorations; Linux).
-    # xdialog itself parses fonts with skrifa (via egui/epaint). No replacement upstream yet.
+    # ttf-parser unmaintained. Transitive only, Linux/BSD only: winit 0.30 -> sctk-adwaita ->
+    # ab_glyph -> owned_ttf_parser (the Wayland client-side decorations), and cosmic-text ->
+    # fontdb (the system font scan of the software renderer). xdialog's own glyph code uses
+    # skrifa. No replacement upstream yet.
     "RUSTSEC-2026-0192",
 ]
 
 [licenses]
+# Reviewed for the drawing layer (4.0): vello_cpu, vello_common, glifo, peniko, kurbo,
+# fearless_simd (Apache-2.0 OR MIT), cosmic-text, skrifa, read-fonts, sys-locale (MIT OR
+# Apache-2.0), fontdb, harfrust (MIT), unicode-linebreak (Apache-2.0), self_cell (Apache-2.0 OR
+# GPL-2.0-only, taken as Apache-2.0), accesskit 0.25, objc2-core-* 0.3 and windows-numerics: all
+# covered below, no exceptions. The bundled Ubuntu fonts (src/backends/draw/soft/fonts/, Linux/BSD
+# builds only) are under the Ubuntu Font Licence 1.0 (its text ships next to them, LICENCE.txt), which
+# cargo-deny doesn't see.
 allow = [
     "MIT",
     "Apache-2.0",
