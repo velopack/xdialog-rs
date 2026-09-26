@@ -1,4 +1,4 @@
-//! A message and a progress dialog with a custom icon (egui backends):
+//! A message and a progress dialog with a custom icon (drawn backends: Fluent, Ubuntu):
 //! `cargo run --example custom_icon -- <path to .ico/.png/.icns>`.
 
 use xdialog::*;

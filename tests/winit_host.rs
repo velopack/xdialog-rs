@@ -35,7 +35,7 @@ fn run() {
         fn resumed(&mut self, _: &ActiveEventLoop) {}
         fn window_event(&mut self, _: &ActiveEventLoop, _: WindowId, _: WindowEvent) {}
     }
-    // AppKit needs its own loop; `Auto` falls back to an egui look.
+    // AppKit needs its own loop; `Auto` falls back to a drawn look.
     let appkit = XDialogBuilder::new().with_backend(XDialogBackend::AppKit).into_host_app(Inner, || {});
     assert!(matches!(appkit, Err(XDialogError::NoBackendAvailable)));
     assert!(XDialogBuilder::new().into_host_app(Inner, || {}).is_ok());
@@ -48,7 +48,7 @@ fn run() {
     use std::sync::Arc;
     use std::time::Instant;
 
-    use xdialog::__test::egui::{Event, Key, PointerButton, Pos2};
+    use xdialog::__test::{Event, Key, Point, PointerButton};
     use xdialog::host::winit::application::ApplicationHandler;
     use xdialog::host::winit::dpi::PhysicalSize;
     use xdialog::host::winit::event::{StartCause, WindowEvent};
@@ -166,8 +166,8 @@ fn run() {
     // Click button `index` (move, press, release).
     let click = |el: &mut EventLoop<()>, app: &mut App, d: &LiveDialog, index: usize| {
         let [x, y, w, h] = d.button_rects[index];
-        let pos = Pos2::new(x + w / 2.0, y + h / 2.0);
-        let button = |pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Default::default() };
+        let pos = Point::new(x + w / 2.0, y + h / 2.0);
+        let button = |pressed| Event::PointerButton { pos, button: PointerButton::Primary, pressed };
         app.test_inject(d.id, Event::PointerMoved(pos));
         app.test_inject(d.id, button(true));
         pump(el, app, 50, &|_| false);
@@ -233,6 +233,7 @@ fn run() {
     let d = wait_dialog(&mut el, &mut app);
     assert!(wakes.load(Ordering::SeqCst) > wakes_before, "the request woke the loop");
     assert!(app.inner().user_events > user_before, "the wake-up is forwarded to the host app");
+    assert!(d.a11y.starts_with("AlertDialog label=\"t\"") && d.a11y.contains("  Button label=\"Yes\""), "{}", d.a11y);
     click(&mut el, &mut app, &d, 1);
     pump(&mut el, &mut app, 2_000, &|_| worker.is_finished());
     assert!(worker.is_finished(), "the click answered the dialog");
@@ -267,7 +268,7 @@ fn run() {
     // Escape closes a message.
     let worker = message("Escape");
     let d = wait_dialog(&mut el, &mut app);
-    let escape = Event::Key { key: Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() };
+    let escape = Event::Key { key: Key::Escape, pressed: true, repeat: false, shift: false };
     app.test_inject(d.id, escape);
     pump(&mut el, &mut app, 2_000, &|_| worker.is_finished());
     assert!(worker.is_finished(), "Escape answered the dialog");

@@ -26,9 +26,9 @@ pub enum XDialogBackend {
     Auto,
     /// Win32 TaskDialog (Windows only).
     Win32,
-    /// The WinUI 3 (ContentDialog) look, drawn with egui.
+    /// The WinUI 3 (ContentDialog) look, drawn by xdialog.
     Fluent,
-    /// The classic xdialog Linux look (Ubuntu font), drawn with egui.
+    /// The classic xdialog Linux look (Ubuntu font), drawn by xdialog.
     Ubuntu,
     /// Native AppKit (macOS only; not available in host mode, where `Auto` on macOS uses `Ubuntu`).
     AppKit,
@@ -46,7 +46,7 @@ pub enum XDialogIcon {
     Warning,
     /// Information icon
     Information,
-    /// The image of [`XDialogOptions::icon_source`] (egui backends; the others show no icon).
+    /// The image of [`XDialogOptions::icon_source`] (Fluent and Ubuntu; the others show no icon).
     /// Without an icon source (or if it can't be loaded) the dialog shows no icon.
     Custom,
 }
@@ -82,7 +82,7 @@ pub struct XDialogOptions {
     pub message: String,
     /// The icon to display in the dialog, or None for no icon.
     pub icon: XDialogIcon,
-    /// An `.ico`, `.png` or `.icns` image. With the egui backends (Fluent, Ubuntu) it is the
+    /// An `.ico`, `.png` or `.icns` image. With the drawn backends (Fluent, Ubuntu) it is the
     /// window / taskbar icon where the platform has one (Windows, X11; not Wayland or macOS), and
     /// the icon shown in the dialog with [`XDialogIcon::Custom`]. The other backends ignore it. An
     /// image that can't be read or decoded is logged and ignored.

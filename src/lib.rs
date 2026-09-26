@@ -31,9 +31,11 @@ pub mod host;
 #[doc(hidden)]
 pub mod __test {
     //! Test-only hooks (offscreen rendering). Not part of the public API.
-    pub use crate::backends::egui_core::offscreen::{OffscreenDialog, TestAppearance, TestProgress};
-    pub use crate::backends::egui_core::theme::DialogKind as TestKind;
-    pub use egui;
+    pub use crate::backends::draw::geom::{Point, Vec2};
+    pub use crate::backends::draw::RENDERER;
+    pub use crate::backends::gui::input::{Event, Key, PointerButton};
+    pub use crate::backends::gui::offscreen::{OffscreenDialog, TestAppearance, TestProgress};
+    pub use crate::backends::gui::theme::DialogKind as TestKind;
 }
 
 mod icon;
