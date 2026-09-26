@@ -37,7 +37,7 @@ egui = { version = "0.36.2", default-features = false }
 egui-winit = { version = "0.36.2", default-features = false, features = ["accesskit", "x11", "wayland"] }
 winit = "0.30.13"
 softbuffer = "0.4.8"
-skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
+skrifa = { version = "0.47.0", default-features = false, features = ["std"] }
 unicode-bidi = "0.3.18"
 strength_reduce = "0.2.4"
 ahash = { version = "0.8.12", default-features = false, features = ["no-rng", "std"] }
