@@ -148,7 +148,7 @@ criterion = { version = "=0.8.2", default-features = false, features = ["cargo_b
 xcap = "=0.9.8"
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
-x11rb = "0.13.2"
+x11rb = "0.14.0"
 
 [target.'cfg(windows)'.dev-dependencies]
 windows = { version = "=0.62.2", features = [
