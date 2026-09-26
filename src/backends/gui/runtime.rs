@@ -200,8 +200,18 @@ impl Runtime {
             WindowEvent::ThemeChanged(_) => w.dialog.refresh_appearance(),
             _ => {
                 let events = w.input.translate(ev, w.window.scale_factor());
+                // Windows (no title bar): a primary press on the background moves the window.
+                #[cfg(windows)]
+                let drag = events.iter().any(|e| {
+                                           matches!(e, super::input::Event::PointerButton { pos, button: super::input::PointerButton::Primary, pressed: true }
+                                                    if !w.dialog.hits_widget(*pos))
+                                       });
                 if !events.is_empty() {
                     w.dialog.handle_events(events);
+                }
+                #[cfg(windows)]
+                if drag {
+                    let _ = w.window.drag_window();
                 }
             }
         }
@@ -351,11 +361,18 @@ impl Runtime {
         }
         #[cfg(windows)]
         {
-            // Rounded corners (Windows 11). No drag and drop: winit's default registers an OLE drop
-            // target, which needs (and on an uninitialised host thread silently makes) an STA
-            // thread and aborts on an MTA one. Dialogs take no drops.
+            // No title bar and no close button: the dialog draws its whole client area and is
+            // moved by dragging its background (`dialog_event`). The title still names the window
+            // in the taskbar, Alt+Tab and to screen readers; Alt+F4 still closes it (WS_SYSMENU
+            // stays). The DWM shadow and rounded corners (Windows 11) keep it looking like a
+            // window. No drag and drop: winit's default registers an OLE drop target, which needs
+            // (and on an uninitialised host thread silently makes) an STA thread and aborts on an
+            // MTA one. Dialogs take no drops.
             use winit::platform::windows::{CornerPreference, WindowAttributesExtWindows};
-            attrs = attrs.with_drag_and_drop(false).with_corner_preference(CornerPreference::Round);
+            attrs = attrs.with_decorations(false)
+                         .with_undecorated_shadow(true)
+                         .with_drag_and_drop(false)
+                         .with_corner_preference(CornerPreference::Round);
         }
         let px = dialog.physical_size(ppp);
         let virtual_left = || el.available_monitors().map(|m| m.position().x).min().unwrap_or(0);

@@ -29,7 +29,7 @@ use super::theme::{button_id, DialogKind, DialogUiOutput, DialogView, ProgressVi
 use super::ui::{Id, Ui, UiState};
 #[cfg(any(test, feature = "_test-hooks"))]
 use crate::backends::draw::MemorySurface;
-use crate::backends::draw::{DrawError, Frame, Image, Rect, Shape, Size, Surface, Text, WindowSurface};
+use crate::backends::draw::{DrawError, Frame, Image, Point, Rect, Shape, Size, Surface, Text, WindowSurface};
 use crate::icon::IconFile;
 use crate::model::{ResultSender, XDialogIcon, XDialogOptions, XDialogResult, XDialogTheme};
 use crate::{ProgressButtonCallback, ProgressDialogProxy};
@@ -348,6 +348,11 @@ impl Dialog {
             }
         }
         self.schedule.asap(Instant::now());
+    }
+
+    /// Whether `pos` (logical px) is on an interactive widget of the last pass.
+    pub(crate) fn hits_widget(&self, pos: Point) -> bool {
+        self.hits.iter().any(|(_, r)| r.contains(pos))
     }
 
     /// The API index of the button with widget id `id`.
