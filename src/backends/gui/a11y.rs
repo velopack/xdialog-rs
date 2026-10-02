@@ -22,6 +22,8 @@ use std::sync::{Arc, Mutex};
 
 use accesskit::{Action, ActionRequest, Node, NodeId, Rect as AkRect, Role, TreeId, TreeInfo, TreeUpdate};
 
+use super::dialog::DialogContent;
+use super::keyboard::focused_button;
 use super::theme::{DialogKind, DialogUiOutput, ProgressView};
 use crate::backends::draw::{Point, Rect};
 use crate::model::XDialogIcon;
@@ -45,13 +47,7 @@ pub(crate) fn node_button(node: NodeId) -> Option<usize> {
 
 /// What the tree is built from.
 pub(crate) struct TreeSource<'a> {
-    pub kind: DialogKind,
-    pub title: &'a str,
-    pub heading: &'a str,
-    pub body: &'a str,
-    pub icon: &'a XDialogIcon,
-    pub buttons: &'a [String],
-    pub progress: Option<ProgressView>,
+    pub content: &'a DialogContent,
     pub out: &'a DialogUiOutput,
     pub focus: Option<usize>,
     /// Physical px per logical px (bounds are physical, client-relative).
@@ -60,6 +56,7 @@ pub(crate) struct TreeSource<'a> {
 
 /// The full tree of a dialog.
 pub(crate) fn tree(s: &TreeSource<'_>) -> TreeUpdate {
+    let c = s.content;
     let bounds = |r: Rect| {
         let r = r.scale(s.ppp);
         AkRect { x0: r.x0, y0: r.y0, x1: r.x1, y1: r.y1 }
@@ -79,10 +76,10 @@ pub(crate) fn tree(s: &TreeSource<'_>) -> TreeUpdate {
         }
         n
     };
-    if !s.heading.is_empty() {
-        add(HEADING, label(s.heading, s.out.parts.heading), &mut nodes);
+    if !c.heading.is_empty() {
+        add(HEADING, label(&c.heading, s.out.parts.heading), &mut nodes);
     }
-    let icon = match s.icon {
+    let icon = match c.icon {
         // `Custom` is decorative.
         XDialogIcon::None | XDialogIcon::Custom => None,
         XDialogIcon::Information => Some("Information"),
@@ -92,10 +89,10 @@ pub(crate) fn tree(s: &TreeSource<'_>) -> TreeUpdate {
     if let Some(word) = icon {
         add(ICON, label(word, s.out.parts.icon), &mut nodes);
     }
-    if !s.body.is_empty() {
-        add(BODY, label(s.body, s.out.parts.body), &mut nodes);
+    if !c.body.is_empty() {
+        add(BODY, label(&c.body, s.out.parts.body), &mut nodes);
     }
-    if let Some(p) = s.progress {
+    if let Some(p) = c.progress {
         let mut n = Node::new(Role::ProgressIndicator);
         if let ProgressView::Determinate { value } = p {
             let v = (value.clamp(0.0, 1.0) as f64 * 100.0).round();
@@ -111,25 +108,25 @@ pub(crate) fn tree(s: &TreeSource<'_>) -> TreeUpdate {
     }
     for b in &s.out.buttons {
         let mut n = Node::new(Role::Button);
-        n.set_label(s.buttons.get(b.index).map_or("", String::as_str));
+        n.set_label(c.buttons.get(b.index).map_or("", String::as_str));
         n.add_action(Action::Click);
         n.add_action(Action::Focus);
         n.set_bounds(bounds(b.rect));
         add(button_node(b.index), n, &mut nodes);
     }
-    let mut root = Node::new(if s.kind == DialogKind::Message { Role::AlertDialog } else { Role::Dialog });
-    let name = if s.title.trim().is_empty() { s.heading } else { s.title };
+    let mut root = Node::new(if c.kind == DialogKind::Message { Role::AlertDialog } else { Role::Dialog });
+    let name = if c.title.trim().is_empty() { c.heading.as_str() } else { c.title.as_str() };
     if !name.is_empty() {
         root.set_label(name);
     }
-    let description = [s.heading, s.body].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join("\n");
+    let description = [c.heading.as_str(), c.body.as_str()].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join("\n");
     if !description.is_empty() {
         root.set_description(description);
     }
     root.set_bounds(bounds(Rect::from_origin_size(Point::ZERO, s.out.desired_size)));
     root.set_children(children);
     nodes.insert(0, (ROOT, root));
-    let focus = s.focus.filter(|f| s.out.buttons.iter().any(|b| b.index == *f)).map_or(ROOT, button_node);
+    let focus = focused_button(s.focus, s.out).map_or(ROOT, button_node);
     TreeUpdate { nodes, tree: Some(TreeInfo::new(ROOT)), tree_id: TreeId::ROOT, focus }
 }
 

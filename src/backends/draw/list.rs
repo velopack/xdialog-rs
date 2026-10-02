@@ -7,7 +7,7 @@
 
 use std::rc::Rc;
 
-use super::{Canvas, Color, Image, Layout, Point, Rect};
+use super::{Canvas, Color, Image, Layout, Point, Rect, TextLayout};
 
 /// How the ends of a [`Shape::Line`] look.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,6 +72,34 @@ pub(crate) enum Shape {
     /// Clip what follows (until the matching `PopClip`) to a rect.
     PushClip(Rect),
     PopClip,
+}
+
+/// Same drawing: layouts and images compare by id (both are immutable).
+impl PartialEq for Shape {
+    fn eq(&self, other: &Shape) -> bool {
+        use Shape as S;
+        match (self, other) {
+            (S::Rect { rect, radius, color, snap }, S::Rect { rect: r, radius: ra, color: c, snap: s }) => {
+                (rect, radius, color, snap) == (r, ra, c, s)
+            }
+            (S::Gradient { rect, radius, top, bottom }, S::Gradient { rect: r, radius: ra, top: t, bottom: b }) => {
+                (rect, radius, top, bottom) == (r, ra, t, b)
+            }
+            (S::Polygon { points, color }, S::Polygon { points: p, color: c }) => (points, color) == (p, c),
+            (S::Stroke { rect, radius, width, color }, S::Stroke { rect: r, radius: ra, width: w, color: c }) => {
+                (rect, radius, width, color) == (r, ra, w, c)
+            }
+            (S::Circle { center, radius, color }, S::Circle { center: ce, radius: r, color: c }) => (center, radius, color) == (ce, r, c),
+            (S::Line { from, to, width, cap, color }, S::Line { from: f, to: t, width: w, cap: ca, color: c }) => {
+                (from, to, width, cap, color) == (f, t, w, ca, c)
+            }
+            (S::Text { layout, pos, color }, S::Text { layout: l, pos: p, color: c }) => layout.id() == l.id() && (pos, color) == (p, c),
+            (S::Image { image, rect }, S::Image { image: i, rect: r }) => image.id() == i.id() && rect == r,
+            (S::PushClip(a), S::PushClip(b)) => a == b,
+            (S::PopClip, S::PopClip) => true,
+            _ => false,
+        }
+    }
 }
 
 /// One frame to present.
