@@ -1,5 +1,5 @@
 //! On-screen captures vs `tests/visual_references/<windows|macos|linux|linux_wayland>/`: the native
-//! backends (Win32 TaskDialog: forced here; AppKit) and the Linux default (the drawn Ubuntu look,
+//! backends (Win32 TaskDialog and AppKit: forced here) and the Linux default (the drawn Ubuntu look,
 //! X11 and Wayland); every drawn look also has offscreen goldens (`tests/offscreen.rs`).
 //! Opt-in, it takes focus: `XDIALOG_VISUAL_TEST=1` compares,
 //! `XDIALOG_VISUAL_SEED=1 cargo test --test visual_regression` (re)writes the references. A failing
@@ -218,8 +218,15 @@ fn main() {
         eprintln!("Skipping visual regression (Windows, macOS and Linux; set XDIALOG_VISUAL_TEST=1 or XDIALOG_VISUAL_SEED=1)");
         return;
     }
-    // Windows: the references are the Win32 TaskDialog (`Auto` picks Fluent on Windows 10+).
-    let backend = if cfg!(windows) { XDialogBackend::Win32 } else { XDialogBackend::Auto };
+    // The references are the native backends where there is one (`Auto` picks Fluent on Windows
+    // 10+ and the MacOS look on macOS): Win32 TaskDialog, AppKit.
+    let backend = if cfg!(windows) {
+        XDialogBackend::Win32
+    } else if cfg!(target_os = "macos") {
+        XDialogBackend::AppKit
+    } else {
+        XDialogBackend::Auto
+    };
     let captures = XDialogBuilder::new().with_backend(backend).run_loop(run_all_captures);
 
     let platform = match () {
