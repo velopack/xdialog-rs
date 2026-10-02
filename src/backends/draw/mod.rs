@@ -116,7 +116,6 @@ pub(crate) trait TextLayout: Clone + 'static {
     fn cap_height(&self) -> f64;
     /// Process-unique monotonic id assigned at creation (NOT a pointer — no ABA). The soft
     /// backend's text rasters key on (id, scale).
-    #[cfg_attr(not(draw_soft), allow(dead_code))]
     fn id(&self) -> u64;
 }
 

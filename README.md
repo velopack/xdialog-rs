@@ -124,10 +124,8 @@ effective appearance on macOS) unless
 `XDialogBuilder::with_theme` forces one.
 
 Win32 TaskDialog (`XDialogBackend::Win32`, `win32-direct`, and the fallback of `Auto`) is part of
-version 6 of the Windows Common Controls, which an executable gets only from its manifest: give
-yours a dependency on `Microsoft.Windows.Common-Controls` 6.0, as the
-[`app.manifest`](https://github.com/velopack/xdialog/blob/master/app.manifest) embedded in
-xdialog's own examples and tests does.
+version 6 of the Windows Common Controls. Your executable needs no manifest for it: if its own
+manifest doesn't select v6, xdialog activates v6 for its dialogs.
 
 ## Custom icons
 
