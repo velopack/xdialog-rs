@@ -5,6 +5,8 @@
 //! were recorded unsnapped (moving progress bar ends), and places text and images on whole pixels.
 //! Canvases map logical px to physical px by `ppp` themselves and never snap.
 
+use std::rc::Rc;
+
 use super::{Canvas, Color, Image, Layout, Point, Rect};
 
 /// How the ends of a [`Shape::Line`] look.
@@ -25,6 +27,18 @@ pub(crate) enum Shape {
         radius: f64,
         color: Color,
         snap: bool,
+    },
+    /// Filled (rounded) rect with a vertical gradient (`top` to `bottom`), edges snapped.
+    Gradient {
+        rect: Rect,
+        radius: f64,
+        top: Color,
+        bottom: Color,
+    },
+    /// Filled closed polygon (never snapped).
+    Polygon {
+        points: Rc<[Point]>,
+        color: Color,
     },
     /// Stroke of `width` centred on the (rounded) rect's edge.
     Stroke {
@@ -67,7 +81,7 @@ pub(crate) struct Frame<'a> {
     pub size_px: [u32; 2],
     /// Physical px per logical px.
     pub ppp: f64,
-    /// Window background (opaque).
+    /// Window background: opaque, except on a translucent surface (macOS vibrancy).
     pub clear: Color,
 }
 
@@ -85,6 +99,8 @@ pub(crate) fn replay<C: Canvas>(canvas: &mut C, frame: &Frame<'_>) {
                 let r = if *sn { snap(rect) } else { *rect };
                 canvas.fill_rect(r, *radius, *color);
             }
+            Shape::Gradient { rect, radius, top, bottom } => canvas.fill_rect_gradient(snap(rect), *radius, *top, *bottom),
+            Shape::Polygon { points, color } => canvas.fill_polygon(points, *color),
             Shape::Stroke { rect, radius, width, color } => {
                 // Whole physical pixels wide, placed so both stroke edges land on pixel edges.
                 let w = (width * ppp).round().max(1.0);
@@ -151,6 +167,14 @@ mod tests {
 
         fn line(&mut self, a: Point, b: Point, width: f64, cap: LineCap, _: Color) {
             self.0.push(format!("line {} {} {} {} w{width} {cap:?}", a.x, a.y, b.x, b.y));
+        }
+
+        fn fill_rect_gradient(&mut self, r: Rect, radius: f64, _: Color, _: Color) {
+            self.0.push(format!("gradient {} {} {} {} r{radius}", r.x0, r.y0, r.x1, r.y1));
+        }
+
+        fn fill_polygon(&mut self, points: &[Point], _: Color) {
+            self.0.push(format!("polygon {}", points.len()));
         }
 
         fn push_clip(&mut self, r: Rect) {

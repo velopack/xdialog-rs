@@ -74,6 +74,9 @@ pub(crate) struct TextParams<'a> {
     /// Paragraph base direction (shared code computes it with unicode_bidi::get_base_direction).
     /// Lines are start-aligned in that direction (right-aligned within max_width when true).
     pub rtl: bool,
+    /// Centre every line within `max_width` (unwrapped: within the widest line) instead of
+    /// start-aligning it.
+    pub center: bool,
 }
 
 /// Per-thread text/font service. Obtained with `Text::shared()`; the runtime keeps an Rc,
@@ -127,6 +130,11 @@ pub(crate) trait Canvas {
     fn stroke_rect(&mut self, rect: Rect, radius: f64, width: f64, color: Color);
     fn fill_circle(&mut self, center: Point, radius: f64, color: Color);
     fn line(&mut self, from: Point, to: Point, width: f64, cap: LineCap, color: Color);
+    /// Anti-aliased fill of a (rounded) rect with a vertical linear gradient, `top` at its top
+    /// edge to `bottom` at its bottom edge.
+    fn fill_rect_gradient(&mut self, rect: Rect, radius: f64, top: Color, bottom: Color);
+    /// Anti-aliased fill of the closed polygon through `points` (non-zero winding).
+    fn fill_polygon(&mut self, points: &[Point], color: Color);
     /// Axis-aligned, aliased, intersected with the current clip. Balanced by pop_clip.
     fn push_clip(&mut self, rect: Rect);
     fn pop_clip(&mut self);

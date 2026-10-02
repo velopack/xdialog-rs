@@ -103,7 +103,7 @@ pub fn init_win32_direct() {
 
 fn convert_icon(icon: &XDialogIcon) -> TASKDIALOGCONFIG_0 {
     match icon {
-        // `Custom` is only shown by the drawn backends (Fluent, Ubuntu).
+        // `Custom` is only shown by the drawn backends (Fluent, Ubuntu, MacOS).
         XDialogIcon::None | XDialogIcon::Custom => TASKDIALOGCONFIG_0::default(),
         XDialogIcon::Error => TASKDIALOGCONFIG_0 { pszMainIcon: TD_ERROR_ICON },
         XDialogIcon::Warning => TASKDIALOGCONFIG_0 { pszMainIcon: TD_WARNING_ICON },

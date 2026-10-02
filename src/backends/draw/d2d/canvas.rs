@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct2D::*;
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
+use windows::core::Interface;
 use windows_numerics::Vector2;
 
 use super::text::Text;
@@ -12,6 +13,7 @@ use crate::backends::draw::{list, Color, DrawError, Frame, Image, LineCap, Point
 
 /// Everything bound to one render target's device: dropped together when the device is lost.
 pub(crate) struct DeviceRes {
+    factory: ID2D1Factory,
     brush: ID2D1SolidColorBrush,
     round: ID2D1StrokeStyle,
     /// Uploaded images by `Image::id`, and whether the current frame drew them.
@@ -31,7 +33,8 @@ impl DeviceRes {
                                                    dashOffset: 0.0 };
         // SAFETY: plain resource creation on live interfaces.
         unsafe {
-            Ok(DeviceRes { brush: dc.CreateSolidColorBrush(&color_f(Color::BLACK), None)?,
+            Ok(DeviceRes { factory: text.d2d.cast()?,
+                           brush: dc.CreateSolidColorBrush(&color_f(Color::BLACK), None)?,
                            round: ID2D1Factory::CreateStrokeStyle(&text.d2d, &props, None)?,
                            images: HashMap::new(),
                            swizzle: Vec::new() })
@@ -157,6 +160,46 @@ impl crate::backends::draw::Canvas for Canvas<'_> {
             LineCap::Round => Some(&self.dev.round),
         };
         unsafe { self.dc.DrawLine(vec2(from), vec2(to), self.brush(color), width as f32, style) };
+    }
+
+    fn fill_rect_gradient(&mut self, rect: Rect, radius: f64, top: Color, bottom: Color) {
+        let stops = [D2D1_GRADIENT_STOP { position: 0.0, color: color_f(top) }, D2D1_GRADIENT_STOP { position: 1.0, color: color_f(bottom) }];
+        let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES { startPoint: vec2(Point::new(rect.x0, rect.y0)), endPoint: vec2(Point::new(rect.x0, rect.y1)) };
+        let brush = unsafe {
+            ID2D1RenderTarget::CreateGradientStopCollection(self.dc, &stops, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP)
+                .and_then(|stops| self.dc.CreateLinearGradientBrush(&props, None, &stops))
+        };
+        match brush {
+            Ok(brush) => unsafe {
+                if radius > 0.0 {
+                    self.dc.FillRoundedRectangle(&rounded(rect, radius), &brush);
+                } else {
+                    self.dc.FillRectangle(&rect_f(rect), &brush);
+                }
+            },
+            Err(e) => warn!("xdialog: could not create a Direct2D gradient: {e}"),
+        }
+    }
+
+    fn fill_polygon(&mut self, points: &[Point], color: Color) {
+        let Some((first, rest)) = points.split_first() else { return };
+        let rest: Vec<Vector2> = rest.iter().map(|p| vec2(*p)).collect();
+        let geometry = unsafe {
+            (|| -> windows::core::Result<ID2D1PathGeometry> {
+                let geometry = self.dev.factory.CreatePathGeometry()?;
+                let sink = geometry.Open()?;
+                sink.SetFillMode(D2D1_FILL_MODE_WINDING);
+                sink.BeginFigure(vec2(*first), D2D1_FIGURE_BEGIN_FILLED);
+                sink.AddLines(&rest);
+                sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+                sink.Close()?;
+                Ok(geometry)
+            })()
+        };
+        match geometry {
+            Ok(geometry) => unsafe { self.dc.FillGeometry(&geometry, self.brush(color), None) },
+            Err(e) => warn!("xdialog: could not create a Direct2D path: {e}"),
+        }
     }
 
     fn push_clip(&mut self, rect: Rect) {

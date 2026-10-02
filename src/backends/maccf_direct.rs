@@ -30,7 +30,7 @@ fn icon_to_alert_level(icon: &XDialogIcon) -> CFOptionFlags {
         XDialogIcon::Error => kCFUserNotificationStopAlertLevel,
         XDialogIcon::Information => kCFUserNotificationNoteAlertLevel,
         XDialogIcon::Warning => kCFUserNotificationCautionAlertLevel,
-        // `Custom` is only shown by the drawn backends (Fluent, Ubuntu).
+        // `Custom` is only shown by the drawn backends (Fluent, Ubuntu, MacOS).
         XDialogIcon::None | XDialogIcon::Custom => kCFUserNotificationPlainAlertLevel,
     }
 }

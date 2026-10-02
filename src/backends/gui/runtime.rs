@@ -188,6 +188,9 @@ impl Runtime {
     }
 
     fn dialog_event(&mut self, key: usize, ev: &WindowEvent) {
+        // No title bar (Windows; the macOS look): a primary press on the background moves the
+        // window.
+        let drag_by_background = cfg!(windows) || self.backend == XDialogBackend::MacOS;
         let Some(w) = self.dialogs.get_mut(&key) else { return };
         // Every event reaches the adapter (window bounds, focus).
         w.a11y.process_event(&w.window, ev);
@@ -200,16 +203,13 @@ impl Runtime {
             WindowEvent::ThemeChanged(_) => w.dialog.refresh_appearance(),
             _ => {
                 let events = w.input.translate(ev, w.window.scale_factor());
-                // Windows (no title bar): a primary press on the background moves the window.
-                #[cfg(windows)]
-                let drag = events.iter().any(|e| {
+                let drag = drag_by_background && events.iter().any(|e| {
                                            matches!(e, super::input::Event::PointerButton { pos, button: super::input::PointerButton::Primary, pressed: true }
                                                     if !w.dialog.hits_widget(*pos))
                                        });
                 if !events.is_empty() {
                     w.dialog.handle_events(events);
                 }
-                #[cfg(windows)]
                 if drag {
                     let _ = w.window.drag_window();
                 }
@@ -374,6 +374,20 @@ impl Runtime {
                          .with_drag_and_drop(false)
                          .with_corner_preference(CornerPreference::Round);
         }
+        // The macOS look: the title bar hidden (its buttons too) under a full-size content view, so
+        // the dialog draws the whole window and AppKit still gives it rounded corners and a
+        // shadow; transparent over the alert material when the theme is translucent.
+        #[cfg(target_os = "macos")]
+        let translucent = self.backend == XDialogBackend::MacOS && dialog.wants_translucency();
+        #[cfg(target_os = "macos")]
+        if self.backend == XDialogBackend::MacOS {
+            use winit::platform::macos::WindowAttributesExtMacOS;
+            attrs = attrs.with_titlebar_transparent(true)
+                         .with_title_hidden(true)
+                         .with_titlebar_buttons_hidden(true)
+                         .with_fullsize_content_view(true)
+                         .with_transparent(translucent);
+        }
         let px = dialog.physical_size(ppp);
         let virtual_left = || el.available_monitors().map(|m| m.position().x).min().unwrap_or(0);
         let position = test_position(px, virtual_left).or_else(|| {
@@ -381,8 +395,10 @@ impl Runtime {
                                                           // window manager doesn't reposition it after mapping.
                                                           let m = primary.as_ref()?;
                                                           let (msize, mpos) = (m.size(), m.position());
+                                                          // macOS alerts sit higher: a third of the free space above.
+                                                          let above = if self.backend == XDialogBackend::MacOS { 3 } else { 2 };
                                                           Some([mpos.x + (msize.width as i32 - px[0] as i32) / 2,
-                                                                mpos.y + (msize.height as i32 - px[1] as i32) / 2])
+                                                                mpos.y + (msize.height as i32 - px[1] as i32) / above])
                                                       });
         if let Some([x, y]) = position {
             attrs = attrs.with_position(PhysicalPosition::new(x, y));
@@ -398,14 +414,25 @@ impl Runtime {
         // AccessKit needs its adapter before the window is first shown.
         let inbox = self.inbox.clone();
         let a11y = A11y::new(el, &window, Box::new(move || inbox.wake()));
-        let surface =
-            WindowSurface::new(&window, &text).map_err(|e| XDialogError::SystemError(format!("xdialog: could not create a surface: {e}")))?;
+        #[cfg(target_os = "macos")]
+        let translucent = translucent && super::platform_mac::add_material(&window);
+        #[cfg(target_os = "macos")]
+        let surface = if translucent { WindowSurface::translucent(&window, &text) } else { WindowSurface::new(&window, &text) };
+        #[cfg(not(target_os = "macos"))]
+        let surface = WindowSurface::new(&window, &text);
+        let surface = surface.map_err(|e| XDialogError::SystemError(format!("xdialog: could not create a surface: {e}")))?;
+        #[cfg(target_os = "macos")]
+        dialog.set_translucent(translucent);
         let s = window.inner_size();
         dialog.attach(Target::Window(surface), window.scale_factor(), [s.width, s.height]);
         window.set_visible(true);
         // Present right away: presenting to a hidden window is a no-op on Win32/X11 and the class
         // background would flash.
         dialog.frame().map_err(|e| XDialogError::SystemError(format!("xdialog: could not present: {e}")))?;
+        #[cfg(target_os = "macos")]
+        if translucent {
+            super::platform_mac::invalidate_shadow(&window);
+        }
         dialog.set_callback(callback.take());
         self.retired.retain(|r| r.0 != window.id());
         self.dialogs.insert(id, DialogWindow { dialog, window, input: WinitInput::default(), a11y, period: None });

@@ -208,6 +208,28 @@ impl crate::backends::draw::Canvas for Canvas<'_> {
         ctx.stroke_path(&vk::Line::new(vpoint(from), vpoint(to)).to_path(tolerance));
     }
 
+    fn fill_rect_gradient(&mut self, rect: Rect, radius: f64, top: Color, bottom: Color) {
+        use vello_cpu::peniko::{ColorStop, Gradient};
+        let tolerance = self.tolerance();
+        let gradient = Gradient::new_linear(vk::Point::new(rect.x0, rect.y0), vk::Point::new(rect.x0, rect.y1))
+            .with_stops([ColorStop::from((0.0, vcolor(top))), ColorStop::from((1.0, vcolor(bottom)))]);
+        let ctx = &mut self.p.ctx;
+        ctx.set_transform(self.root);
+        ctx.set_paint(gradient);
+        ctx.fill_path(&vk::RoundedRect::from_rect(vrect(rect), radius.max(0.0)).to_path(tolerance));
+    }
+
+    fn fill_polygon(&mut self, points: &[Point], color: Color) {
+        let Some((first, rest)) = points.split_first() else { return };
+        let mut path = vk::BezPath::new();
+        path.move_to(vpoint(*first));
+        for p in rest {
+            path.line_to(vpoint(*p));
+        }
+        path.close_path();
+        self.solid(color).fill_path(&path);
+    }
+
     fn push_clip(&mut self, rect: Rect) {
         let ctx = &mut self.p.ctx;
         ctx.set_transform(self.root);

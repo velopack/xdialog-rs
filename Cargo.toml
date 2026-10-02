@@ -63,10 +63,11 @@ zbus = "5"
 # AppKit Backend; CoreGraphics + CoreText drawing backend (`backends/draw/cg`).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSDate", "NSDictionary", "NSGeometry", "NSRunLoop", "NSString"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSBundle", "NSDate", "NSDictionary", "NSGeometry", "NSRunLoop", "NSString"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "std",
     "objc2-core-foundation",
+    "objc2-quartz-core",
     "NSApplication",
     "NSAttributedString",
     "NSButton",
@@ -86,10 +87,16 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSStringDrawing",
     "NSTextField",
     "NSView",
+    "NSVisualEffectView",
     "NSWindow",
+    "NSColor",
+    "NSColorSpace",
+    "NSAppearance",
 ] }
+# The translucent window surface (`backends/draw/cg/window.rs`).
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["std", "objc2-core-foundation", "CALayer", "CATransaction"] }
 objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std", "CFString", "CFAttributedString", "CFDictionary", "CFNumber", "CFArray", "CFCGTypes"] }
-objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGContext", "CGBitmapContext", "CGColorSpace", "CGColor", "CGImage", "CGDataProvider", "CGPath", "CGAffineTransform"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGContext", "CGBitmapContext", "CGColorSpace", "CGColor", "CGImage", "CGDataProvider", "CGGradient", "CGPath", "CGAffineTransform"] }
 objc2-core-text = { version = "0.3.2", default-features = false, features = ["std", "objc2-core-graphics", "CTFont", "CTFontDescriptor", "CTFontTraits", "CTLine", "CTTypesetter", "CTStringAttributes", "CTParagraphStyle", "CTRun"] }
 core-foundation = { version = "0.10", optional = true }
 core-foundation-sys = { version = "0.8", optional = true }

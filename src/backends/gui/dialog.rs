@@ -71,7 +71,7 @@ impl DialogContent {
 
     /// Every string the theme may draw (font coverage check).
     fn texts(&self) -> Vec<&str> {
-        let mut v = vec![self.heading.as_str(), self.body.as_str()];
+        let mut v = vec![self.title.as_str(), self.heading.as_str(), self.body.as_str()];
         v.extend(self.buttons.iter().map(String::as_str));
         v
     }
@@ -155,6 +155,8 @@ pub(crate) struct Dialog {
     /// The custom icon's side in physical px and its image (`None`: no frame decoded), rendered
     /// again when the scale changes.
     icon: Option<(u32, Option<Image>)>,
+    /// The window has a behind-window material: frames clear with the theme's translucent colour.
+    translucent: bool,
 }
 
 impl Dialog {
@@ -186,7 +188,8 @@ impl Dialog {
                              #[cfg(any(test, all(feature = "winit-host", feature = "_test-hooks")))]
                              frames: 0,
                              fonts_complete: false,
-                             icon: None };
+                             icon: None,
+                             translucent: false };
         d.update_fonts(p.font_wait);
         d.run_pass(true);
         d.requested = d.out.desired_size;
@@ -202,13 +205,16 @@ impl Dialog {
         self.fonts_complete = self.st.texts.prepare_fonts(&self.content.texts(), wait);
     }
 
-    /// The `Custom` icon's image at the current scale (rendered on first use and when the scale
-    /// changes); nothing to do without an icon file or for the other icons.
+    /// The icon's image at the current scale (rendered on first use and when the scale changes):
+    /// `Custom`'s icon file, or the theme's system image of a severity icon; nothing to do
+    /// without either.
     fn update_icon(&mut self) {
-        if self.content.icon != XDialogIcon::Custom {
-            return;
-        }
-        let Some(file) = self.content.icon_file.as_ref() else { return };
+        let file = match self.content.icon {
+            XDialogIcon::None => return,
+            XDialogIcon::Custom => self.content.icon_file.clone(),
+            ref severity => self.theme.system_icon(severity),
+        };
+        let Some(file) = file else { return };
         let px = (self.theme.icon_size() * self.ppp).round().max(1.0) as u32;
         if self.icon.as_ref().is_none_or(|(size, _)| *size != px) {
             let image = file.render(px).map(|img| Image::from_straight_rgba([img.size, img.size], &img.rgba));
@@ -222,7 +228,8 @@ impl Dialog {
         self.update_icon();
         self.st.texts.begin_pass(self.theme.fonts());
         let c = &self.content;
-        let view = DialogView { heading: &c.heading,
+        let view = DialogView { title: &c.title,
+                                heading: &c.heading,
                                 body: &c.body,
                                 icon: &c.icon,
                                 custom_icon: self.icon.as_ref().and_then(|(_, img)| img.as_ref()),
@@ -275,9 +282,9 @@ impl Dialog {
         }
 
         let mut presented = Ok(());
+        let clear = self.clear_color();
         if let Some(target) = self.target.as_mut() {
-            presented =
-                target.present(&Frame { shapes: &self.shapes, size_px: self.size_px, ppp: self.ppp, clear: self.theme.clear_color() });
+            presented = target.present(&Frame { shapes: &self.shapes, size_px: self.size_px, ppp: self.ppp, clear });
         }
         #[cfg(any(test, all(feature = "winit-host", feature = "_test-hooks")))]
         {
@@ -516,6 +523,23 @@ impl Dialog {
     // ---------------------------------------------------------------------------------------------
     // Accessors
     // ---------------------------------------------------------------------------------------------
+
+    /// The colour frames are cleared with (see [`Theme::translucent_clear`]).
+    fn clear_color(&self) -> crate::backends::draw::Color {
+        self.translucent.then(|| self.theme.translucent_clear()).flatten().unwrap_or_else(|| self.theme.clear_color())
+    }
+
+    /// Whether the theme has a translucent look (its window should get a behind-window material).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) fn wants_translucency(&self) -> bool {
+        self.theme.translucent_clear().is_some()
+    }
+
+    /// The window got a behind-window material (call before the first frame).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) fn set_translucent(&mut self, translucent: bool) {
+        self.translucent = translucent;
+    }
 
     pub(crate) fn title(&self) -> &str {
         &self.content.title

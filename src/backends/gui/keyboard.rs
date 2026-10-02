@@ -47,7 +47,7 @@ impl KeyboardState {
     /// The on-open step, after the measure pass: focus the default button, focus visible.
     pub(crate) fn on_open(&mut self, focus: &mut Option<usize>, out: &DialogUiOutput) {
         *focus = default_button(out);
-        self.focus_visible = true;
+        self.focus_visible = self.policy.focus_visibility != FocusVisibility::KeyboardNavOnly;
     }
 
     /// Wheel scrolling (positive `dy`: reveal content further down).
@@ -61,7 +61,7 @@ impl KeyboardState {
         match *ev {
             Event::WindowFocused(false) => self.space_down = None,
             Event::PointerButton { button: PointerButton::Primary, pressed: true, .. }
-                if self.policy.focus_visibility == FocusVisibility::KeyboardOnly =>
+                if self.policy.focus_visibility != FocusVisibility::Always =>
             {
                 self.focus_visible = false
             }
@@ -112,6 +112,11 @@ impl KeyboardState {
             Key::PageUp | Key::PageDown if p.scroll_keys => {
                 let page = PAGE_FRACTION * client_h.max(0.0);
                 self.scroll += if key == Key::PageDown { page } else { -page };
+            }
+            Key::Enter if !repeat && p.enter_activates_default => {
+                if let Some(b) = default_button(out) {
+                    return KeyAction::Activate(b);
+                }
             }
             Key::Enter if !repeat => {
                 let fallback = p.enter_falls_back_to_default && focus.is_none();
@@ -244,10 +249,11 @@ mod tests {
 
     #[test]
     fn open_focuses_default_and_shows_focus() {
-        for (policy, display) in [(UBUNTU, vec![0, 1, 2]), (FLUENT, vec![2, 1, 0])] {
+        // Ubuntu shows the focus visual on open, Fluent only after keyboard navigation.
+        for (policy, display, visible) in [(UBUNTU, vec![0, 1, 2], true), (FLUENT, vec![2, 1, 0], false)] {
             let mut r = Rig::new(policy, display);
             assert_eq!(r.focus, Some(2));
-            assert!(r.info().focus_visible);
+            assert_eq!(r.info().focus_visible, visible);
         }
     }
 
@@ -337,6 +343,8 @@ mod tests {
     #[test]
     fn focus_visible_modality_for_keyboard_only() {
         let mut r = Rig::new(FLUENT, vec![1, 0]);
+        assert!(!r.info().focus_visible, "hidden on open");
+        r.tap(Key::Tab);
         assert!(r.info().focus_visible);
         r.ev(Event::PointerButton { pos: Point::ZERO, button: PointerButton::Secondary, pressed: true });
         assert!(r.info().focus_visible, "only primary presses hide the focus visual");

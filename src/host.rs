@@ -24,8 +24,7 @@
 //! the repository is a complete host.
 //!
 //! The backend is chosen as for [`XDialogBuilder::run`](crate::XDialogBuilder::run), except that
-//! AppKit needs its own loop: on macOS `Auto` uses the `Ubuntu` look, and an explicit `AppKit`
-//! fails with `NoBackendAvailable`.
+//! AppKit needs its own loop: an explicit `AppKit` fails with `NoBackendAvailable`.
 //!
 //! Dialog functions work from any thread; the event-loop thread is xdialog's UI thread (see
 //! [Threads](crate#threads)). There, ask with [`show_message`](crate::show_message) and check
@@ -99,8 +98,7 @@ pub struct XDialogApp<A> {
 impl<A> XDialogApp<A> {
     pub(crate) fn new(app: A, requested: XDialogBackend, xtheme: XDialogTheme, waker: WakeFn) -> Result<Self, XDialogError> {
         let (backend, fallback) = match crate::backends::resolve(requested) {
-            // AppKit needs its own loop: `Auto` on macOS gets a drawn look instead.
-            Some((XDialogBackend::AppKit, _)) if requested == XDialogBackend::Auto => (XDialogBackend::Ubuntu, false),
+            // AppKit needs its own loop.
             Some((XDialogBackend::AppKit, _)) | None => return Err(XDialogError::NoBackendAvailable),
             Some(chosen) => chosen,
         };

@@ -125,7 +125,7 @@ fn images_blit_one_to_one() {
 }
 
 fn params<'a>(family: &'a Family, max_width: Option<f64>, line_height: Option<f64>) -> TextParams<'a> {
-    TextParams { family, size: 14.0, weight: Weight::REGULAR, optical_size: None, line_height, max_width, rtl: false }
+    TextParams { family, size: 14.0, weight: Weight::REGULAR, optical_size: None, line_height, max_width, rtl: false, center: false }
 }
 
 #[test]

@@ -30,6 +30,7 @@ use tokens::*;
 pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: FocusVisibility::Always,
                                                              arrows: ArrowNav::Wrap,
                                                              enter_falls_back_to_default: false,
+                                                             enter_activates_default: false,
                                                              space: SpaceKey::ActivateOnPress,
                                                              scroll_keys: false };
 

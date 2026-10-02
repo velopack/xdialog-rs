@@ -73,7 +73,7 @@ impl OffscreenDialog {
     /// Runs the measure pass, the keyboard on-open step and the open frame at `t = 0` (scripts
     /// should use `t > 0`). Panics if this platform's drawing backend is unavailable.
     pub fn new(backend: XDialogBackend, look: TestAppearance, ppp: f64, kind: DialogKind, options: XDialogOptions) -> Self {
-        assert!(matches!(backend, XDialogBackend::Fluent | XDialogBackend::Ubuntu), "{backend:?} is not a drawn backend");
+        assert!(matches!(backend, XDialogBackend::Fluent | XDialogBackend::Ubuntu | XDialogBackend::MacOS), "{backend:?} is not a drawn backend");
         assert!(ppp > 0.0 && ppp <= 8.0, "invalid ppp {ppp}");
         let text = Text::shared().unwrap_or_else(|e| panic!("xdialog: no text system: {e}"));
         let params = DialogParams { id: 0,

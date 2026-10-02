@@ -84,7 +84,7 @@ impl Inbox {
     }
 }
 
-/// The installed request handler of builder mode for the drawn (Fluent, Ubuntu) and AppKit backends (and "no
+/// The installed request handler of builder mode for the drawn (Fluent, Ubuntu, MacOS) and AppKit backends (and "no
 /// backend"), and of `into_host_app`; Win32 TaskDialog installs `TaskDialogManager` itself. Once
 /// the receiver is gone (host app exited or dropped, builder loop ended) requests are answered with
 /// `NoBackendAvailable`.
