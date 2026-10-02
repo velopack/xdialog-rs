@@ -1,8 +1,8 @@
 //! Offscreen tests for the drawn themes, through this platform's drawing backend
 //! (`xdialog::__test::RENDERER`: `d2d` on Windows, `cg` on macOS, `soft` elsewhere).
 //!
-//! - Determinism: every gallery variant (`examples/gallery/{ubuntu,fluent,macos}.rs`) rendered twice in
-//!   fresh dialogs gives byte-identical frames.
+//! - Determinism: every gallery variant (`examples/gallery/{ubuntu,fluent,macos}.rs`, both macOS
+//!   styles) rendered twice in fresh dialogs gives byte-identical frames.
 //! - Harness behaviour: hover/press/click/keyboard go through the real `Dialog` path; HiDPI size;
 //!   progress and `set_text`.
 //! - Accessibility: the AccessKit tree of a message and a progress dialog (snapshots).
@@ -30,7 +30,7 @@ mod macos;
 use std::path::{Path, PathBuf};
 
 pub use model::*;
-pub use xdialog::__test::{Event, Key, OffscreenDialog, Point, TestAppearance, TestKind, TestProgress, RENDERER};
+pub use xdialog::__test::{Event, Key, OffscreenDialog, Point, TestAppearance, TestKind, TestMacStyle, TestProgress, RENDERER};
 pub use xdialog::{XDialogBackend, XDialogIcon, XDialogOptions, XDialogResult};
 
 const THRESHOLD: u8 = 10;
@@ -61,6 +61,78 @@ fn fluent_is_deterministic() {
 #[test]
 fn macos_is_deterministic() {
     assert_deterministic(XDialogBackend::MacOS, &macos::variants());
+}
+
+#[test]
+fn macos_tahoe_is_deterministic() {
+    assert_deterministic(XDialogBackend::MacOS, &macos::tahoe_variants());
+}
+
+/// The Tahoe layout against the CFUserNotification captures (macOS 26.6, points): buttons 28
+/// tall and 16 from the sides and bottom, side by side 110 wide 8 apart (default on the right),
+/// stacked 228 wide every 34 (default on top); the icon at (20, 20), or centred with a heading
+/// and no body. With the system font (`cg`) the window heights match the captures too.
+#[test]
+fn macos_tahoe_layout() {
+    let open = |heading: &str, body: &str, icon: XDialogIcon, buttons: &[&str]| {
+        OffscreenDialog::with_mac_style(XDialogBackend::MacOS,
+                                        TestMacStyle::Tahoe,
+                                        look(true),
+                                        1.0,
+                                        TestKind::Message,
+                                        opts("x", heading, body, icon, buttons))
+    };
+    let close = |a: f64, b: f64| (a - b).abs() < 0.01;
+    // (heading, body, icon, buttons, captured window height)
+    let cases: [(&str, &str, XDialogIcon, &[&str], u32); 6] =
+        [("Are you sure you want to quit Karabiner-Elements?",
+          "The changed key will be restored after Karabiner-Elements is quit.",
+          XDialogIcon::Warning,
+          &["Cancel", "Quit"],
+          234),
+         ("Update complete", "Your application has been updated.", XDialogIcon::Warning, &["OK"], 202),
+         ("Install update?", "A new version is available.", XDialogIcon::Warning, &["Remind Me Later", "Install and Relaunch"], 236),
+         ("Do you want to save the changes you made?",
+          "Your changes will be lost if you don't save them.",
+          XDialogIcon::Information,
+          &["Cancel", "Don't Save", "Save"],
+          302),
+         ("Update failed",
+          "Velopack is about to apply an update to this application. The update package has been downloaded and verified, and the \
+           application will restart automatically once the installation has finished. Any unsaved work in open windows may be lost if \
+           you continue.",
+          XDialogIcon::Information,
+          &["Cancel", "OK"],
+          330),
+         ("Hello from maccf-direct!", "", XDialogIcon::Error, &["OK"], 176)];
+    for (heading, body, icon, buttons, height) in cases {
+        let d = open(heading, body, icon, buttons);
+        let (w, h) = d.size_px();
+        assert_eq!(w, 260, "{heading}");
+        if RENDERER == "cg" {
+            assert!(h.abs_diff(height) <= 1, "{heading}: height {h}, captured {height}");
+        }
+        let r = d.button_rects();
+        let bottom = r.iter().map(|b| b[1] + b[3]).fold(0.0, f64::max);
+        assert!(close(bottom, h as f64 - 16.0), "{heading}: {r:?} in {h}");
+        assert!(r.iter().all(|b| close(b[3], 28.0)), "{heading}: {r:?}");
+        match buttons.len() {
+            1 => assert!(close(r[0][0], 16.0) && close(r[0][2], 228.0), "{heading}: {r:?}"),
+            2 if buttons[0].len() < 10 => {
+                assert!(close(r[0][0], 16.0) && close(r[1][0], 134.0), "{heading}: {r:?}");
+                assert!(close(r[0][2], 110.0) && close(r[1][2], 110.0) && close(r[0][1], r[1][1]), "{heading}: {r:?}");
+            }
+            n => {
+                // Stacked, the default (last API index) on top, 34 apart.
+                for i in 0..n {
+                    assert!(close(r[i][0], 16.0) && close(r[i][2], 228.0), "{heading}: {r:?}");
+                }
+                for i in 1..n {
+                    assert!(close(r[i - 1][1] - r[i][1], 34.0), "{heading}: {r:?}");
+                }
+            }
+        }
+    }
 }
 
 fn two_buttons() -> XDialogOptions {

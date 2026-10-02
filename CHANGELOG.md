@@ -13,7 +13,9 @@ look of 3.x: same layout, Ubuntu font, colours, metrics, animations and keyboard
 
 - **macOS now shows the drawn `MacOS` look by default** instead of AppKit: the alert of macOS 11
   (Big Sur) to 15 (Sequoia), with the system font, the translucent alert material, the system
-  accent colour and the system's alert icons. Use
+  accent colour and the system's alert icons. On macOS 26 (Tahoe) and later it draws Tahoe's
+  alert instead: left-aligned, capsule buttons, rounder corners and the Liquid Glass material.
+  Both styles show an indeterminate progress bar as a capsule sliding side to side. Use
   `XDialogBuilder::new().with_backend(XDialogBackend::AppKit)` for the previous behaviour.
 
 - **Windows 10 and later now show the Fluent look by default** instead of Win32 TaskDialog

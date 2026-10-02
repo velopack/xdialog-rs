@@ -8,12 +8,12 @@ use crate::backends::draw::{Color, LineCap, Point, Rect, Size, Vec2};
 use crate::backends::gui::anim::{Easing, Transition};
 use crate::backends::gui::text::TextBlock;
 use crate::backends::gui::theme::{button_id, ButtonInteraction, DialogView, ProgressView};
-use crate::backends::gui::ui::{caps_centered, Id, Ui};
+use crate::backends::gui::ui::{caps_centered, indeterminate_capsule, Id, Ui, CAPSULE_CYCLE, CAPSULE_STRETCH};
 use crate::model::XDialogIcon;
 
-/// Push button height and corner radius (a Sequoia alert's large push buttons).
+/// Push button height (both styles) and Sequoia's corner radius (Tahoe's buttons are capsules).
 pub(crate) const BUTTON_H: f64 = 28.0;
-const CORNER: f64 = 6.0;
+pub(crate) const CORNER: f64 = 6.0;
 /// Fill change on pointer-over / pointer-out (pressing is instant).
 const HOVER_FADE: Transition = Transition::linear(0.12);
 /// Focus ring: width and gap outside the button.
@@ -23,16 +23,13 @@ const RING_GAP: f64 = 0.5;
 pub(crate) const PROGRESS_H: f64 = 6.0;
 /// Determinate value changes.
 const PROGRESS_VALUE: Transition = Transition::new(0.2, Easing::CubicBezier(0.25, 0.1, 0.25, 1.0));
-/// Indeterminate: one sweep of the highlight across the track, and its width (of the track).
-const INDETERMINATE_LOOP: f64 = 1.4;
-const INDETERMINATE_W: f64 = 0.3;
 
 // ------------------------------------------------------------------------------------------------
 // Push button
 // ------------------------------------------------------------------------------------------------
 
-/// A push button in `rect`: the default button (accent gradient, white label) or a standard one
-/// (translucent fill). Under the pointer the fill fades to its hover shade (no hover while another
+/// A push button in `rect` with the style's corners (`tk.button_radius`): the default button (accent gradient, flat on
+/// Tahoe; white label) or a standard one (translucent fill). Under the pointer the fill fades to its hover shade (no hover while another
 /// button is held); the pressed look shows at once while the pointer is held inside, or Space is
 /// held. The focus ring shows only with keyboard focus visibility.
 pub(crate) fn button(ui: &mut Ui<'_>,
@@ -44,6 +41,7 @@ pub(crate) fn button(ui: &mut Ui<'_>,
                      tk: &MacTokens)
                      -> ButtonInteraction {
     let st = ButtonInteraction::interact(ui, rect, index, view);
+    let radius = tk.button_radius;
     let pressed = st.pointer_down && st.contains_pointer || st.key_pressed;
     let fade = if pressed { Transition::INSTANT } else { HOVER_FADE };
     let id = button_id(index).with("macos.fill");
@@ -57,7 +55,11 @@ pub(crate) fn button(ui: &mut Ui<'_>,
         };
         let top = ui.animate(id.with("top"), top, fade);
         let bottom = ui.animate(id.with("bottom"), bottom, fade);
-        ui.fill_rect_gradient(rect, CORNER, top, bottom);
+        if top == bottom {
+            ui.fill_rect(rect, radius, top);
+        } else {
+            ui.fill_rect_gradient(rect, radius, top, bottom);
+        }
         tk.default_text
     } else {
         let fill = if pressed {
@@ -68,12 +70,12 @@ pub(crate) fn button(ui: &mut Ui<'_>,
             tk.button
         };
         let fill = ui.animate(id, fill, fade);
-        ui.fill_rect(rect, CORNER, fill);
+        ui.fill_rect(rect, radius, fill);
         tk.text
     };
     if st.focus_visible {
         let d = RING_GAP + RING_W / 2.0;
-        ui.stroke_rect(rect.inflate(d, d), CORNER + d, RING_W, tk.focus_ring);
+        ui.stroke_rect(rect.inflate(d, d), radius + d, RING_W, tk.focus_ring);
     }
     ui.text(label, caps_centered(rect, label), text);
     st
@@ -84,7 +86,8 @@ pub(crate) fn button(ui: &mut Ui<'_>,
 // ------------------------------------------------------------------------------------------------
 
 /// NSProgressIndicator (bar style) in `r` (`PROGRESS_H` tall): a capsule track with the accent
-/// capsule growing from the left; indeterminate, an accent highlight sweeping left to right.
+/// capsule growing from the left; indeterminate, the shared "stretchy capsule" sweeping side to
+/// side (`ui::indeterminate_capsule`, the Ubuntu theme's motion) in the accent.
 pub(crate) fn progress(ui: &mut Ui<'_>, r: Rect, progress: ProgressView, tk: &MacTokens) {
     let id = Id::new("macos.progress");
     let radius = r.height() / 2.0;
@@ -98,16 +101,12 @@ pub(crate) fn progress(ui: &mut Ui<'_>, r: Rect, progress: ProgressView, tk: &Ma
                 ui.fill_rect_unsnapped(Rect::from_origin_size(r.origin(), Size::new(w, r.height())), radius, tk.progress);
             }
         }
-        ProgressView::Indeterminate { since, .. } => {
+        ProgressView::Indeterminate { restarted_at, .. } => {
             ui.animate(id, 0.0f32, Transition::INSTANT);
             ui.request_smooth_frame();
-            let t = ((ui.time() - since) / INDETERMINATE_LOOP).rem_euclid(1.0);
-            let w = r.width() * INDETERMINATE_W;
-            // From fully left of the track to fully right of it, eased at both ends.
-            let x = -w + (r.width() + w) * Easing::CubicBezier(0.42, 0.0, 0.58, 1.0).apply(t as f32) as f64;
-            let (x0, x1) = (x.max(0.0), (x + w).min(r.width()));
-            if x1 - x0 > 0.5 {
-                ui.fill_rect_unsnapped(Rect::new(r.x0 + x0, r.y0, r.x0 + x1, r.y1), radius, tk.progress);
+            let elapsed = (ui.time() - restarted_at).max(0.0);
+            if let Some(c) = indeterminate_capsule(r, elapsed, CAPSULE_CYCLE, CAPSULE_STRETCH) {
+                ui.fill_rect_unsnapped(c, radius, tk.progress);
             }
         }
     }

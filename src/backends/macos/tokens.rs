@@ -1,19 +1,24 @@
-//! macOS (Big Sur to Sequoia alert) colour tokens, light and dark.
+//! macOS alert colour tokens, light and dark, for both styles ([`MacStyle`]).
 //!
-//! Colours were sampled from Sequoia alerts (CFUserNotification / NSAlert) and match AppKit's
-//! semantic colours where one exists (`labelColor`, `controlAccentColor`, `systemYellow`, ...).
+//! Colours were sampled from Sequoia and Tahoe alerts (CFUserNotification / NSAlert) and match
+//! AppKit's semantic colours where one exists (`labelColor`, `controlAccentColor`, `systemYellow`,
+//! ...). Tahoe captures are Display P3: the values here are converted to sRGB (greys are the same
+//! in both; the default button's P3 #3478F6 is sRGB #007AFF).
 //! The alert window is vibrant: on macOS [`MacTokens::bg`] is only the fallback the frame is
 //! cleared with when the behind-window material is unavailable. Everything drawn on top of it is
 //! translucent, as AppKit's control fills are, so it reads the same over the material.
 //!
-//! Fonts ([`FONTS`]): the system UI font (SF Pro) on macOS: 13 pt bold title, 11 pt body, 13 pt
-//! button labels. Elsewhere (renders of this look on Windows and Linux) SF Pro when installed,
+//! Fonts ([`FONTS`]): the system UI font (SF Pro) on macOS: 13 pt bold title, 13 pt button
+//! labels, and an 11 pt (Sequoia) or 13 pt (Tahoe) body. Elsewhere (renders of this look on Windows and Linux) SF Pro when installed,
 //! else Segoe UI, else the platform UI font.
 
 use crate::backends::draw::color::{argb, rgb};
 use crate::backends::draw::{Color, Weight};
-use crate::backends::gui::appearance::Appearance;
+use crate::backends::gui::appearance::{Accent, Appearance};
 use crate::backends::gui::text::ThemeFonts;
+
+use super::widgets::{BUTTON_H, CORNER};
+use super::MacStyle;
 
 /// `systemBlue` (the default `controlAccentColor`), light and dark.
 const BLUE_LIGHT: u32 = 0x007AFF;
@@ -25,7 +30,8 @@ pub(crate) struct MacTokens {
     pub bg: Color,
     /// `labelColor`: title, body and standard button labels.
     pub text: Color,
-    /// Default (accent) push button: vertical gradient, under the pointer, and while pressed.
+    /// Default (accent) push button: vertical gradient (flat on Tahoe), under the pointer, and
+    /// while pressed.
     pub default_top: Color,
     pub default_bottom: Color,
     pub default_hover_top: Color,
@@ -34,6 +40,8 @@ pub(crate) struct MacTokens {
     pub default_pressed_bottom: Color,
     /// Label on the accent fill (`alternateSelectedControlTextColor`).
     pub default_text: Color,
+    /// Push button corner radius: 6 on Sequoia, a capsule (half the 28 height) on Tahoe.
+    pub button_radius: f64,
     /// Standard push button fill (translucent), under the pointer, and while pressed.
     pub button: Color,
     pub button_hover: Color,
@@ -61,7 +69,15 @@ pub(crate) struct MacTokens {
 }
 
 impl MacTokens {
-    pub(crate) fn new(appearance: &Appearance) -> Self {
+    pub(crate) fn new(style: MacStyle, appearance: &Appearance) -> Self {
+        match style {
+            MacStyle::Legacy => Self::legacy(appearance),
+            MacStyle::Tahoe => Self::tahoe(appearance),
+        }
+    }
+
+    /// Big Sur to Sequoia.
+    fn legacy(appearance: &Appearance) -> Self {
         let dark = appearance.dark;
         let accent = appearance.accent.map_or(rgb(if dark { BLUE_DARK } else { BLUE_LIGHT }), |a| a.base);
         let t = |light: u32, dark_v: u32| argb(if dark { dark_v } else { light });
@@ -85,6 +101,7 @@ impl MacTokens {
                     default_pressed_top: top.lerp_to_gamma(black, pressed),
                     default_pressed_bottom: bottom.lerp_to_gamma(black, pressed),
                     default_text: white,
+                    button_radius: CORNER,
                     button: t(0x1F000000, 0x47FFFFFF),
                     button_hover: t(0x2B000000, 0x59FFFFFF),
                     button_pressed: t(0x38000000, 0x6BFFFFFF),
@@ -104,19 +121,48 @@ impl MacTokens {
                     note_bottom: accent,
                     icon_glyph: white }
     }
+
+    /// Tahoe (sampled on macOS 26.6): the default button is the accent, flat, in both modes
+    /// (sRGB #007AFF with the blue accent: `controlAccentColor` resolves to the light shade in
+    /// dark mode too); standard buttons a flat translucent fill (white 7.5 % dark, black 7.3 %
+    /// light: #212121 over #0F0F0F, #A6A6A6 over #B3B3B3); text `labelColor` at 85 %. The glass
+    /// is flat but shows the backdrop (#0F0F0F / #B3B3B3 over a dark window): `bg` is an opaque
+    /// stand-in over an average desktop.
+    fn tahoe(appearance: &Appearance) -> Self {
+        let dark = appearance.dark;
+        let accent = appearance.accent.map_or(rgb(BLUE_LIGHT), |a| a.base);
+        let t = |light: u32, dark_v: u32| argb(if dark { dark_v } else { light });
+        let (black, white) = (Color::BLACK, Color::WHITE);
+        let hover = if dark { accent.lerp_to_gamma(white, 0.1) } else { accent.lerp_to_gamma(black, 0.08) };
+        let pressed = accent.lerp_to_gamma(black, if dark { 0.25 } else { 0.18 });
+        // Text, focus ring, scroller and fallback icons as on Sequoia (with this accent).
+        let base = Self::legacy(&Appearance { dark, accent: Some(Accent { base: accent, win_palette: None }) });
+        MacTokens { bg: t(0xFFEFEFEF, 0xFF1C1C1C),
+                    default_top: accent,
+                    default_bottom: accent,
+                    default_hover_top: hover,
+                    default_hover_bottom: hover,
+                    default_pressed_top: pressed,
+                    default_pressed_bottom: pressed,
+                    button_radius: BUTTON_H / 2.0,
+                    button: t(0x13000000, 0x13FFFFFF),
+                    button_hover: t(0x1F000000, 0x24FFFFFF),
+                    button_pressed: t(0x2E000000, 0x38FFFFFF),
+                    track: t(0x14000000, 0x1FFFFFFF),
+                    ..base }
+    }
 }
 
 // ------------------------------------------------------------------------------------------------
 // Fonts
 // ------------------------------------------------------------------------------------------------
 
-/// Title and button label size, body size (NSAlert: bold system font 13 pt, informative text
-/// small system font 11 pt).
+/// Title and button label size (NSAlert: bold system font 13 pt). The body size is per style
+/// (`Metrics::body_size`): small system font 11 pt on Sequoia, 13 pt on Tahoe.
 pub(crate) const TITLE_SIZE: f64 = 13.0;
 pub(crate) const BUTTON_SIZE: f64 = 13.0;
-pub(crate) const BODY_SIZE: f64 = 11.0;
 
-/// Line pitch: 16 pt for 13 pt text, 14 pt for 11 pt text (measured on Sequoia).
+/// Line pitch: 16 pt for 13 pt text, 14 pt for 11 pt text (measured on Sequoia and Tahoe).
 pub(crate) fn line_height(size: f64) -> f64 {
     size + 3.0
 }
@@ -145,11 +191,30 @@ mod tests {
             let d = [c.r().abs_diff(w.r()), c.g().abs_diff(w.g()), c.b().abs_diff(w.b())];
             assert!(d.iter().all(|&x| x <= 12), "{c:?} vs {w:?}");
         };
-        let light = MacTokens::new(&Appearance { dark: false, accent: None });
+        let light = MacTokens::new(MacStyle::Legacy, &Appearance { dark: false, accent: None });
         close(light.default_top, 0x2391FF);
         close(light.default_bottom, 0x007AFF);
-        let dark = MacTokens::new(&Appearance { dark: true, accent: None });
+        let dark = MacTokens::new(MacStyle::Legacy, &Appearance { dark: true, accent: None });
         close(dark.default_top, 0x2179E2);
         close(dark.default_bottom, 0x1D6BC9);
+    }
+
+    /// Tahoe's default button is flat sRGB #007AFF in both modes; standard buttons are 7-8 %
+    /// translucent fills (sampled over #0F0F0F / #B3B3B3); a custom accent tints the default.
+    #[test]
+    fn default_button_matches_tahoe() {
+        for dark in [false, true] {
+            let tk = MacTokens::new(MacStyle::Tahoe, &Appearance { dark, accent: None });
+            assert_eq!((tk.default_top, tk.default_bottom), (rgb(0x007AFF), rgb(0x007AFF)));
+            assert_eq!(tk.default_text, Color::WHITE);
+            let (over, want) = if dark { (0x0F, 0x21) } else { (0xB3, 0xA6) };
+            let ink = if dark { 255.0 } else { 0.0 };
+            let a = tk.button.a() as f64 / 255.0;
+            let got = over as f64 * (1.0 - a) + ink * a;
+            assert!((got - want as f64).abs() <= 1.5, "dark {dark}: {got} vs {want}");
+        }
+        let purple = Accent { base: rgb(0xA550A7), win_palette: None };
+        let tk = MacTokens::new(MacStyle::Tahoe, &Appearance { dark: true, accent: Some(purple) });
+        assert_eq!(tk.default_top, rgb(0xA550A7));
     }
 }

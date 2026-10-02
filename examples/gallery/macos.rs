@@ -1,5 +1,6 @@
 //! macOS theme gallery variants, light and dark, with the default (blue) accent plus a few
-//! purple ones.
+//! purple ones: [`variants`] in the Sequoia style (`macos/`), [`tahoe_variants`] in the Tahoe
+//! style (`macos_tahoe/`).
 //!
 //! Buttons are in API order left to right (the last API index is the default, blue, button);
 //! three or more, or labels too long for half the row, stack with the default on top. Stills are
@@ -99,7 +100,9 @@ pub fn variants() -> Vec<Variant> {
         v.push(prog("progress_050", "Downloading package… 50%").at(0.2, Action::Progress(TestProgress::Value(0.5))).capture(1.0, ""));
         v.push(prog("progress_indeterminate", "Preparing…").at(0.2, Action::Progress(TestProgress::Indeterminate))
                                                            .capture(1.0, "")
-                                                           .capture(1.5, "_t500ms"));
+                                                           .capture(1.5, "_t500ms")
+                                                           .capture(2.0, "_t1000ms")
+                                                           .capture(2.6, "_t1600ms"));
         v.push(Variant::progress(format!("progress_nobuttons_{th}"), opts("x", "Copying files", "", XDialogIcon::None, &[]), look(dark))
                .at(0.2, Action::Progress(TestProgress::Value(0.3)))
                .capture(1.0, ""));
@@ -126,5 +129,47 @@ pub fn variants() -> Vec<Variant> {
                                  &["Done", "Move to Trash"]),
                             look(true)).ppp(2.0)
                                        .capture(1.0, ""));
+    v
+}
+
+/// The macOS 26 (Tahoe) style: the alerts captured from CFUserNotification on Tahoe for
+/// reference (`ref_<name>_<light|dark>`, at 2x like the captures: 520 px wide), then every
+/// Sequoia variant above in the Tahoe style (none of them golden).
+///
+/// `ref_plain_three` shows the note icon where CFUserNotification shows the generic app icon (the
+/// same 64 pt box).
+pub fn tahoe_variants() -> Vec<Variant> {
+    let refs: [(&str, &str, &str, XDialogIcon, &[&str]); 7] =
+        [("caution_ok_cancel",
+          "Are you sure you want to quit Karabiner-Elements?",
+          "The changed key will be restored after Karabiner-Elements is quit.",
+          XDialogIcon::Warning,
+          &["Cancel", "Quit"]),
+         ("caution_ok", "Update complete", "Your application has been updated.", XDialogIcon::Warning, &["OK"]),
+         ("caution_long_buttons",
+          "Install update?",
+          "A new version is available.",
+          XDialogIcon::Warning,
+          &["Remind Me Later", "Install and Relaunch"]),
+         ("caution_multiline",
+          "My App",
+          "This dialog was shown without any event loop.\nPick an option:",
+          XDialogIcon::Warning,
+          &["Cancel", "Discard", "Save"]),
+         ("plain_three",
+          "Do you want to save the changes you made?",
+          "Your changes will be lost if you don't save them.",
+          XDialogIcon::Information,
+          &["Cancel", "Don't Save", "Save"]),
+         ("note_long", "Update failed", LONG, XDialogIcon::Information, &["Cancel", "OK"]),
+         ("stop_title_only", "Hello from maccf-direct!", "", XDialogIcon::Error, &["OK"])];
+    let mut v = Vec::new();
+    for dark in [false, true] {
+        for (name, heading, body, icon, buttons) in &refs {
+            let o = opts("x", heading, body, icon.clone(), buttons);
+            v.push(Variant::message(format!("ref_{name}_{}", theme_word(dark)), o, look(dark)).ppp(2.0).capture(1.0, "").tahoe());
+        }
+    }
+    v.extend(variants().into_iter().map(|v| Variant { golden: false, ..v }.tahoe()));
     v
 }

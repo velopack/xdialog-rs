@@ -17,9 +17,9 @@ update framework.
 
 ## Features
 - Cross-platform: works on Windows, macOS, and Linux
-- A WinUI 3 (Fluent) look on Windows 10+, the macOS alert look (Big Sur to Sequoia) on macOS,
-  the classic xdialog look on Linux, native Win32 TaskDialog and AppKit; the backend is chosen
-  at runtime
+- A WinUI 3 (Fluent) look on Windows 10+, the macOS alert look on macOS (the centred alert of
+  Big Sur to Sequoia, or Tahoe's left-aligned Liquid Glass alert on macOS 26+), the classic
+  xdialog look on Linux, native Win32 TaskDialog and AppKit; the backend is chosen at runtime
 - Drawn with the platform's renderer and fonts on Windows and macOS; pure Rust software
   rendering on Linux (no GPU, no C/C++ dependencies, static musl compatible)
 - Embedded font (Ubuntu) on Linux only - no system font dependencies there; Windows and macOS

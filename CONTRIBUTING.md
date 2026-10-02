@@ -19,12 +19,15 @@ core, driven by design tokens. On macOS the `MacOS` look's window is transparent
   system fonts match `tests/visual_references/offscreen/<renderer>/FONT_ID`).
 - `cargo run --release --example gallery --features _test-hooks -- --theme all` renders every
   dialog variant of every look to `target/gallery/<renderer>/<theme>/` plus a contact sheet
-  (`--out <dir>`, `--filter <substr>`).
+  (`--out <dir>`, `--filter <substr>`). `--theme macos` renders both macOS styles, Sequoia into
+  `macos/` and Tahoe into `macos_tahoe/`; `--theme macos_legacy` or `--theme macos_tahoe` renders
+  one of them.
 - `XDIALOG_VISUAL_SEED=1 cargo test --test visual_regression` re-seeds the screenshot references
   of `tests/visual_regression.rs` (Win32 TaskDialog on Windows, AppKit on macOS; it takes focus,
   `XDIALOG_VISUAL_TEST=1` compares).
 - Hidden environment variables (testing only): `XDIALOG_BACKEND=auto|win32|fluent|ubuntu|macos|appkit`
   overrides the backend choice; `XDIALOG_TEST_NO_ACTIVATE`, and in debug or `_test-hooks` builds
-  `XDIALOG_TEST_POS`, `XDIALOG_TEST_ACCENT`, `XDIALOG_TEST_FAIL_DRAWN` (the drawn runtime fails to
-  show any dialog) and `XDIALOG_TEST_STUB_TASKDIALOG` (TaskDialogs answer at once with their
-  default button, no window); `tests/fallback.rs` uses the last two.
+  `XDIALOG_TEST_POS`, `XDIALOG_TEST_ACCENT`, `XDIALOG_TEST_MAC_STYLE=legacy|tahoe` (the drawn
+  macOS look's style, otherwise chosen by the running macOS version), `XDIALOG_TEST_FAIL_DRAWN`
+  (the drawn runtime fails to show any dialog) and `XDIALOG_TEST_STUB_TASKDIALOG` (TaskDialogs
+  answer at once with their default button, no window); `tests/fallback.rs` uses the last two.

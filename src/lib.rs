@@ -36,6 +36,7 @@ pub mod __test {
     pub use crate::backends::gui::input::{Event, Key, PointerButton};
     pub use crate::backends::gui::offscreen::{OffscreenDialog, TestAppearance, TestProgress};
     pub use crate::backends::gui::theme::DialogKind as TestKind;
+    pub use crate::backends::macos::MacStyle as TestMacStyle;
 }
 
 mod icon;

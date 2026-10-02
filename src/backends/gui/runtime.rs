@@ -419,7 +419,7 @@ impl Runtime {
         let inbox = self.inbox.clone();
         let a11y = A11y::new(el, &window, Box::new(move || inbox.wake()));
         #[cfg(target_os = "macos")]
-        let translucent = translucent && super::platform_mac::add_material(&window);
+        let translucent = translucent && super::platform_mac::add_material(&window, dialog.window_material());
         #[cfg(target_os = "macos")]
         let surface = if translucent { WindowSurface::translucent(&window, &text) } else { WindowSurface::new(&window, &text) };
         #[cfg(not(target_os = "macos"))]
