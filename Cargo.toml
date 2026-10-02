@@ -53,7 +53,7 @@ vello_cpu = { version = "0.2", default-features = false, features = ["std", "tex
 # `Tint` for vello_cpu's `set_tint` (vello_cpu does not re-export it).
 vello_common = { version = "0.2", default-features = false }
 cosmic-text = { version = "0.19", default-features = false, features = ["std", "peniko"] }
-skrifa = { version = "0.44.0", default-features = false, features = ["std"] }
+skrifa = { version = "0.47.0", default-features = false, features = ["std"] }
 sys-locale = "0.3"
 
 # Linux: the XDG desktop portal (appearance).
