@@ -62,6 +62,11 @@ pub(crate) const fn test_env_enabled() -> bool {
     cfg!(any(debug_assertions, feature = "_test-hooks"))
 }
 
+/// Whether the test-only switch `name` is set (non-empty, not `0`) and test env vars are honoured.
+pub(crate) fn test_flag(name: &str) -> bool {
+    test_env_enabled() && std::env::var_os(name).is_some_and(|v| !v.is_empty() && v != "0")
+}
+
 /// Apply `XDIALOG_TEST_ACCENT=RRGGBB|#RRGGBB|none` (read through `var`).
 fn apply_test_env(a: &mut Appearance, var: impl Fn(&str) -> Option<String>) {
     let Some(accent) = var("XDIALOG_TEST_ACCENT") else { return };
