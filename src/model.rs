@@ -30,7 +30,9 @@ pub enum XDialogBackend {
     Fluent,
     /// The classic xdialog Linux look (Ubuntu font), drawn by xdialog.
     Ubuntu,
-    /// Native AppKit (macOS only; not available in host mode, where `Auto` on macOS uses `Ubuntu`).
+    /// The macOS alert look (Big Sur to Sequoia), drawn by xdialog.
+    MacOS,
+    /// Native AppKit (macOS only; not available in host mode).
     AppKit,
 }
 
@@ -46,7 +48,7 @@ pub enum XDialogIcon {
     Warning,
     /// Information icon
     Information,
-    /// The image of [`XDialogOptions::icon_source`] (Fluent and Ubuntu; the others show no icon).
+    /// The image of [`XDialogOptions::icon_source`] (the drawn backends; the others show no icon).
     /// Without an icon source (or if it can't be loaded) the dialog shows no icon.
     Custom,
 }
@@ -82,7 +84,7 @@ pub struct XDialogOptions {
     pub message: String,
     /// The icon to display in the dialog, or None for no icon.
     pub icon: XDialogIcon,
-    /// An `.ico`, `.png` or `.icns` image. With the drawn backends (Fluent, Ubuntu) it is the
+    /// An `.ico`, `.png` or `.icns` image. With the drawn backends (Fluent, Ubuntu, MacOS) it is the
     /// window / taskbar icon where the platform has one (Windows, X11; not Wayland or macOS), and
     /// the icon shown in the dialog with [`XDialogIcon::Custom`]. The other backends ignore it. An
     /// image that can't be read or decoded is logged and ignored.

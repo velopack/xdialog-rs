@@ -2,20 +2,21 @@
 //!
 //! ```text
 //! cargo run --release --example gallery --features _test-hooks -- \
-//!     [--theme ubuntu|fluent|all] [--out <dir>] [--filter <substr>]
+//!     [--theme ubuntu|fluent|macos|all] [--out <dir>] [--filter <substr>]
 //! ```
 //!
 //! `<out>` defaults to `target/gallery/<renderer>` (`soft`, `d2d` or `cg`).
 //!
-//! Renders every variant of `ubuntu.rs` / `fluent.rs` with the deterministic offscreen renderer
+//! Renders every variant of `ubuntu.rs` / `fluent.rs` / `macos.rs` with the deterministic offscreen renderer
 //! (injected clock, pointer, keyboard focus and appearance, light and dark) through this
 //! platform's drawing backend and writes `<out>/<theme>/<variant><suffix>.png` per capture plus
 //! `<out>/<theme>/sheet.png`, a contact sheet of the stills (captures without a suffix). Review
 //! the images by eye.
 //!
-//! The driver is `main.rs` + `model.rs`; the variant lists are `ubuntu.rs` and `fluent.rs`.
+//! The driver is `main.rs` + `model.rs`; the variant lists are `ubuntu.rs`, `fluent.rs` and `macos.rs`.
 
 mod fluent;
+mod macos;
 mod ubuntu;
 mod model;
 
@@ -31,7 +32,7 @@ pub use xdialog::{XDialogBackend, XDialogIcon, XDialogOptions};
 type Theme = (XDialogBackend, fn() -> Vec<Variant>);
 
 /// The gallery themes and their variant lists.
-const THEMES: [Theme; 2] = [(XDialogBackend::Ubuntu, ubuntu::variants), (XDialogBackend::Fluent, fluent::variants)];
+const THEMES: [Theme; 3] = [(XDialogBackend::Ubuntu, ubuntu::variants), (XDialogBackend::Fluent, fluent::variants), (XDialogBackend::MacOS, macos::variants)];
 
 struct Args {
     themes: Vec<Theme>,

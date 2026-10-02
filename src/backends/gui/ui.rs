@@ -212,6 +212,16 @@ impl<'a> Ui<'a> {
         self.shapes.push(Shape::Rect { rect, radius, color, snap: false });
     }
 
+    /// A (rounded) rect filled with a vertical gradient from `top` to `bottom`, edges snapped.
+    pub(crate) fn fill_rect_gradient(&mut self, rect: Rect, radius: f64, top: Color, bottom: Color) {
+        self.shapes.push(Shape::Gradient { rect, radius, top, bottom });
+    }
+
+    /// A filled closed polygon.
+    pub(crate) fn polygon(&mut self, points: &[Point], color: Color) {
+        self.shapes.push(Shape::Polygon { points: points.into(), color });
+    }
+
     /// A stroke of `width` centred on the (rounded) rect's edge.
     pub(crate) fn stroke_rect(&mut self, rect: Rect, radius: f64, width: f64, color: Color) {
         self.shapes.push(Shape::Stroke { rect, radius, width, color });

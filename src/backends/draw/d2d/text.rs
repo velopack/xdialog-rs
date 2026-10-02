@@ -79,6 +79,7 @@ struct FormatKey {
     opsz: Option<u64>,
     line_height: Option<u64>,
     rtl: bool,
+    center: bool,
     wrap: bool,
 }
 
@@ -170,6 +171,7 @@ impl Text {
                               opsz: opsz.map(f64::to_bits),
                               line_height: p.line_height.map(f64::to_bits),
                               rtl: p.rtl,
+                              center: p.center,
                               wrap: p.max_width.is_some() };
         if let Some(f) = self.formats.borrow().get(&key) {
             return Ok(f.clone());
@@ -196,6 +198,9 @@ impl Text {
         unsafe {
             if p.rtl {
                 format.SetReadingDirection(DWRITE_READING_DIRECTION_RIGHT_TO_LEFT)?;
+            }
+            if p.center {
+                format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
             }
             format.SetWordWrapping(if p.max_width.is_some() {
                                        DWRITE_WORD_WRAPPING_EMERGENCY_BREAK
@@ -296,7 +301,7 @@ mod tests {
     use crate::backends::draw::{TextLayout, TextSystem, Weight};
 
     fn params(family: &Family, max_width: Option<f64>, line_height: Option<f64>, opsz: Option<f64>) -> TextParams<'_> {
-        TextParams { family, size: 14.0, weight: Weight::REGULAR, optical_size: opsz, line_height, max_width, rtl: false }
+        TextParams { family, size: 14.0, weight: Weight::REGULAR, optical_size: opsz, line_height, max_width, rtl: false, center: false }
     }
 
     #[test]

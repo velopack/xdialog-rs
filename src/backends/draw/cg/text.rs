@@ -275,7 +275,7 @@ fn attributes(font: &CTFont, rtl: bool) -> CFRetained<CFDictionary<CFString, CFT
 }
 
 /// Lay out one paragraph: lines broken at `max_width` (whitespace, else clusters), each start-
-/// aligned in the paragraph's direction; baselines the font's ascent below each line top
+/// aligned in the paragraph's direction (or centred); baselines the font's ascent below each line top
 /// (with a `line_height`, shifted by half its difference to ascent + descent).
 fn lay_out(text: &str, font: &CTFont, p: &TextParams<'_>) -> CtLayout {
     // SAFETY: CoreText calls on objects created here; every `CFRange` passed lies inside the
@@ -320,7 +320,13 @@ fn lay_out(text: &str, font: &CTFont, p: &TextParams<'_>) -> CtLayout {
         }
         let width = lines.iter().map(|l| l.1).fold(0.0, f64::max);
         let flush_width = p.max_width.unwrap_or(width);
-        let flush: CGFloat = if p.rtl { 1.0 } else { 0.0 };
+        let flush: CGFloat = if p.center {
+            0.5
+        } else if p.rtl {
+            1.0
+        } else {
+            0.0
+        };
         let line_count = lines.len();
         let lines = lines.into_iter()
                          .enumerate()
@@ -349,7 +355,7 @@ mod tests {
     use crate::backends::draw::{TextLayout, TextSystem, Weight};
 
     fn params(family: &Family, max_width: Option<f64>, line_height: Option<f64>, rtl: bool) -> TextParams<'_> {
-        TextParams { family, size: 14.0, weight: Weight::REGULAR, optical_size: None, line_height, max_width, rtl }
+        TextParams { family, size: 14.0, weight: Weight::REGULAR, optical_size: None, line_height, max_width, rtl, center: false }
     }
 
     #[test]

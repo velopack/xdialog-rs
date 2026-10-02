@@ -1,4 +1,4 @@
-//! The core of the drawn backends (Fluent, Ubuntu): runtime and event loop, windows, input,
+//! The core of the drawn backends (Fluent, Ubuntu, MacOS): runtime and event loop, windows, input,
 //! appearance/DPI, accessibility (AccessKit), request handling and test hooks, plus the measure
 //! pass, the keyboard policy, text layout and a small widget API ([`ui::Ui`]). It draws through
 //! the `draw` layer (a display list replayed by the one drawing backend of the target). Look,
@@ -21,6 +21,9 @@ pub(crate) mod ui;
 
 #[cfg(windows)]
 pub(crate) mod platform_win;
+
+#[cfg(target_os = "macos")]
+pub(crate) mod platform_mac;
 
 #[cfg(feature = "_test-hooks")]
 pub(crate) mod offscreen;

@@ -78,6 +78,7 @@ struct Key {
     line_height: Option<u64>,
     max_width: Option<u64>,
     rtl: bool,
+    center: bool,
     generation: u64,
 }
 
@@ -124,6 +125,7 @@ impl crate::backends::draw::TextSystem for Text {
                         line_height: p.line_height.map(f64::to_bits),
                         max_width: p.max_width.map(f64::to_bits),
                         rtl: p.rtl,
+                        center: p.center,
                         generation: fonts::lock().generation };
         if let Some(l) = self.memo.borrow().get(&key) {
             return l.clone();
@@ -172,7 +174,14 @@ fn shape(text: &str, p: &TextParams<'_>) -> Shaped {
         b.set_size(p.max_width.map(|w| w.max(0.0) as f32), None);
         b.set_wrap(if p.max_width.is_some() { Wrap::WordOrGlyph } else { Wrap::None });
         let attrs = Attrs::new().family(cosmic_text::Family::Name(family)).weight(cosmic_text::Weight(p.weight.0));
-        b.set_text(text, &attrs, Shaping::Advanced, Some(if p.rtl { Align::Right } else { Align::Left }));
+        let align = if p.center {
+            Align::Center
+        } else if p.rtl {
+            Align::Right
+        } else {
+            Align::Left
+        };
+        b.set_text(text, &attrs, Shaping::Advanced, Some(align));
         for run in b.layout_runs() {
             lines += 1;
             let baseline = run.line_top + ascent;
@@ -228,7 +237,7 @@ mod tests {
     use crate::backends::draw::{TextLayout, TextSystem, Weight};
 
     fn params(family: &Family, max_width: Option<f64>, line_height: Option<f64>, rtl: bool) -> TextParams<'_> {
-        TextParams { family, size: 14.0, weight: Weight::REGULAR, optical_size: None, line_height, max_width, rtl }
+        TextParams { family, size: 14.0, weight: Weight::REGULAR, optical_size: None, line_height, max_width, rtl, center: false }
     }
 
     #[test]

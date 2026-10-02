@@ -3,7 +3,8 @@
 //!
 //! A [`TextBlock`] is one layout per `\n` paragraph, stacked. Each paragraph is laid out in its
 //! own direction: a right-to-left paragraph (first strong character) is laid out at its own width
-//! with its lines right-aligned, and right-aligned within the block. The block itself records
+//! with its lines right-aligned, and right-aligned within the block. A centred style
+//! ([`TextStyle::centered`]) centres every line and paragraph in the block instead. The block itself records
 //! whether it starts right-to-left, so painters can right-align it in its column. `max_lines`
 //! elides the text (with `…`) until it fits.
 //!
@@ -27,15 +28,27 @@ pub(crate) struct TextStyle {
     pub size: f64,
     /// The theme's bold weight instead of its regular one.
     pub bold: bool,
+    /// Every line centred in the block (instead of start-aligned in its paragraph's direction).
+    pub center: bool,
 }
 
 impl TextStyle {
     pub(crate) const fn regular(size: f64) -> Self {
-        TextStyle { size, bold: false }
+        TextStyle { size, bold: false, center: false }
     }
 
     pub(crate) const fn bold(size: f64) -> Self {
-        TextStyle { size, bold: true }
+        TextStyle { size, bold: true, center: false }
+    }
+
+    /// The same style with centred lines.
+    pub(crate) const fn centered(self) -> Self {
+        TextStyle { center: true, ..self }
+    }
+
+    /// `bold` and `center` as one cache key word.
+    fn flags(&self) -> u64 {
+        self.bold as u64 | (self.center as u64) << 1
     }
 }
 
@@ -178,7 +191,7 @@ impl TextCache {
 
     /// One paragraph layout (cached).
     fn para(&mut self, text: &str, style: &TextStyle, max_width: Option<f64>, rtl: bool) -> Layout {
-        let bits = [style.size.to_bits(), style.bold as u64, max_width.map_or(u64::MAX, f64::to_bits), rtl as u64];
+        let bits = [style.size.to_bits(), style.flags(), max_width.map_or(u64::MAX, f64::to_bits), rtl as u64];
         if let Some(l) = self.paras.get(text, bits) {
             return l;
         }
@@ -190,7 +203,8 @@ impl TextCache {
                                   optical_size: (fonts.opsz)(style.size),
                                   line_height: (fonts.line_height)(style.size),
                                   max_width,
-                                  rtl };
+                                  rtl,
+                                  center: style.center };
         let layout = self.text.layout(text, &params);
         self.paras.insert(text, bits, layout.clone());
         layout
@@ -199,7 +213,7 @@ impl TextCache {
     /// Lay out `text`, wrapped at `wrap_width` (logical px; `f64::INFINITY` = no wrapping), into
     /// at most `max_lines` lines (elided). Cached.
     pub(crate) fn layout(&mut self, text: &str, style: &TextStyle, wrap_width: f64, max_lines: Option<usize>) -> Rc<TextBlock> {
-        let bits = [style.size.to_bits(), style.bold as u64, wrap_width.to_bits(), max_lines.map_or(u64::MAX, |n| n as u64)];
+        let bits = [style.size.to_bits(), style.flags(), wrap_width.to_bits(), max_lines.map_or(u64::MAX, |n| n as u64)];
         if let Some(b) = self.blocks.get(text, bits) {
             return b;
         }
@@ -241,8 +255,8 @@ impl TextCache {
             let rtl = starts_rtl(para);
             let mut layout = self.para(para, style, wrap, rtl);
             let mut w = layout.size().width;
-            if rtl {
-                // Lines right-aligned within the paragraph's own width.
+            if rtl || style.center {
+                // Lines right-aligned (or centred) within the paragraph's own width.
                 let own = w.ceil() + 1.0;
                 layout = self.para(para, style, Some(own), rtl);
                 w = own;
@@ -255,7 +269,16 @@ impl TextCache {
         }
         let block_w = paras.iter().map(|p| p.3).fold(width, f64::max);
         let rtl = paras.first().is_some_and(|p| p.2);
-        let paras = paras.into_iter().map(|(layout, y, rtl, w)| (layout, Point::new(if rtl { block_w - w } else { 0.0 }, y))).collect();
+        let x = |rtl: bool, w: f64| {
+            if style.center {
+                ((block_w - w) / 2.0).round()
+            } else if rtl {
+                block_w - w
+            } else {
+                0.0
+            }
+        };
+        let paras = paras.into_iter().map(|(layout, y, rtl, w)| (layout, Point::new(x(rtl, w), y))).collect();
         TextBlock { size: Size::new(block_w.ceil(), y.ceil()), rtl, lines, paras }
     }
 }

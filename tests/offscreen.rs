@@ -1,7 +1,7 @@
 //! Offscreen tests for the drawn themes, through this platform's drawing backend
 //! (`xdialog::__test::RENDERER`: `d2d` on Windows, `cg` on macOS, `soft` elsewhere).
 //!
-//! - Determinism: every gallery variant (`examples/gallery/{ubuntu,fluent}.rs`) rendered twice in
+//! - Determinism: every gallery variant (`examples/gallery/{ubuntu,fluent,macos}.rs`) rendered twice in
 //!   fresh dialogs gives byte-identical frames.
 //! - Harness behaviour: hover/press/click/keyboard go through the real `Dialog` path; HiDPI size;
 //!   progress and `set_text`.
@@ -24,6 +24,8 @@ mod model;
 mod ubuntu;
 #[path = "../examples/gallery/fluent.rs"]
 mod fluent;
+#[path = "../examples/gallery/macos.rs"]
+mod macos;
 
 use std::path::{Path, PathBuf};
 
@@ -56,6 +58,11 @@ fn fluent_is_deterministic() {
     assert_deterministic(XDialogBackend::Fluent, &fluent::variants());
 }
 
+#[test]
+fn macos_is_deterministic() {
+    assert_deterministic(XDialogBackend::MacOS, &macos::variants());
+}
+
 fn two_buttons() -> XDialogOptions {
     opts("t", "Heading", "Body text of the dialog.", XDialogIcon::Warning, &["No", "Yes"])
 }
@@ -65,7 +72,8 @@ fn px(img: &[u8], w: u32, x: f64, y: f64) -> [u8; 3] {
     [img[i], img[i + 1], img[i + 2]]
 }
 
-fn harness_behaviour(backend: XDialogBackend) {
+/// `hover`: the theme has a pointer-over look (AppKit's push buttons have none).
+fn harness_behaviour(backend: XDialogBackend, hover: bool) {
     let mut d = OffscreenDialog::new(backend, look(false), 1.0, TestKind::Message, two_buttons());
     let (w, h) = d.size_px();
     assert!(w >= 200 && h >= 80, "measured size {w}x{h}");
@@ -84,7 +92,9 @@ fn harness_behaviour(backend: XDialogBackend) {
     d.render_at(2.0);
     let (_, _, settled) = d.render_at(3.0);
     assert_eq!(d.render_at(3.0).2, settled);
-    assert_ne!(px(&idle, w, probe.0, probe.1), px(&settled, w, probe.0, probe.1), "hover changes the button");
+    if hover {
+        assert_ne!(px(&idle, w, probe.0, probe.1), px(&settled, w, probe.0, probe.1), "hover changes the button");
+    }
 
     // Press + release inside -> ButtonPressed; the dialog stops presenting (last image kept).
     d.event(button(c, true));
@@ -122,12 +132,17 @@ fn harness_behaviour(backend: XDialogBackend) {
 
 #[test]
 fn ubuntu_harness_behaviour() {
-    harness_behaviour(XDialogBackend::Ubuntu);
+    harness_behaviour(XDialogBackend::Ubuntu, true);
 }
 
 #[test]
 fn fluent_harness_behaviour() {
-    harness_behaviour(XDialogBackend::Fluent);
+    harness_behaviour(XDialogBackend::Fluent, true);
+}
+
+#[test]
+fn macos_harness_behaviour() {
+    harness_behaviour(XDialogBackend::MacOS, true);
 }
 
 #[test]
@@ -157,7 +172,7 @@ fn progress_and_text_changes() {
 /// The AccessKit tree of a message dialog: roles, names, focus and physical bounds.
 #[test]
 fn a11y_tree_of_a_message() {
-    for backend in [XDialogBackend::Ubuntu, XDialogBackend::Fluent] {
+    for backend in [XDialogBackend::Ubuntu, XDialogBackend::Fluent, XDialogBackend::MacOS] {
         let mut d = OffscreenDialog::new(backend, look(false), 1.0, TestKind::Message, two_buttons());
         d.render_at(1.0);
         let dump = d.a11y_dump();
@@ -213,7 +228,7 @@ fn a11y_tree_without_icon_or_title() {
 #[test]
 fn a11y_tree_of_a_progress() {
     let options = opts("Installing", "Installing update", "Downloading...", XDialogIcon::None, &["Cancel"]);
-    for backend in [XDialogBackend::Fluent, XDialogBackend::Ubuntu] {
+    for backend in [XDialogBackend::Fluent, XDialogBackend::Ubuntu, XDialogBackend::MacOS] {
         let mut d = OffscreenDialog::new(backend, look(true), 1.0, TestKind::Progress, options.clone());
         d.set_progress(TestProgress::Value(0.42));
         d.render_at(1.0);
@@ -374,4 +389,10 @@ fn ubuntu_goldens() {
 fn fluent_goldens() {
     let done = check_goldens(XDialogBackend::Fluent, &fluent::variants());
     println!("{RENDERER}/fluent: {} goldens {}", done.len(), if blessing() { "written" } else { "compared" });
+}
+
+#[test]
+fn macos_goldens() {
+    let done = check_goldens(XDialogBackend::MacOS, &macos::variants());
+    println!("{RENDERER}/macos: {} goldens {}", done.len(), if blessing() { "written" } else { "compared" });
 }

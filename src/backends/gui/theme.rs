@@ -17,6 +17,7 @@ pub(crate) use super::text::ThemeFonts;
 pub(crate) use super::ui::{Id, Ui};
 use crate::backends::draw::{Color, Image, Rect, Size};
 use crate::backends::fluent::FluentTheme;
+use crate::backends::macos::MacTheme;
 use crate::backends::ubuntu::UbuntuTheme;
 use crate::model::{XDialogBackend, XDialogIcon};
 
@@ -64,13 +65,16 @@ pub(crate) struct FrameInfo {
 /// The dialog content handed to [`Theme::ui`]. All strings are the raw API strings.
 #[derive(Clone, Copy)]
 pub(crate) struct DialogView<'a> {
+    /// `options.title`: the window title (a theme may show it when there is no heading).
+    pub title: &'a str,
     /// `options.main_instruction` ("" = none).
     pub heading: &'a str,
     /// `options.message`, or the latest `set_text` for progress dialogs ("" = none).
     pub body: &'a str,
     pub icon: &'a XDialogIcon,
-    /// `XDialogIcon::Custom`: the icon image, rendered at [`Theme::icon_size`] × the scale (1 texel
-    /// : 1 physical px). `None`: no icon file, or it could not be loaded.
+    /// The icon image, rendered at [`Theme::icon_size`] × the scale (1 texel : 1 physical px):
+    /// `XDialogIcon::Custom`'s icon source, or for a severity icon the theme's
+    /// [`Theme::system_icon`]. `None`: no such file, or it could not be loaded.
     pub custom_icon: Option<&'a Image>,
     /// Button labels in API order. Every button index in this contract is an index into this slice.
     pub buttons: &'a [String],
@@ -139,14 +143,17 @@ impl DialogUiOutput {
 // Keyboard policy
 // ------------------------------------------------------------------------------------------------
 
-/// When [`FrameInfo::focus_visible`] is true. Visible on open in both cases.
+/// When [`FrameInfo::focus_visible`] is true.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum FocusVisibility {
-    /// Whenever something is focused (the theme itself may hide it while hovering).
+    /// Whenever something is focused, also on open (the theme itself may hide it while hovering).
     Always,
-    /// Only after keyboard navigation (":focus-visible", WinUI FocusState.Keyboard). A pointer
-    /// press anywhere in the window hides it until the next Tab/arrow key.
+    /// On open and after keyboard navigation (":focus-visible", WinUI FocusState.Keyboard). A
+    /// pointer press anywhere in the window hides it until the next Tab/arrow key.
     KeyboardOnly,
+    /// As `KeyboardOnly`, but hidden on open (Fluent, macOS: the default button is marked by its
+    /// accent fill; the focus visual only appears once Tab or an arrow key moves focus).
+    KeyboardNavOnly,
 }
 
 /// Left/Right arrow focus navigation along [`DialogUiOutput::buttons`].
@@ -172,14 +179,17 @@ pub(crate) enum SpaceKey {
 ///
 /// Fixed for every theme: the default button (the highest API index laid out) is focused on open,
 /// Tab/Shift+Tab move through [`DialogUiOutput::buttons`] wrapping, navigation keys auto-repeat,
-/// Enter (not repeat) activates the focused button, Escape (not repeat) closes, Up/Down never
-/// navigate. Each theme's choice is its `KEYBOARD` constant.
+/// Enter (not repeat) activates the focused button (unless `enter_activates_default`), Escape
+/// (not repeat) closes, Up/Down never navigate. Each theme's choice is its `KEYBOARD` constant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct KeyboardPolicy {
     pub focus_visibility: FocusVisibility,
     pub arrows: ArrowNav,
     /// Enter with nothing focused activates the default button.
     pub enter_falls_back_to_default: bool,
+    /// Enter always activates the default button, whatever has focus (macOS: Return is the
+    /// default button's key equivalent, Space activates the focused one).
+    pub enter_activates_default: bool,
     pub space: SpaceKey,
     /// PageUp/PageDown/Home/End (and Up/Down) produce [`FrameInfo::scroll_request`].
     pub scroll_keys: bool,
@@ -189,7 +199,7 @@ pub(crate) struct KeyboardPolicy {
 // The trait
 // ------------------------------------------------------------------------------------------------
 
-/// Implemented by `ubuntu::UbuntuTheme` and `fluent::FluentTheme`. Each theme stores its own
+/// Implemented by `ubuntu::UbuntuTheme`, `fluent::FluentTheme` and `macos::MacTheme`. Each theme stores its own
 /// colours/metrics ("tokens") for the current appearance, and any per-dialog widget state.
 pub(crate) trait Theme {
     /// Recompute the tokens for an appearance. Called on open and on appearance change (core then
@@ -207,6 +217,22 @@ pub(crate) trait Theme {
     /// The window background (core clears every frame with it).
     fn clear_color(&self) -> Color;
 
+    /// What to clear with instead of [`Theme::clear_color`] when the window has a behind-window
+    /// material (macOS vibrancy: a transparent window over an `NSVisualEffectView`), usually
+    /// transparent or a light tint. `None` (the default): the theme is always opaque, and core
+    /// never gives its windows a material.
+    fn translucent_clear(&self) -> Option<Color> {
+        None
+    }
+
+    /// The image file of a severity icon (`Information`, `Warning`, `Error`) this theme shows
+    /// instead of drawing one (macOS: the system's alert icons). Core renders it at
+    /// [`Theme::icon_size`] and hands it over as [`DialogView::custom_icon`]. `None` (the
+    /// default): the theme draws its own.
+    fn system_icon(&self, _icon: &XDialogIcon) -> Option<std::sync::Arc<crate::icon::IconFile>> {
+        None
+    }
+
     /// Build the whole dialog into `ui` (origin top-left of the client area). Buttons MUST use
     /// [`ButtonInteraction::interact`], so core can hit-test and focus them.
     ///
@@ -218,11 +244,12 @@ pub(crate) trait Theme {
     fn ui(&mut self, view: &DialogView<'_>, ui: &mut Ui<'_>) -> DialogUiOutput;
 }
 
-/// The theme of a drawn backend (`Fluent`, anything else: `Ubuntu`), with default tokens until
+/// The theme of a drawn backend (`Fluent`, `MacOS`, anything else: `Ubuntu`), with default tokens until
 /// [`Theme::set_appearance`].
 pub(crate) fn new(backend: XDialogBackend) -> Box<dyn Theme> {
     match backend {
         XDialogBackend::Fluent => Box::new(FluentTheme::new()),
+        XDialogBackend::MacOS => Box::new(MacTheme::new()),
         _ => Box::new(UbuntuTheme::new()),
     }
 }
@@ -287,7 +314,8 @@ pub(crate) mod test_support {
 
     /// A message dialog view with `buttons`, no heading/body/icon and default frame info.
     pub(crate) fn view(buttons: &[String]) -> DialogView<'_> {
-        DialogView { heading: "",
+        DialogView { title: "",
+                     heading: "",
                      body: "",
                      icon: &XDialogIcon::None,
                      custom_icon: None,

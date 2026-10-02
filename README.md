@@ -3,8 +3,8 @@
 [![License](https://img.shields.io/crates/l/xdialog?style=flat-square)](https://github.com/velopack/xdialog/blob/master/LICENSE)
 
 A cross-platform library for displaying native dialogs in Rust: message boxes and progress
-dialogs from any thread, with one API on Windows, macOS and Linux. The Fluent (Windows) and
-Ubuntu (Linux) looks are drawn by xdialog itself on winit windows, through each OS's own
+dialogs from any thread, with one API on Windows, macOS and Linux. The Fluent (Windows), macOS
+and Ubuntu (Linux) looks are drawn by xdialog itself on winit windows, through each OS's own
 renderer: Direct2D and DirectWrite on Windows, CoreGraphics and CoreText on macOS, and a pure
 Rust software renderer on Linux (no GPU and no C/C++ build dependencies, static musl compatible).
 Win32 TaskDialog and AppKit are the native backends.
@@ -17,8 +17,9 @@ update framework.
 
 ## Features
 - Cross-platform: works on Windows, macOS, and Linux
-- A WinUI 3 (Fluent) look on Windows 10+, the classic xdialog look on Linux, native Win32
-  TaskDialog and AppKit; the backend is chosen at runtime
+- A WinUI 3 (Fluent) look on Windows 10+, the macOS alert look (Big Sur to Sequoia) on macOS,
+  the classic xdialog look on Linux, native Win32 TaskDialog and AppKit; the backend is chosen
+  at runtime
 - Drawn with the platform's renderer and fonts on Windows and macOS; pure Rust software
   rendering on Linux (no GPU, no C/C++ dependencies, static musl compatible)
 - Embedded font (Ubuntu) on Linux only - no system font dependencies there; Windows and macOS
@@ -112,20 +113,21 @@ The backend is chosen at runtime with `XDialogBuilder::with_backend`. The defaul
 | Older Windows | `Win32` TaskDialog |
 | Linux | `Ubuntu` (the classic xdialog look, bundled Ubuntu font) |
 | Linux, no display server | every dialog function returns `XDialogError::NoBackendAvailable`; your program keeps running |
-| macOS | `AppKit` |
+| macOS | `MacOS` (the alert of macOS 11 to 15: SF Pro, the translucent alert material, system accent colour and alert icons) |
 
-`Fluent` and `Ubuntu` can be chosen on any platform where winit runs; `Win32` and `AppKit` only on
+`Fluent`, `Ubuntu` and `MacOS` can be chosen on any platform where winit runs; `Win32` and `AppKit` only on
 their own. A backend that can't run here gives `NoBackendAvailable`; if the backend runs but a
 dialog's window can't be created, that call returns `SystemError` (except where `Auto` falls back
 to TaskDialog). The drawn backends follow the
-system light/dark preference (the Windows registry, the XDG desktop portal on Linux) unless
+system light/dark preference (the Windows registry, the XDG desktop portal on Linux, AppKit's
+effective appearance on macOS) unless
 `XDialogBuilder::with_theme` forces one.
 
 ## Custom icons
 
 `XDialogOptions::icon_source` takes an `.ico`, `.png` or `.icns` image, as a file
 (`XDialogIconSource::File`) or its bytes (`XDialogIconSource::Bytes`); the format is read from the
-content, so any of the three works on every platform. With the drawn backends (Fluent, Ubuntu) it
+content, so any of the three works on every platform. With the drawn backends (Fluent, Ubuntu, MacOS) it
 becomes the dialog's window and taskbar icon where the platform has one (Windows, and X11 on
 Linux; Wayland and macOS have no per-window icons), and with `XDialogIcon::Custom` it is shown in
 the dialog instead of the information, warning or error icon. `Custom` without an icon source (or
@@ -156,12 +158,11 @@ None are on by default.
 ### Using your own winit event loop
 
 winit allows one event loop per process, and `XDialogBuilder::run` runs one for the drawn
-backends (Fluent, Ubuntu). An application with its own winit loop enables `winit-host`, wraps its
+backends (Fluent, Ubuntu, MacOS). An application with its own winit loop enables `winit-host`, wraps its
 `ApplicationHandler` with `XDialogBuilder::into_host_app` on its event-loop thread instead of
 calling `run`, and passes the wrapper to `run_app`. The handler needs no xdialog code: the wrapper
 handles the dialog windows' events, merges their wake-up deadline into your control flow and
-closes the dialogs on exit. On macOS `Auto` uses the `Ubuntu` look there, since AppKit needs its
-own loop. See the
+closes the dialogs on exit. `AppKit` is not available there, since it needs its own loop. See the
 [`xdialog::host`](https://docs.rs/xdialog/latest/xdialog/host/index.html) documentation and
 [`examples/winit_host.rs`](https://github.com/velopack/xdialog/blob/master/examples/winit_host.rs),
 a complete host.
@@ -182,7 +183,7 @@ function.
 
 ## The drawn backends
 
-The Fluent and Ubuntu looks record their drawing into a small display list that one of three
+The Fluent, Ubuntu and macOS looks record their drawing into a small display list that one of three
 renderers replays; exactly one is compiled for each target:
 
 | Target | Renderer | Fonts |

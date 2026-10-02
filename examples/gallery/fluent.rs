@@ -21,10 +21,16 @@ fn yesno() -> XDialogOptions {
     opts("Save changes?", "Save changes?", "Do you want to save changes to the document before closing?", XDialogIcon::None, &["No", "Yes"])
 }
 
-/// Hide the open-time keyboard focus visual with a pointer click on empty space, then park the
-/// pointer outside.
+/// A pointer click on empty space (hides a keyboard focus visual), then the pointer parked
+/// outside.
 fn pointer_mode(v: Variant) -> Variant {
     v.at(0.5, Action::MoveTo(3.0, 3.0)).at(0.5, Action::Press).at(0.5, Action::Release).at(0.5, Action::Leave)
+}
+
+/// Press Tab `n` times at `t = 0.5` (with `n` buttons: focus back on the default button, the
+/// keyboard focus visual shown).
+fn tab_around(v: Variant, n: usize) -> Variant {
+    (0..n).fold(v, |v, _| v.at(0.5, Action::Key(Key::Tab)))
 }
 
 /// All variants for the fluent theme.
@@ -50,12 +56,16 @@ pub fn variants() -> Vec<Variant> {
 
         let long_title_o = opts("Long title", "This is a considerably longer dialog title that needs to wrap onto a second line", "Short body.", XDialogIcon::None, &["OK"]);
         v.push(sw("cd_long_title", long_title_o).golden());
-        // Opened without pointer input: the default button shows the keyboard focus visual.
-        let kb = |name: &str, o: XDialogOptions| Variant::message(format!("kbfocus_{name}_{th}"), o, look.clone()).capture(1.0, "");
+        // Tab once per button wraps focus back to the default button, now with the keyboard focus
+        // visual (hidden on open).
+        let kb = |name: &str, o: XDialogOptions| {
+            let n = o.buttons.len();
+            tab_around(Variant::message(format!("kbfocus_{name}_{th}"), o, look.clone()), n).capture(1.0, "")
+        };
         v.push(kb("yesno", yesno()).golden());
         v.push(kb("info_accentclose", info_o));
         v.push(kb("icon_warning", warning_o.clone()));
-        v.push(Variant::progress(format!("kbfocus_progress_050_{th}"), opts("Installing update", "Installing update", "Downloading package... 50%", XDialogIcon::None, &["Cancel"]), look.clone())
+        v.push(tab_around(Variant::progress(format!("kbfocus_progress_050_{th}"), opts("Installing update", "Installing update", "Downloading package... 50%", XDialogIcon::None, &["Cancel"]), look.clone()), 1)
                .at(0.2, Action::Progress(TestProgress::Value(0.5)))
                .capture(1.0, ""));
 
@@ -77,13 +87,13 @@ pub fn variants() -> Vec<Variant> {
         let (std_b, acc_b) = (0usize, 1usize);
         let state = |kind: &str, state: &str| Variant::message(format!("btn_{kind}_{state}_{th}"), yesno(), look.clone());
         for (kind, b) in [("standard", std_b), ("accent", acc_b)] {
-            let mode = |v: Variant| if kind == "standard" { v } else { pointer_mode(v) };
+            let mode = |v: Variant| if kind == "standard" { tab_around(v, 2) } else { pointer_mode(v) };
             v.push(mode(state(kind, "pointerover")).at(1.0, Action::HoverButton(b)).capture(1.5, ""));
             v.push(mode(state(kind, "pressed")).at(1.0, Action::PressButton(b)).capture(1.5, ""));
         }
-        // Keyboard focus: the default (accent) button has it on open (`kbfocus_yesno`); Tab moves
-        // it to "No" and the accent style follows focus.
-        v.push(state("accent", "focused_pointerover").at(1.0, Action::HoverButton(acc_b)).capture(1.5, ""));
+        // Keyboard focus: the default (accent) button has it on open, its visual after keyboard
+        // navigation (`kbfocus_yesno`); Tab moves it to "No" and the accent style follows focus.
+        v.push(tab_around(state("accent", "focused_pointerover"), 2).at(1.0, Action::HoverButton(acc_b)).capture(1.5, ""));
         v.push(state("standard", "focused").at(1.0, Action::Key(Key::Tab)).capture(1.5, ""));
         v.push(state("standard", "focused_pointerover").at(1.0, Action::Key(Key::Tab)).at(1.0, Action::HoverButton(std_b)).capture(1.5, ""));
 
@@ -143,7 +153,7 @@ pub fn variants() -> Vec<Variant> {
     v.push(Variant::message("hidpi2_yesno_light", yesno(), purple(false)).ppp(2.0).capture(1.0, ""));
     v.push(Variant::message("hidpi15_yesno_dark", yesno(), purple(true)).ppp(1.5).capture(1.0, ""));
     // Fractional scales: the focus ring thicknesses land on whole physical pixels.
-    v.push(Variant::message("hidpi125_kbfocus_yesno_light", yesno(), purple(false)).ppp(1.25).capture(1.0, ""));
-    v.push(Variant::message("hidpi15_kbfocus_yesno_light", yesno(), purple(false)).ppp(1.5).capture(1.0, ""));
+    v.push(tab_around(Variant::message("hidpi125_kbfocus_yesno_light", yesno(), purple(false)).ppp(1.25), 2).capture(1.0, ""));
+    v.push(tab_around(Variant::message("hidpi15_kbfocus_yesno_light", yesno(), purple(false)).ppp(1.5), 2).capture(1.0, ""));
     v
 }

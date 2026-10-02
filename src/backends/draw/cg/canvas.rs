@@ -13,7 +13,7 @@ use std::ptr;
 use objc2_core_foundation::{CFData, CFRetained, CGAffineTransform, CGFloat, CGPoint, CGRect, CGSize};
 use objc2_core_graphics::{
     CGBitmapContextCreate, CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGContext, CGDataProvider, CGImage, CGImageAlphaInfo,
-    CGImageByteOrderInfo, CGInterpolationQuality, CGLineCap, CGPath,
+    CGGradient, CGGradientDrawingOptions, CGImageByteOrderInfo, CGInterpolationQuality, CGLineCap, CGPath,
 };
 
 use crate::backends::draw::{list, Color, DrawError, Frame, Image, LineCap, Point, Rect};
@@ -109,14 +109,17 @@ impl Painter {
 
     /// Draw `frame` into `pixels`: `frame.size_px` (non-zero), row-major top row first, each pixel
     /// a native-endian `0x00RRGGBB` (softbuffer's format; `NoneSkipFirst` + 32-bit little
-    /// endian in CG terms). The previous contents do not matter (the frame is cleared first).
-    pub(crate) fn draw(&mut self, pixels: &mut [u32], frame: &Frame<'_>) -> Result<(), DrawError> {
+    /// endian in CG terms), or with `alpha` a premultiplied `0xAARRGGBB` (`PremultipliedFirst`:
+    /// a translucent clear colour stays translucent). The previous contents do not matter (the
+    /// frame is cleared first).
+    pub(crate) fn draw(&mut self, pixels: &mut [u32], frame: &Frame<'_>, alpha: bool) -> Result<(), DrawError> {
         let [w, h] = frame.size_px;
         let (w, h) = (w as usize, h as usize);
         if pixels.len() != w * h {
             return Err(DrawError::Backend(format!("cg: {} pixels for a {w}x{h} frame", pixels.len())));
         }
-        let info = CGImageAlphaInfo::NoneSkipFirst.0 | CGImageByteOrderInfo::Order32Little.0;
+        let alpha_info = if alpha { CGImageAlphaInfo::PremultipliedFirst } else { CGImageAlphaInfo::NoneSkipFirst };
+        let info = alpha_info.0 | CGImageByteOrderInfo::Order32Little.0;
         // SAFETY: `pixels` holds `w * h` u32 = `h` rows of `w * 4` bytes, u32-aligned, and stays
         // mutably borrowed (untouched by anything else) until the context is released at the end
         // of this function, after which nothing draws into it.
@@ -188,9 +191,12 @@ impl Canvas<'_> {
 
 impl crate::backends::draw::Canvas for Canvas<'_> {
     fn clear(&mut self, color: Color) {
-        // A margin past every edge: the whole bitmap whatever the rounding of `size`.
+        // A margin past every edge: the whole bitmap whatever the rounding of `size`. Cleared to
+        // transparent first, so a translucent colour replaces the previous frame.
+        let all = cg_rect(Rect::new(-1.0, -1.0, self.size[0] + 1.0, self.size[1] + 1.0));
+        CGContext::clear_rect(self.c(), all);
         self.fill_color(color);
-        CGContext::fill_rect(self.c(), cg_rect(Rect::new(-1.0, -1.0, self.size[0] + 1.0, self.size[1] + 1.0)));
+        CGContext::fill_rect(self.c(), all);
     }
 
     fn fill_rect(&mut self, rect: Rect, radius: f64, color: Color) {
@@ -240,6 +246,44 @@ impl crate::backends::draw::Canvas for Canvas<'_> {
         CGContext::move_to_point(c, from.x, from.y);
         CGContext::add_line_to_point(c, to.x, to.y);
         CGContext::stroke_path(c);
+    }
+
+    fn fill_rect_gradient(&mut self, rect: Rect, radius: f64, top: Color, bottom: Color) {
+        if !drawable(rect) {
+            return;
+        }
+        let [r0, g0, b0, a0] = top.to_straight_f32();
+        let [r1, g1, b1, a1] = bottom.to_straight_f32();
+        let components: [CGFloat; 8] = [r0, g0, b0, a0, r1, g1, b1, a1].map(|v| v as CGFloat);
+        let locations: [CGFloat; 2] = [0.0, 1.0];
+        // SAFETY: two colours of four components (the RGB space plus alpha) and two locations.
+        let Some(gradient) = (unsafe { CGGradient::with_color_components(Some(self.space), components.as_ptr(), locations.as_ptr(), 2) })
+        else {
+            return;
+        };
+        let c = self.c();
+        CGContext::save_g_state(c);
+        self.rect_path(rect, radius);
+        CGContext::clip(c);
+        CGContext::draw_linear_gradient(c,
+                                        Some(&gradient),
+                                        CGPoint::new(rect.x0, rect.y0),
+                                        CGPoint::new(rect.x0, rect.y1),
+                                        CGGradientDrawingOptions::empty());
+        CGContext::restore_g_state(c);
+    }
+
+    fn fill_polygon(&mut self, points: &[Point], color: Color) {
+        let Some((first, rest)) = points.split_first() else { return };
+        let c = self.c();
+        self.fill_color(color);
+        CGContext::begin_path(c);
+        CGContext::move_to_point(c, first.x, first.y);
+        for p in rest {
+            CGContext::add_line_to_point(c, p.x, p.y);
+        }
+        CGContext::close_path(c);
+        CGContext::fill_path(c);
     }
 
     fn push_clip(&mut self, rect: Rect) {

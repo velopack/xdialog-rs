@@ -29,6 +29,9 @@ pub(crate) mod ubuntu;
 /// The Fluent look (WinUI 3 ContentDialog).
 pub(crate) mod fluent;
 
+/// The macOS look (the Big Sur to Sequoia alert).
+pub(crate) mod macos;
+
 /// The concrete backend to run (never `Auto`) and whether a failing drawn dialog falls back to
 /// Win32 TaskDialog (`Auto` on Windows 10+). `None`: the backend can't run on this platform.
 /// The hidden `XDIALOG_BACKEND` env var (tests, field diagnosis) replaces `requested`.
@@ -49,23 +52,25 @@ fn resolve_here(requested: XDialogBackend) -> Option<(XDialogBackend, bool)> {
         #[cfg(windows)]
         Auto | Win32 => Some((Win32, false)),
         #[cfg(target_os = "macos")]
-        Auto | AppKit => Some((AppKit, false)),
+        Auto => Some((MacOS, false)),
+        #[cfg(target_os = "macos")]
+        AppKit => Some((AppKit, false)),
         #[cfg(not(any(windows, target_os = "macos")))]
         Auto => Some((Ubuntu, false)),
-        Fluent | Ubuntu => Some((requested, false)),
+        Fluent | Ubuntu | MacOS => Some((requested, false)),
         _ => None,
     }
 }
 
-/// An `XDIALOG_BACKEND` value: a variant name (`auto`, `win32`, `fluent`, `ubuntu`, `appkit`; any
-/// case). Empty or unknown: `None` (unknown values are logged).
+/// An `XDIALOG_BACKEND` value: a variant name (`auto`, `win32`, `fluent`, `ubuntu`, `macos`,
+/// `appkit`; any case). Empty or unknown: `None` (unknown values are logged).
 fn parse_backend(value: &str) -> Option<XDialogBackend> {
     use XDialogBackend::*;
     let value = value.trim();
     if value.is_empty() {
         return None;
     }
-    let found = [Auto, Win32, Fluent, Ubuntu, AppKit].into_iter().find(|b| format!("{b:?}").eq_ignore_ascii_case(value));
+    let found = [Auto, Win32, Fluent, Ubuntu, MacOS, AppKit].into_iter().find(|b| format!("{b:?}").eq_ignore_ascii_case(value));
     if found.is_none() {
         warn!("xdialog: XDIALOG_BACKEND={value} is unknown; ignored");
     }
@@ -146,6 +151,7 @@ mod tests {
     fn parse_backend_names() {
         assert_eq!(parse_backend("fluent"), Some(Fluent));
         assert_eq!(parse_backend(" UBUNTU "), Some(Ubuntu));
+        assert_eq!(parse_backend("macos"), Some(MacOS));
         assert_eq!(parse_backend("Win32"), Some(Win32));
         assert_eq!(parse_backend("appkit"), Some(AppKit));
         assert_eq!(parse_backend("auto"), Some(Auto));
@@ -157,6 +163,7 @@ mod tests {
     fn resolve_per_platform() {
         assert_eq!(resolve_here(Fluent), Some((Fluent, false)));
         assert_eq!(resolve_here(Ubuntu), Some((Ubuntu, false)));
+        assert_eq!(resolve_here(MacOS), Some((MacOS, false)));
         #[cfg(windows)]
         {
             let win10 = gui::platform_win::windows_10_or_later();
@@ -166,7 +173,7 @@ mod tests {
         }
         #[cfg(target_os = "macos")]
         {
-            assert_eq!(resolve_here(Auto), Some((AppKit, false)));
+            assert_eq!(resolve_here(Auto), Some((MacOS, false)));
             assert_eq!(resolve_here(AppKit), Some((AppKit, false)));
             assert_eq!(resolve_here(Win32), None);
         }

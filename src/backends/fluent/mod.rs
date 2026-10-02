@@ -63,11 +63,13 @@ const SCROLLBAR_INSET: f64 = 4.0;
 /// Smallest scrolling body viewport.
 const MIN_VIEWPORT: f64 = 40.0;
 
-/// Keyboard policy (WinUI): focus ring only after keyboard use, clamped arrows, Enter falls back
-/// to the default button, Space activates on release, PageUp/PageDown/Home/End scroll the body.
-pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: FocusVisibility::KeyboardOnly,
+/// Keyboard policy (WinUI): focus ring only after keyboard navigation (not on open: the default
+/// button is marked by its accent fill), clamped arrows, Enter falls back to the default button,
+/// Space activates on release, PageUp/PageDown/Home/End scroll the body.
+pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: FocusVisibility::KeyboardNavOnly,
                                                              arrows: ArrowNav::Clamp,
                                                              enter_falls_back_to_default: true,
+                                                             enter_activates_default: false,
                                                              space: SpaceKey::ActivateOnRelease,
                                                              scroll_keys: true };
 

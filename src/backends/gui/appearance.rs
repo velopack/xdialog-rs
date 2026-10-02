@@ -7,6 +7,8 @@
 //! - **Windows:** `AppsUseLightTheme` and `Explorer\Accent\AccentPalette` from the registry, read
 //!   inline on each dialog open (microseconds), on `ThemeChanged` and on focus (accent changes have
 //!   no event). No WinRT.
+//! - **macOS:** the app's effective appearance and `controlAccentColor` from AppKit, read inline on
+//!   the main thread (the event loop thread) on each dialog open and on `ThemeChanged`.
 //! - Test builds (`debug_assertions` or `_test-hooks`): `XDIALOG_TEST_ACCENT=RRGGBB|none` overrides
 //!   the accent.
 
@@ -202,7 +204,16 @@ mod platform {
     }
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(target_os = "macos")]
+mod platform {
+    use super::Appearance;
+
+    pub(super) fn read() -> Appearance {
+        crate::backends::gui::platform_mac::read_appearance()
+    }
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 mod platform {
     use super::Appearance;
 
