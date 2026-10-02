@@ -63,7 +63,7 @@ fn your_main_logic() -> i32 {
   let should_update_now = show_message_yes_no(
     "My App Incorporated",
     "New version available",
-    "Would you like to to the new version now?",
+    "Would you like to update to the new version now?",
     XDialogIcon::Warning,
   ).unwrap();
 
@@ -122,6 +122,12 @@ to TaskDialog). The drawn backends follow the
 system light/dark preference (the Windows registry, the XDG desktop portal on Linux, AppKit's
 effective appearance on macOS) unless
 `XDialogBuilder::with_theme` forces one.
+
+Win32 TaskDialog (`XDialogBackend::Win32`, `win32-direct`, and the fallback of `Auto`) is part of
+version 6 of the Windows Common Controls, which an executable gets only from its manifest: give
+yours a dependency on `Microsoft.Windows.Common-Controls` 6.0, as the
+[`app.manifest`](https://github.com/velopack/xdialog/blob/master/app.manifest) embedded in
+xdialog's own examples and tests does.
 
 ## Custom icons
 

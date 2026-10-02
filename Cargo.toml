@@ -9,6 +9,8 @@ repository = "https://github.com/velopack/xdialog"
 keywords = ["dialog", "message-box", "messagebox", "cross-platform"]
 categories = ["graphics", "gui", "visualization"]
 rust-version = "1.95"
+# The golden PNGs (~7 MB); the tests that read them need a checkout.
+exclude = ["tests/visual_references/", ".github/"]
 
 [features]
 default = []
@@ -118,7 +120,6 @@ windows = { version = "0.62", features = [
     "Win32_Graphics_Dwm",
     "Win32_System_Registry",
     "Win32_UI_HiDpi",
-    "Win32_Globalization",
     "Wdk_System_SystemServices",
     "Win32_System_SystemInformation",
     "Win32_Graphics_Direct2D",
@@ -164,6 +165,10 @@ name = "lifecycle"
 harness = false
 
 [[test]]
+name = "builder"
+harness = false
+
+[[test]]
 name = "visual_regression"
 harness = false
 
@@ -192,7 +197,7 @@ harness = false
 required-features = ["_test-hooks"]
 
 [dev-dependencies]
-image = "=0.25.10"
+image = { version = "=0.25.10", default-features = false, features = ["png"] }
 criterion = { version = "=0.8.2", default-features = false, features = ["cargo_bench_support"] }
 
 # Window captures for tests/visual_regression.rs (Windows uses GDI directly, Wayland `grim`).

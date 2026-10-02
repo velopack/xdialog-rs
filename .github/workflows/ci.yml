@@ -21,8 +21,9 @@ jobs:
   #   default        XDialogBuilder, backend chosen at runtime (Auto: Fluent/Win32, Ubuntu, AppKit)
   #   all features   + winit-host (xdialog::host), win32-direct / maccf-direct, and _test-hooks:
   #                  the offscreen goldens of the drawn looks (tests/offscreen.rs) through this
-  #                  OS's renderer (d2d on Windows, cg on macOS, soft elsewhere) and the host test
-  #                  (tests/winit_host.rs)
+  #                  OS's renderer (d2d on Windows, cg on macOS, soft elsewhere), the host tests
+  #                  (tests/winit_host.rs, tests/winit_host_on_demand.rs) and the TaskDialog
+  #                  fallback (tests/fallback.rs, Windows)
   # The soft goldens are always compared; d2d/cg ones only when offscreen/<renderer>/FONT_ID
   # matches the runner's fonts and OS version. Renders that were skipped or differ are uploaded
   # from target/offscreen-actual/.
@@ -128,6 +129,22 @@ jobs:
         run: |
           cargo test --locked --doc --features winit-host
           RUSTDOCFLAGS="-D warnings" cargo doc --locked --no-deps --features winit-host
+
+  # The declared rust-version (Cargo.toml) still builds the library.
+  msrv:
+    name: MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.95
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: msrv
+
+      - name: Check
+        run: cargo check --locked --lib --all-features
 
   # Linux without a display server: every dialog function returns NoBackendAvailable and the
   # program keeps running. The static (musl) test binary is built once, then run on a range of old
