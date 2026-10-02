@@ -79,6 +79,9 @@ pub(crate) struct Runtime {
     xtheme: XDialogTheme,
     inbox: Arc<Inbox>,
     rx: Receiver<DialogMessageRequest>,
+    /// A request received before the event loop existed (macOS builder mode: the first dialog
+    /// request), handled before the queue.
+    pending: Option<DialogMessageRequest>,
     dialogs: BTreeMap<usize, DialogWindow>,
     /// Windows of closed dialogs, until the iteration of their `Destroyed` ends (`true`: seen).
     retired: Vec<(WindowId, bool)>,
@@ -111,11 +114,34 @@ impl Runtime {
                      xtheme,
                      inbox,
                      rx,
+                     pending: None,
                      dialogs: BTreeMap::new(),
                      retired: Vec::new(),
                      text: None,
                      exit: false,
                      _ui_thread: UiThreadMark::set() })
+    }
+
+    /// macOS builder mode, before the event loop exists: block until the first dialog request and
+    /// return it (`None`: `ExitEventLoop` or every sender is gone). Requests for dialogs that were
+    /// never created are no-ops, as they are once the loop runs.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn wait_for_first_dialog(&mut self) -> Option<DialogMessageRequest> {
+        loop {
+            match self.rx.recv().ok()? {
+                DialogMessageRequest::ExitEventLoop => return None,
+                msg @ (DialogMessageRequest::ShowMessageWindow(..) | DialogMessageRequest::ShowProgressWindow(..)) => return Some(msg),
+                _ => {}
+            }
+        }
+    }
+
+    /// macOS builder mode: the event loop now exists; `first` (from [`Self::wait_for_first_dialog`])
+    /// is handled in its first iteration, `waker` wakes it from then on.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn attach(&mut self, first: DialogMessageRequest, waker: WakeFn) {
+        self.pending = Some(first);
+        self.inbox.set_waker(waker);
     }
 
     /// Handle queued requests, refresh after font/appearance changes, apply accessibility
@@ -126,7 +152,7 @@ impl Runtime {
         // Cleared before draining: a request sent from now on wakes the loop again.
         self.inbox.begin_drain();
         let mut refresh = false;
-        while let Ok(msg) = self.rx.try_recv() {
+        while let Some(msg) = self.pending.take().or_else(|| self.rx.try_recv().ok()) {
             match msg {
                 // Stopped (builder: the loop is ending; host: after a double panic): answer, don't
                 // leave callers waiting.
@@ -529,7 +555,7 @@ impl Runtime {
 impl Drop for Runtime {
     fn drop(&mut self) {
         self.close_all();
-        self.rx.try_iter().for_each(crate::channel::reject);
+        self.pending.take().into_iter().chain(self.rx.try_iter()).for_each(crate::channel::reject);
     }
 }
 
@@ -597,7 +623,7 @@ fn winit_theme(dark: bool) -> winit::window::Theme {
 }
 
 /// `XDIALOG_TEST_NO_ACTIVATE=1`: never activate/focus dialog windows. Honoured in all builds.
-fn no_activate() -> bool {
+pub(super) fn no_activate() -> bool {
     std::env::var_os("XDIALOG_TEST_NO_ACTIVATE").is_some_and(|v| !v.is_empty() && v != "0")
 }
 

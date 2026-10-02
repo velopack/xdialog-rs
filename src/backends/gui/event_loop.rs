@@ -17,23 +17,59 @@ use crate::model::{XDialogBackend, XDialogTheme};
 /// Build the event loop on this thread and install its request handler. The returned closure runs
 /// the loop here until `ExitEventLoop`. `Err`: the loop could not be built (no display server, a
 /// second winit loop, ...) or a handler is already installed.
+///
+/// macOS: `Err` only for an installed handler; the loop is built when the first dialog is
+/// requested, not here (a build failure then answers the requests with `NoBackendAvailable`).
+/// Building it connects to the window server, which registers the process with LaunchServices: an
+/// executable inside another app's bundle (an updater in `Contents/MacOS`) then checks in as a
+/// second instance of that app and can show in the Dock and take focus. Most runs of such tools
+/// show no dialog, so they stay invisible (as the AppKit backend does).
 pub(crate) fn start(backend: XDialogBackend, fallback: bool, xtheme: XDialogTheme) -> Result<Box<dyn FnOnce()>, String> {
-    let event_loop = build()?;
-    let proxy = event_loop.create_proxy();
-    let waker = Box::new(move || {
-        let _ = proxy.send_event(());
-    });
-    let mut rt = Runtime::install(backend, fallback, xtheme, waker).map_err(|e| e.to_string())?;
-    Ok(Box::new(move || {
-        if let Err(e) = event_loop.run_app(&mut rt) {
-            error!("xdialog: event loop error: {e}");
-        }
-    }))
+    #[cfg(target_os = "macos")]
+    {
+        let mut rt = Runtime::install(backend, fallback, xtheme, Box::new(|| {})).map_err(|e| e.to_string())?;
+        Ok(Box::new(move || {
+            let Some(first) = rt.wait_for_first_dialog() else { return };
+            let event_loop = match build() {
+                Ok(el) => el,
+                Err(e) => {
+                    // Dropping `rt` answers the queued and later requests with NoBackendAvailable.
+                    warn!("xdialog: drawn backend unavailable ({e})");
+                    crate::channel::reject(first);
+                    return;
+                }
+            };
+            let proxy = event_loop.create_proxy();
+            rt.attach(first,
+                      Box::new(move || {
+                          let _ = proxy.send_event(());
+                      }));
+            if let Err(e) = event_loop.run_app(&mut rt) {
+                error!("xdialog: event loop error: {e}");
+            }
+        }))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let event_loop = build()?;
+        let proxy = event_loop.create_proxy();
+        let waker = Box::new(move || {
+            let _ = proxy.send_event(());
+        });
+        let mut rt = Runtime::install(backend, fallback, xtheme, waker).map_err(|e| e.to_string())?;
+        Ok(Box::new(move || {
+            if let Err(e) = event_loop.run_app(&mut rt) {
+                error!("xdialog: event loop error: {e}");
+            }
+        }))
+    }
 }
 
 /// Build the event loop: `with_any_thread(true)` (tests and `XDialogBuilder` run on arbitrary
 /// threads), Windows `with_dpi_aware(false)` (the thread sets per-monitor-v2 itself; a library
-/// must not change process DPI state). A panic inside `build()` is caught.
+/// must not change process DPI state), macOS an accessory app (no Dock icon or menu bar, like
+/// CFUserNotification alerts; windows still take focus) without winit's default menu. A panic
+/// inside `build()` is caught.
 fn build() -> Result<EventLoop<()>, String> {
     let built = catch_unwind(AssertUnwindSafe(|| {
                                  let mut b = EventLoop::<()>::with_user_event();
@@ -49,6 +85,13 @@ fn build() -> Result<EventLoop<()>, String> {
                                      use winit::platform::x11::EventLoopBuilderExtX11;
                                      EventLoopBuilderExtX11::with_any_thread(&mut b, true);
                                      EventLoopBuilderExtWayland::with_any_thread(&mut b, true);
+                                 }
+                                 #[cfg(target_os = "macos")]
+                                 {
+                                     use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
+                                     b.with_activation_policy(ActivationPolicy::Accessory);
+                                     b.with_default_menu(false);
+                                     b.with_activate_ignoring_other_apps(!super::runtime::no_activate());
                                  }
                                  b.build()
                              }));
