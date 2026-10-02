@@ -78,6 +78,13 @@ impl Inbox {
         }
     }
 
+    /// Replace the waker (macOS builder mode: the event loop is built when the first dialog is
+    /// requested, so it gets its waker then).
+    #[cfg(target_os = "macos")]
+    pub(crate) fn set_waker(&self, waker: WakeFn) {
+        *self.waker.lock().unwrap_or_else(|e| e.into_inner()) = waker;
+    }
+
     /// Called by the backend right before it drains the receiver.
     pub(crate) fn begin_drain(&self) {
         self.wake_pending.store(false, Ordering::SeqCst);
