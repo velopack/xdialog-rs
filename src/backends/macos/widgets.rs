@@ -8,12 +8,11 @@ use crate::backends::draw::{Color, LineCap, Point, Rect, Size, Vec2};
 use crate::backends::gui::anim::{Easing, Transition};
 use crate::backends::gui::text::TextBlock;
 use crate::backends::gui::theme::{button_id, ButtonInteraction, DialogView, ProgressView};
-use crate::backends::gui::ui::{caps_centered, indeterminate_capsule, Id, Ui, CAPSULE_CYCLE, CAPSULE_STRETCH};
+use crate::backends::gui::ui::{caps_centered, Id, ScrollBarSpec, Ui};
 use crate::model::XDialogIcon;
 
-/// Push button height (both styles) and Sequoia's corner radius (Tahoe's buttons are capsules).
+/// Push button height (both styles).
 pub(crate) const BUTTON_H: f64 = 28.0;
-pub(crate) const CORNER: f64 = 6.0;
 /// Fill change on pointer-over / pointer-out (pressing is instant).
 const HOVER_FADE: Transition = Transition::linear(0.12);
 /// Focus ring: width and gap outside the button.
@@ -28,20 +27,21 @@ const PROGRESS_VALUE: Transition = Transition::new(0.2, Easing::CubicBezier(0.25
 // Push button
 // ------------------------------------------------------------------------------------------------
 
-/// A push button in `rect` with the style's corners (`tk.button_radius`): the default button (accent gradient, flat on
+/// A push button in `rect` with corners of `radius`: the default button (accent gradient, flat on
 /// Tahoe; white label) or a standard one (translucent fill). Under the pointer the fill fades to its hover shade (no hover while another
 /// button is held); the pressed look shows at once while the pointer is held inside, or Space is
 /// held. The focus ring shows only with keyboard focus visibility.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn button(ui: &mut Ui<'_>,
                      rect: Rect,
                      index: usize,
                      label: &Rc<TextBlock>,
+                     radius: f64,
                      default: bool,
                      view: &DialogView<'_>,
                      tk: &MacTokens)
                      -> ButtonInteraction {
     let st = ButtonInteraction::interact(ui, rect, index, view);
-    let radius = tk.button_radius;
     let pressed = st.pointer_down && st.contains_pointer || st.key_pressed;
     let fade = if pressed { Transition::INSTANT } else { HOVER_FADE };
     let id = button_id(index).with("macos.fill");
@@ -87,7 +87,7 @@ pub(crate) fn button(ui: &mut Ui<'_>,
 
 /// NSProgressIndicator (bar style) in `r` (`PROGRESS_H` tall): a capsule track with the accent
 /// capsule growing from the left; indeterminate, the shared "stretchy capsule" sweeping side to
-/// side (`ui::indeterminate_capsule`, the Ubuntu theme's motion) in the accent.
+/// side (`Ui::indeterminate_capsule`, the Ubuntu theme's motion) in the accent.
 pub(crate) fn progress(ui: &mut Ui<'_>, r: Rect, progress: ProgressView, tk: &MacTokens) {
     let id = Id::new("macos.progress");
     let radius = r.height() / 2.0;
@@ -103,11 +103,7 @@ pub(crate) fn progress(ui: &mut Ui<'_>, r: Rect, progress: ProgressView, tk: &Ma
         }
         ProgressView::Indeterminate { restarted_at, .. } => {
             ui.animate(id, 0.0f32, Transition::INSTANT);
-            ui.request_smooth_frame();
-            let elapsed = (ui.time() - restarted_at).max(0.0);
-            if let Some(c) = indeterminate_capsule(r, elapsed, CAPSULE_CYCLE, CAPSULE_STRETCH) {
-                ui.fill_rect_unsnapped(c, radius, tk.progress);
-            }
+            ui.indeterminate_capsule(r, restarted_at, tk.progress);
         }
     }
 }
@@ -194,33 +190,12 @@ fn inset_vertex(prev: Point, at: Point, next: Point, r: f64) -> Point {
 // Overlay scroller
 // ------------------------------------------------------------------------------------------------
 
-/// Knob width at rest and while the pointer is over the scroller or dragging it; its inset from
-/// the viewport's right edge; shortest knob.
-const KNOB_THIN: f64 = 6.0;
-const KNOB_WIDE: f64 = 9.0;
-const KNOB_INSET: f64 = 2.0;
-const MIN_KNOB: f64 = 18.0;
-
-/// The overlay scroller at the right edge of `viewport` for content `content_h` tall at
-/// `offset`: a rounded knob that widens under the pointer. Dragging it scrolls; returns the new
-/// offset.
-pub(crate) fn scroll_bar(ui: &mut Ui<'_>, viewport: Rect, content_h: f64, offset: f64, tk: &MacTokens) -> f64 {
-    let (view_h, max) = (viewport.height(), (content_h - viewport.height()).max(0.0));
-    if max <= 0.0 {
-        return 0.0;
-    }
-    let x1 = viewport.x1 - KNOB_INSET;
-    let it = ui.interact(Id::new("macos.scroller"), Rect::new(x1 - KNOB_WIDE, viewport.y0, x1, viewport.y1));
-    let knob_h = (view_h * view_h / content_h).max(MIN_KNOB).min(view_h - 2.0 * KNOB_INSET);
-    let travel = view_h - 2.0 * KNOB_INSET - knob_h;
-    let mut offset = offset;
-    if it.pointer_down && travel > 0.0 {
-        offset = (offset + ui.pointer_delta().y * max / travel).clamp(0.0, max);
-    }
-    let w = ui.animate(Id::new("macos.scroller.width"),
-                       if it.hovered || it.pointer_down { KNOB_WIDE as f32 } else { KNOB_THIN as f32 },
-                       Transition::linear(0.12)) as f64;
-    let y = viewport.y0 + KNOB_INSET + offset / max * travel;
-    ui.fill_rect_unsnapped(Rect::from_origin_size(Point::new(x1 - w, y), Size::new(w, knob_h)), w / 2.0, tk.scroll_thumb);
-    offset
-}
+/// The overlay scroller (`MacTokens::scroll_thumb`): a rounded knob 6 wide, 9 under the pointer
+/// or while dragged, inset 2 from the viewport's right edge, top and bottom, at least 18 tall.
+pub(crate) const SCROLL_BAR: ScrollBarSpec = ScrollBarSpec { thin: 6.0,
+                                                             wide: 9.0,
+                                                             inset: 2.0,
+                                                             end_inset: 2.0,
+                                                             min_thumb: 18.0,
+                                                             fade: Transition::linear(0.12),
+                                                             max_radius: None };

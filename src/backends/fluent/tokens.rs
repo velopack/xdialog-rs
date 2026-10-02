@@ -76,13 +76,14 @@ pub(crate) struct FluentTokens {
 }
 
 /// The accent palette for `appearance`: the system's (Windows registry), one derived from an
-/// accent colour without a palette (portal, test override), else the Windows 11 default blue.
+/// accent colour without a palette (portal, macOS, test override), else the Windows 11 default blue.
 fn palette(appearance: &Appearance) -> [Color; 7] {
     appearance.accent.map_or(DEFAULT_PALETTE.map(rgb), |a| a.win_palette.unwrap_or_else(|| derive_palette(a.base)))
 }
 
-/// Approximate `[L3, L2, L1, A, D1, D2, D3]` from a single accent colour (only used when an
-/// accent comes without the Windows palette, i.e. `XDIALOG_TEST_ACCENT` alone).
+/// Approximate `[L3, L2, L1, A, D1, D2, D3]` from a single accent colour, for an accent without
+/// the Windows palette: the Linux portal's, macOS `controlAccentColor`, or `XDIALOG_TEST_ACCENT`
+/// alone.
 fn derive_palette(base: Color) -> [Color; 7] {
     let (w, b) = (Color::WHITE, Color::BLACK);
     let mix = |to: Color, t: f32| base.lerp_to_gamma(to, t);

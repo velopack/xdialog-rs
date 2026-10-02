@@ -17,7 +17,6 @@ use crate::backends::draw::{Color, Weight};
 use crate::backends::gui::appearance::{Accent, Appearance};
 use crate::backends::gui::text::ThemeFonts;
 
-use super::widgets::{BUTTON_H, CORNER};
 use super::MacStyle;
 
 /// `systemBlue` (the default `controlAccentColor`), light and dark.
@@ -40,8 +39,6 @@ pub(crate) struct MacTokens {
     pub default_pressed_bottom: Color,
     /// Label on the accent fill (`alternateSelectedControlTextColor`).
     pub default_text: Color,
-    /// Push button corner radius: 6 on Sequoia, a capsule (half the 28 height) on Tahoe.
-    pub button_radius: f64,
     /// Standard push button fill (translucent), under the pointer, and while pressed.
     pub button: Color,
     pub button_hover: Color,
@@ -101,7 +98,6 @@ impl MacTokens {
                     default_pressed_top: top.lerp_to_gamma(black, pressed),
                     default_pressed_bottom: bottom.lerp_to_gamma(black, pressed),
                     default_text: white,
-                    button_radius: CORNER,
                     button: t(0x1F000000, 0x47FFFFFF),
                     button_hover: t(0x2B000000, 0x59FFFFFF),
                     button_pressed: t(0x38000000, 0x6BFFFFFF),
@@ -144,7 +140,6 @@ impl MacTokens {
                     default_hover_bottom: hover,
                     default_pressed_top: pressed,
                     default_pressed_bottom: pressed,
-                    button_radius: BUTTON_H / 2.0,
                     button: t(0x13000000, 0x13FFFFFF),
                     button_hover: t(0x1F000000, 0x24FFFFFF),
                     button_pressed: t(0x2E000000, 0x38FFFFFF),

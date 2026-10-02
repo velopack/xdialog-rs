@@ -1,7 +1,7 @@
 //! Design tokens of the Ubuntu theme: metrics (logical px) and the light / dark colours, with the
 //! desktop accent colour applied to the progress bar and the hover / pressed / focused buttons.
 
-use crate::backends::draw::color::rgb;
+use crate::backends::draw::color::{argb, rgb};
 use crate::backends::draw::{Color, Weight};
 use crate::backends::gui::appearance::Appearance;
 use crate::backends::gui::text::ThemeFonts;
@@ -26,6 +26,10 @@ pub(super) const BUTTON_BORDER: f64 = 2.0;
 pub(super) const PROGRESS_H: f64 = 6.0;
 /// Determinate track/bar corner radius (logical; not a pill).
 pub(super) const PROGRESS_RADIUS: f64 = 2.0;
+/// Smallest scrolling body viewport, and its right edge's distance from the window's (the
+/// overlay scroll bar sits in the margin, next to the text).
+pub(super) const MIN_VIEWPORT: f64 = 40.0;
+pub(super) const SCROLLBAR_INSET: f64 = 4.0;
 /// Window width bounds.
 pub(super) const MIN_WIDTH: f64 = 350.0;
 pub(super) const MAX_WIDTH: f64 = 600.0;
@@ -64,6 +68,8 @@ pub(crate) struct UbuntuTokens {
     pub hover: ButtonLook,
     pub pressed: ButtonLook,
     pub focused: ButtonLook,
+    /// Overlay scroll bar slider.
+    pub scroll_thumb: Color,
 }
 
 const fn look(border: u32, fill: u32, text: u32) -> ButtonLook {
@@ -71,8 +77,8 @@ const fn look(border: u32, fill: u32, text: u32) -> ButtonLook {
 }
 
 impl UbuntuTokens {
-    /// Light or dark palette plus the accent. The accent is honoured only when it comes from the
-    /// desktop portal (a no-op off Linux) or a test override.
+    /// Light or dark palette plus the system accent whenever there is one: the desktop portal's on
+    /// Linux, the Windows accent palette's base, macOS `controlAccentColor`, or a test override.
     pub(crate) fn resolve(appearance: &Appearance) -> UbuntuTokens {
         let mut tk = if appearance.dark {
             UbuntuTokens { bg: rgb(0x2D2D2D),
@@ -83,7 +89,8 @@ impl UbuntuTokens {
                            idle: look(0x5A5A5A, 0x3B3B3B, 0xEEEEEE),
                            hover: look(0x2A7DE3, 0x2A7DE3, 0xFFFFFF),
                            pressed: look(0x1E5FAF, 0x1E5FAF, 0xFFFFFF),
-                           focused: look(0x2A7DE3, 0x3B3B3B, 0xEEEEEE) }
+                           focused: look(0x2A7DE3, 0x3B3B3B, 0xEEEEEE),
+                           scroll_thumb: argb(0x80EEEEEE) }
         } else {
             UbuntuTokens { bg: rgb(0xFAFAFA),
                            title_text: rgb(0x3D3D3D),
@@ -93,7 +100,8 @@ impl UbuntuTokens {
                            idle: look(0xC7C7C7, 0xFFFFFF, 0x3D3D3D),
                            hover: look(0x2A7DE3, 0x2A7DE3, 0xFFFFFF),
                            pressed: look(0x1E5FAF, 0x1E5FAF, 0xFFFFFF),
-                           focused: look(0x2A7DE3, 0xFFFFFF, 0x3D3D3D) }
+                           focused: look(0x2A7DE3, 0xFFFFFF, 0x3D3D3D),
+                           scroll_thumb: argb(0x803D3D3D) }
         };
         if let Some(accent) = appearance.accent {
             tk.apply_accent(accent.base);

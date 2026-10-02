@@ -1,4 +1,5 @@
-//! The Ubuntu theme's widgets: the outlined button, the progress bar and the icons.
+//! The Ubuntu theme's widgets: the outlined button, the progress bar, the look of the body
+//! scroll bar and the icons.
 
 use std::rc::Rc;
 
@@ -8,7 +9,7 @@ use crate::backends::draw::{Color, LineCap, Point, Rect, Size, Vec2};
 use crate::backends::gui::anim::{Easing, Lerp, Transition};
 use crate::backends::gui::text::TextBlock;
 use crate::backends::gui::theme::{button_id, ButtonInteraction, DialogView, ProgressView};
-use crate::backends::gui::ui::{caps_centered, indeterminate_capsule, Id, Ui, CAPSULE_CYCLE, CAPSULE_STRETCH};
+use crate::backends::gui::ui::{caps_centered, Id, ScrollBarSpec, Ui};
 use crate::model::XDialogIcon;
 
 /// Button colour fade: 150 ms linear.
@@ -78,7 +79,7 @@ fn progress_id() -> Id {
 
 /// The progress bar in `rect` (`PROGRESS_H` tall): a radius-2 track + bar animating to each new
 /// value over 300 ms OutCubic; indeterminate = a pill track with the shared "stretchy capsule"
-/// (`ui::indeterminate_capsule`) on a 3 s loop.
+/// (`Ui::indeterminate_capsule`) on a 3 s loop.
 pub(crate) fn progress(ui: &mut Ui<'_>, rect: Rect, progress: ProgressView, tk: &UbuntuTokens) {
     match progress {
         ProgressView::Determinate { value } => {
@@ -93,16 +94,25 @@ pub(crate) fn progress(ui: &mut Ui<'_>, rect: Rect, progress: ProgressView, tk: 
         ProgressView::Indeterminate { restarted_at, .. } => {
             // A running value animation freezes while indeterminate.
             ui.stop_animation::<f32>(progress_id());
-            let r = rect.height() / 2.0;
-            ui.fill_rect(rect, r, tk.progress_bg);
-            let elapsed = (ui.time() - restarted_at).max(0.0);
-            if let Some(c) = indeterminate_capsule(rect, elapsed, CAPSULE_CYCLE, CAPSULE_STRETCH) {
-                ui.fill_rect_unsnapped(c, r, tk.progress_fg);
-            }
-            ui.request_smooth_frame();
+            ui.fill_rect(rect, rect.height() / 2.0, tk.progress_bg);
+            ui.indeterminate_capsule(rect, restarted_at, tk.progress_fg);
         }
     }
 }
+
+// ------------------------------------------------------------------------------------------------
+// Scroll bar
+// ------------------------------------------------------------------------------------------------
+
+/// GTK's overlay scroll bar (Yaru): a 3 px slider (`UbuntuTokens::scroll_thumb`), 8 px while
+/// hovered or dragged, inset 3 from the viewport's right edge, top and bottom, at least 40 tall.
+pub(crate) const SCROLL_BAR: ScrollBarSpec = ScrollBarSpec { thin: 3.0,
+                                                             wide: 8.0,
+                                                             inset: 3.0,
+                                                             end_inset: 3.0,
+                                                             min_thumb: 40.0,
+                                                             fade: FADE,
+                                                             max_radius: None };
 
 // ------------------------------------------------------------------------------------------------
 // Icons: drawn procedurally, a filled disc with a white "i" (information), a white X (error) or a

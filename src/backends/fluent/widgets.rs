@@ -1,5 +1,5 @@
 //! Fluent theme widgets: the button (Button / AccentButtonStyle), the progress bar (ProgressBar),
-//! the severity icon (InfoBar-style) and the body scroll bar (ScrollBar).
+//! the severity icon (InfoBar-style) and the look of the body scroll bar (ScrollBar).
 
 use std::rc::Rc;
 
@@ -8,7 +8,7 @@ use crate::backends::draw::{LineCap, Point, Rect, Size, Vec2};
 use crate::backends::gui::anim::{Easing, Transition};
 use crate::backends::gui::text::TextBlock;
 use crate::backends::gui::theme::{button_id, ButtonInteraction, DialogView, ProgressView};
-use crate::backends::gui::ui::{centered, Id, Ui};
+use crate::backends::gui::ui::{centered, Id, ScrollBarSpec, Ui};
 use crate::model::XDialogIcon;
 
 /// Button height (padding 5/6 + one text line + 1 px borders).
@@ -194,39 +194,15 @@ pub(crate) fn icon(ui: &mut Ui<'_>, origin: Point, icon: &XDialogIcon, tk: &Flue
 // Scroll bar
 // ------------------------------------------------------------------------------------------------
 
-/// Thumb width at rest and while the pointer is over the bar or dragging it.
-const THUMB_THIN: f64 = 2.0;
-const THUMB_WIDE: f64 = 6.0;
-/// Gap between the thumb and the viewport's right edge; shortest thumb.
-const BAR_MARGIN: f64 = 2.0;
-const MIN_THUMB: f64 = 12.0;
-
-/// WinUI's overlay scroll bar at the right edge of `viewport` for content `content_h` tall at
-/// `offset`: a thin thumb (ControlStrongFillColorDefault) that widens while hovered. Dragging it
-/// scrolls; returns the new offset.
-pub(crate) fn scroll_bar(ui: &mut Ui<'_>, viewport: Rect, content_h: f64, offset: f64, tk: &FluentTokens) -> f64 {
-    let (view_h, max) = (viewport.height(), (content_h - viewport.height()).max(0.0));
-    if max <= 0.0 {
-        return 0.0;
-    }
-    let x1 = viewport.x1 - BAR_MARGIN;
-    let bar = Rect::new(x1 - THUMB_WIDE, viewport.y0, x1, viewport.y1);
-    let it = ui.interact(Id::new("fluent.scrollbar"), bar);
-    let thumb_h = (view_h * view_h / content_h).max(MIN_THUMB).min(view_h);
-    let travel = view_h - thumb_h;
-    let mut offset = offset;
-    if it.pointer_down && travel > 0.0 {
-        offset = (offset + ui.pointer_delta().y * max / travel).clamp(0.0, max);
-    }
-    let w = ui.animate(Id::new("fluent.scrollbar.width"),
-                       if it.hovered || it.pointer_down { THUMB_WIDE as f32 } else { THUMB_THIN as f32 },
-                       Transition::linear(0.1));
-    let y = viewport.y0 + offset / max * travel;
-    ui.fill_rect_unsnapped(Rect::from_origin_size(Point::new(x1 - w as f64, y), Size::new(w as f64, thumb_h)),
-                           3.0f64.min(w as f64 / 2.0),
-                           tk.scroll_thumb);
-    offset
-}
+/// WinUI's overlay scroll bar (ScrollBar): a 2 px thumb (`FluentTokens::scroll_thumb`), 6 px
+/// while hovered, 2 px from the viewport's right edge, at least 12 tall.
+pub(crate) const SCROLL_BAR: ScrollBarSpec = ScrollBarSpec { thin: 2.0,
+                                                             wide: 6.0,
+                                                             inset: 2.0,
+                                                             end_inset: 0.0,
+                                                             min_thumb: 12.0,
+                                                             fade: Transition::linear(0.1),
+                                                             max_radius: Some(3.0) };
 
 #[cfg(test)]
 mod tests {
