@@ -33,5 +33,5 @@ core, driven by design tokens. On macOS the `MacOS` look's window is transparent
   macOS look's style, otherwise chosen by the running macOS version), `XDIALOG_TEST_D2D_FAIL`
   (Windows: the Direct2D window surface can't be created, as without Direct2D),
   `XDIALOG_TEST_FAIL_DRAWN` (the drawn runtime fails to show any dialog) and
-  `XDIALOG_TEST_STUB_TASKDIALOG` (TaskDialogs answer at once with their default button, no
-  window); `tests/fallback.rs` uses the last two.
+  `XDIALOG_TEST_STUB_TASKDIALOG` (no TaskDialog window: a message answers at once with its
+  default button, a progress dialog stays open until closed); `tests/fallback.rs` uses the last two.
