@@ -38,6 +38,7 @@ pub(crate) struct Line {
 
 /// A laid out paragraph.
 pub(crate) struct CtLayout {
+    #[allow(dead_code)] // `TextLayout::id`, used by the soft backend only
     id: u64,
     size: Size,
     line_count: usize,
@@ -314,9 +315,6 @@ fn lay_out(text: &str, font: &CTFont, p: &TextParams<'_>) -> CtLayout {
                 (line.typographic_bounds(ptr::null_mut(), ptr::null_mut(), ptr::null_mut()) - line.trailing_whitespace_width()).max(0.0);
             lines.push((line, width));
             start += n;
-        }
-        if lines.is_empty() {
-            return empty_layout(pitch, ascent, cap);
         }
         let width = lines.iter().map(|l| l.1).fold(0.0, f64::max);
         let flush_width = p.max_width.unwrap_or(width);

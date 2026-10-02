@@ -62,7 +62,7 @@ pub(crate) struct TextParams<'a> {
     pub weight: Weight,
     /// Variable-font optical size in pt (Fluent: px*0.75). D2D applies it via IDWriteFactory6
     /// axis values; CG and soft ignore it. None = font default.
-    #[cfg_attr(draw_soft, allow(dead_code))] // D2D only
+    #[cfg_attr(not(windows), allow(dead_code))] // D2D only
     pub optical_size: Option<f64>,
     /// Uniform line pitch in logical px (Fluent size*2724/2048, Ubuntu size*1.2); None = font's
     /// natural. The difference to the font's ascent + descent is split evenly above and below the
@@ -114,8 +114,9 @@ pub(crate) trait TextLayout: Clone + 'static {
     /// Cap height of the paragraph's primary font (logical px): with `first_baseline`, what
     /// centres a label's capitals optically.
     fn cap_height(&self) -> f64;
-    /// Process-unique monotonic id assigned at creation (NOT a pointer — no ABA). Backend
-    /// caches (soft text rasters, D2D command lists) key on (id, colour).
+    /// Process-unique monotonic id assigned at creation (NOT a pointer — no ABA). The soft
+    /// backend's text rasters key on (id, scale).
+    #[cfg_attr(not(draw_soft), allow(dead_code))]
     fn id(&self) -> u64;
 }
 
@@ -143,14 +144,24 @@ pub(crate) trait Canvas {
     fn draw_image(&mut self, image: &Image, dst: Rect);
 }
 
-/// Where frames go. `present` is a no-op for a zero-sized frame.
+/// Where frames go.
 pub(crate) trait Surface {
-    fn present(&mut self, frame: &Frame<'_>) -> Result<(), DrawError>;
+    /// A no-op for a zero-sized frame (minimised, not laid out yet): a memory surface keeps its
+    /// previous image.
+    fn present(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
+        if list::is_zero_size(frame.size_px) {
+            return Ok(());
+        }
+        self.present_nonzero(frame)
+    }
+
+    /// `present` for a frame with both sides non-zero.
+    fn present_nonzero(&mut self, frame: &Frame<'_>) -> Result<(), DrawError>;
 }
 
 pub(crate) trait WindowTarget: Surface + Sized {
-    /// Created after the window exists and before it is shown. Recreates the device target
-    /// once on `DrawError::Lost` inside `present`.
+    /// Created after the window exists and before it is shown. A device target that fails to
+    /// present is recreated once inside `present`.
     fn new(window: &std::rc::Rc<winit::window::Window>, text: &std::rc::Rc<Text>) -> Result<Self, DrawError>;
 }
 
@@ -163,10 +174,6 @@ pub(crate) trait MemoryTarget: Surface + Sized {
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum DrawError {
-    /// D2DERR_RECREATE_TARGET etc.
-    #[error("render target lost")]
-    #[cfg_attr(draw_soft, allow(dead_code))] // D2D only
-    Lost,
     #[error("{0}")]
     Backend(String),
 }

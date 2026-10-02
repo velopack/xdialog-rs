@@ -73,15 +73,24 @@ impl ImageCache {
 /// A `CGImage` over a copy of the image's premultiplied RGBA8 pixels.
 fn new_image(image: &Image, space: &CGColorSpace) -> Option<CFRetained<CGImage>> {
     let [w, h] = image.size();
-    let (w, h) = (w as usize, h as usize);
-    if w == 0 || h == 0 || image.rgba().len() != w * h * 4 {
+    // Byte order default + alpha last: R, G, B, A bytes, premultiplied.
+    cg_image(image.rgba(), w as usize, h as usize, space, CGBitmapInfo(CGImageAlphaInfo::PremultipliedLast.0), true)
+}
+
+/// A `w` x `h` `CGImage` of 32-bit pixels laid out as `info` says, over a copy of `bytes` (so the
+/// image owns its pixels whatever CG retains it for). `None` if `bytes` is not `w * h * 4` long.
+pub(super) fn cg_image(bytes: &[u8],
+                       w: usize,
+                       h: usize,
+                       space: &CGColorSpace,
+                       info: CGBitmapInfo,
+                       interpolate: bool)
+                       -> Option<CFRetained<CGImage>> {
+    if w == 0 || h == 0 || bytes.len() != w * h * 4 {
         return None;
     }
-    // CFData copies the bytes, so the image owns its pixels whatever CG retains it for.
-    let data = CFData::from_bytes(image.rgba());
+    let data = CFData::from_bytes(bytes);
     let provider = CGDataProvider::with_cf_data(Some(&data))?;
-    // Byte order default + alpha last: R, G, B, A bytes, premultiplied.
-    let info = CGBitmapInfo(CGImageAlphaInfo::PremultipliedLast.0);
     // SAFETY: 8 bits per component, 32 per pixel, `w * 4` bytes per row: exactly the `w * h * 4`
     // bytes the provider holds (checked above); `decode` may be null (no remapping).
     unsafe {
@@ -94,7 +103,7 @@ fn new_image(image: &Image, space: &CGColorSpace) -> Option<CFRetained<CGImage>>
                      info,
                      Some(&provider),
                      ptr::null(),
-                     true,
+                     interpolate,
                      CGColorRenderingIntent::RenderingIntentDefault)
     }
 }

@@ -13,10 +13,10 @@ use std::rc::Rc;
 
 use winit::window::Window;
 
-use super::canvas::Painter;
+use super::canvas::{cg_image, Painter};
 use super::text::Text;
 use crate::backends::draw::softbuffer_surface;
-use crate::backends::draw::{list, DrawError, Frame};
+use crate::backends::draw::{DrawError, Frame};
 
 /// Presents into a window: through softbuffer (opaque), or through its own layer (translucent).
 pub(crate) struct WindowSurface {
@@ -46,10 +46,7 @@ impl WindowSurface {
 }
 
 impl crate::backends::draw::Surface for WindowSurface {
-    fn present(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
-        if list::is_zero_size(frame.size_px) {
-            return Ok(()); // minimised / not laid out yet
-        }
+    fn present_nonzero(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
         let painter = &mut self.painter;
         match &mut self.target {
             Presenter::Soft(surface) => surface.present_with(frame.size_px, |buffer| painter.draw(buffer, frame, false)),
@@ -62,21 +59,18 @@ mod layer {
     //! A `CALayer` added over the window view's own layer, showing each frame as a premultiplied
     //! `CGImage`.
 
-    use std::ptr;
     use std::rc::Rc;
 
     use objc2::rc::Retained;
     use objc2::runtime::AnyObject;
     use objc2_app_kit::NSView;
-    use objc2_core_foundation::{CFData, CFRetained, CGPoint};
-    use objc2_core_graphics::{
-        CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGDataProvider, CGImage, CGImageAlphaInfo, CGImageByteOrderInfo,
-    };
+    use objc2_core_foundation::{CFRetained, CGPoint};
+    use objc2_core_graphics::{CGBitmapInfo, CGColorSpace, CGImageAlphaInfo, CGImageByteOrderInfo};
     use objc2_quartz_core::{kCAGravityTopLeft, CALayer, CATransaction};
     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use winit::window::Window;
 
-    use super::Painter;
+    use super::{cg_image, Painter};
     use crate::backends::draw::{DrawError, Frame};
 
     pub(super) struct LayerTarget {
@@ -115,26 +109,10 @@ mod layer {
             painter.draw(&mut self.pixels, frame, true)?;
             // SAFETY: plain `u32`s viewed as their bytes.
             let bytes = unsafe { std::slice::from_raw_parts(self.pixels.as_ptr().cast::<u8>(), self.pixels.len() * 4) };
-            // CFData copies the frame: the layer keeps showing its image while the next is drawn.
-            let data = CFData::from_bytes(bytes);
-            let provider =
-                CGDataProvider::with_cf_data(Some(&data)).ok_or_else(|| DrawError::Backend("cg: CGDataProviderCreateWithCFData failed".into()))?;
+            // The image copies the frame: the layer keeps showing it while the next is drawn.
             let info = CGBitmapInfo(CGImageAlphaInfo::PremultipliedFirst.0 | CGImageByteOrderInfo::Order32Little.0);
-            // SAFETY: 8 bits per component, 32 per pixel, `w * 4` bytes per row: exactly the
-            // `w * h * 4` bytes the provider holds; `decode` may be null (no remapping).
-            let image = unsafe {
-                CGImage::new(w,
-                             h,
-                             8,
-                             32,
-                             w * 4,
-                             Some(&self.space),
-                             info,
-                             Some(&provider),
-                             ptr::null(),
-                             false,
-                             CGColorRenderingIntent::RenderingIntentDefault)
-            }.ok_or_else(|| DrawError::Backend("cg: CGImageCreate failed".into()))?;
+            let image =
+                cg_image(bytes, w, h, &self.space, info, false).ok_or_else(|| DrawError::Backend("cg: CGImageCreate failed".into()))?;
             // No implicit animations (a contents change would cross-fade).
             CATransaction::begin();
             CATransaction::setDisableActions(true);
@@ -174,16 +152,13 @@ impl crate::backends::draw::MemoryTarget for MemorySurface {
     }
 
     fn read_rgba(&self) -> Option<(u32, u32, &[u8])> {
-        (!list::is_zero_size(self.size)).then(|| (self.size[0], self.size[1], &self.rgba[..]))
+        (!crate::backends::draw::list::is_zero_size(self.size)).then(|| (self.size[0], self.size[1], &self.rgba[..]))
     }
 }
 
 #[cfg(any(test, feature = "_test-hooks"))]
 impl crate::backends::draw::Surface for MemorySurface {
-    fn present(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
-        if list::is_zero_size(frame.size_px) {
-            return Ok(()); // the previous image is kept
-        }
+    fn present_nonzero(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
         let n = frame.size_px[0] as usize * frame.size_px[1] as usize;
         self.pixels.resize(n, 0);
         self.painter.draw(&mut self.pixels, frame, false)?;
