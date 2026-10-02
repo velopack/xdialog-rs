@@ -87,12 +87,26 @@ pub struct XDialogOptions {
     /// An `.ico`, `.png` or `.icns` image. With the drawn backends (Fluent, Ubuntu, MacOS) it is the
     /// window / taskbar icon where the platform has one (Windows, X11; not Wayland or macOS), and
     /// the icon shown in the dialog with [`XDialogIcon::Custom`]. The other backends ignore it. An
-    /// image that can't be read or decoded is logged and ignored.
+    /// image that can't be read or decoded is logged and ignored. PNG images (a `.png`, or a PNG
+    /// frame of an `.ico`) must be 8-bit RGB, RGBA, gray or gray + alpha: palette (indexed) and
+    /// 16-bit PNGs are not supported. Frames over 1024 px are skipped.
     pub icon_source: Option<XDialogIconSource>,
     /// The buttons to display in the dialog. This can be an empty array to collapse the button panel.
     /// For progress dialogs the buttons are shown on every platform; an empty array shows no button
     /// except with Win32 TaskDialog, which shows a default button.
     pub buttons: Vec<String>,
+}
+
+impl XDialogOptions {
+    /// The options of the shortcut functions: no icon source.
+    pub(crate) fn basic(title: &str, main_instruction: &str, message: &str, icon: XDialogIcon, buttons: &[&str]) -> Self {
+        XDialogOptions { title: title.to_string(),
+                         main_instruction: main_instruction.to_string(),
+                         message: message.to_string(),
+                         icon,
+                         icon_source: None,
+                         buttons: buttons.iter().map(|b| b.to_string()).collect() }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -159,7 +173,7 @@ impl ResultSender {
 pub(crate) enum DialogMessageRequest {
     // generic
     /// Wake the backend (fonts or the system appearance changed: refresh open dialogs).
-    #[cfg_attr(not(target_os = "linux"), allow(dead_code))] // sent by Linux background threads only
+    #[cfg_attr(not(draw_soft), allow(dead_code))] // sent by the soft backend's font scan / appearance watcher only
     None,
     ExitEventLoop,
     CloseWindow(usize),

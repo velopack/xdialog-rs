@@ -14,8 +14,7 @@ pub fn show_message_info_ok<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
     main_instruction: P2,
     message: P3,
 ) -> Result<(), XDialogError> {
-    show_message_internal(XDialogIcon::Information, window_title, main_instruction, message, vec!["OK".to_string()])?;
-    Ok(())
+    ok(XDialogIcon::Information, window_title.as_ref(), main_instruction.as_ref(), message.as_ref())
 }
 
 /// Shows a message box with a warning icon and an OK button and blocks until the user closes it.
@@ -24,8 +23,7 @@ pub fn show_message_warn_ok<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
     main_instruction: P2,
     message: P3,
 ) -> Result<(), XDialogError> {
-    show_message_internal(XDialogIcon::Warning, window_title, main_instruction, message, vec!["OK".to_string()])?;
-    Ok(())
+    ok(XDialogIcon::Warning, window_title.as_ref(), main_instruction.as_ref(), message.as_ref())
 }
 
 /// Shows a message box with an error icon and an OK button and blocks until the user closes it.
@@ -34,8 +32,7 @@ pub fn show_message_error_ok<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
     main_instruction: P2,
     message: P3,
 ) -> Result<(), XDialogError> {
-    show_message_internal(XDialogIcon::Error, window_title, main_instruction, message, vec!["OK".to_string()])?;
-    Ok(())
+    ok(XDialogIcon::Error, window_title.as_ref(), main_instruction.as_ref(), message.as_ref())
 }
 
 /// Shows a message box with OK/Cancel buttons and blocks until the user closes it.
@@ -46,8 +43,7 @@ pub fn show_message_ok_cancel<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
     message: P3,
     icon: XDialogIcon,
 ) -> Result<bool, XDialogError> {
-    let result = show_message_internal(icon, window_title, main_instruction, message, vec!["Cancel".to_string(), "OK".to_string()])?;
-    Ok(result == XDialogResult::ButtonPressed(1))
+    confirm(icon, window_title.as_ref(), main_instruction.as_ref(), message.as_ref(), ["Cancel", "OK"])
 }
 
 /// Shows a message box with Yes/No buttons and blocks until the user closes it.
@@ -58,8 +54,7 @@ pub fn show_message_yes_no<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
     message: P3,
     icon: XDialogIcon,
 ) -> Result<bool, XDialogError> {
-    let result = show_message_internal(icon, window_title, main_instruction, message, vec!["No".to_string(), "Yes".to_string()])?;
-    Ok(result == XDialogResult::ButtonPressed(1))
+    confirm(icon, window_title.as_ref(), main_instruction.as_ref(), message.as_ref(), ["No", "Yes"])
 }
 
 /// Shows a message box with Retry/Cancel buttons and blocks until the user closes it.
@@ -70,31 +65,27 @@ pub fn show_message_retry_cancel<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>
     message: P3,
     icon: XDialogIcon,
 ) -> Result<bool, XDialogError> {
-    let result = show_message_internal(icon, window_title, main_instruction, message, vec!["Cancel".to_string(), "Retry".to_string()])?;
+    confirm(icon, window_title.as_ref(), main_instruction.as_ref(), message.as_ref(), ["Cancel", "Retry"])
+}
+
+fn ok(icon: XDialogIcon, title: &str, main_instruction: &str, message: &str) -> Result<(), XDialogError> {
+    show_message_internal(XDialogOptions::basic(title, main_instruction, message, icon, &["OK"]))?;
+    Ok(())
+}
+
+/// `true` if the second button (`yes`) was pressed.
+fn confirm(icon: XDialogIcon, title: &str, main_instruction: &str, message: &str, [no, yes]: [&str; 2]) -> Result<bool, XDialogError> {
+    let result = show_message_internal(XDialogOptions::basic(title, main_instruction, message, icon, &[no, yes]))?;
     Ok(result == XDialogResult::ButtonPressed(1))
 }
 
-fn show_message_internal<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
-    icon: XDialogIcon,
-    window_title: P1,
-    main_instruction: P2,
-    message: P3,
-    buttons: Vec<String>,
-) -> Result<XDialogResult, XDialogError> {
-    let data = XDialogOptions {
-        title: window_title.as_ref().to_string(),
-        main_instruction: main_instruction.as_ref().to_string(),
-        message: message.as_ref().to_string(),
-        icon,
-        icon_source: None,
-        buttons,
-    };
+fn show_message_internal(options: XDialogOptions) -> Result<XDialogResult, XDialogError> {
     // Checked before showing: the dialog would only flash.
     if is_ui_thread() && !get_silent() {
         warn!("xdialog: show_message_* would block the xdialog UI thread and deadlock; call it from another thread or use show_message");
         return Err(XDialogError::BlockingCallOnUiThread);
     }
-    show_message(data).wait()
+    show_message(options).wait()
 }
 
 /// Shows a message box with the specified options and returns at once, without waiting for the
@@ -171,7 +162,7 @@ impl MessageDialogProxy {
     /// Like [`wait`](Self::wait), but closes the dialog and returns
     /// [`XDialogResult::TimeoutElapsed`] if the user hasn't closed it within `timeout`.
     pub fn wait_timeout(&self, timeout: Duration) -> Result<XDialogResult, XDialogError> {
-        self.wait_until(Some(Instant::now() + timeout))
+        self.wait_until(Instant::now().checked_add(timeout))
     }
 
     fn wait_until(&self, deadline: Option<Instant>) -> Result<XDialogResult, XDialogError> {
@@ -188,7 +179,7 @@ impl MessageDialogProxy {
         // Timed out. The first result wins: one that arrives right now is kept.
         self.result.set(Ok(XDialogResult::TimeoutElapsed));
         let _ = send_request(DialogMessageRequest::CloseWindow(self.id));
-        self.try_result().unwrap_or(Ok(XDialogResult::TimeoutElapsed))
+        self.try_result().expect("just set")
     }
 
     /// Closes the dialog; its result becomes [`XDialogResult::WindowClosed`]. Does nothing if it
@@ -282,6 +273,48 @@ mod tests {
         assert!(matches!(p.wait_timeout(Duration::from_millis(10)), Ok(XDialogResult::TimeoutElapsed)));
         tx.send(XDialogResult::WindowClosed); // the backend's close, afterwards
         assert!(matches!(p.try_result(), Some(Ok(XDialogResult::TimeoutElapsed))));
+    }
+
+    #[test]
+    fn proxy_wait_timeout_max_waits_forever() {
+        let (p, reply) = proxy();
+        let answer = std::thread::spawn(move || {
+            let tx = reply.opened();
+            std::thread::sleep(Duration::from_millis(10));
+            tx.send(XDialogResult::ButtonPressed(1));
+        });
+        assert!(matches!(p.wait_timeout(Duration::MAX), Ok(XDialogResult::ButtonPressed(1))));
+        answer.join().unwrap();
+    }
+
+    #[test]
+    fn proxy_future_wakes_on_answer() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::task::{Wake, Waker};
+
+        struct Flag(AtomicBool);
+        impl Wake for Flag {
+            fn wake(self: Arc<Self>) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+        let flag = Arc::new(Flag(false.into()));
+        let waker = Waker::from(flag.clone());
+        let mut cx = Context::from_waker(&waker);
+
+        let (mut p, reply) = proxy();
+        assert!(Pin::new(&mut p).poll(&mut cx).is_pending());
+        reply.opened().send(XDialogResult::ButtonPressed(1));
+        assert!(flag.0.load(Ordering::SeqCst));
+        assert!(matches!(Pin::new(&mut p).poll(&mut cx), Poll::Ready(Ok(XDialogResult::ButtonPressed(1)))));
+
+        flag.0.store(false, Ordering::SeqCst);
+        let (mut p, reply) = proxy();
+        assert!(Pin::new(&mut p).poll(&mut cx).is_pending());
+        drop(reply);
+        assert!(flag.0.load(Ordering::SeqCst));
+        assert!(matches!(Pin::new(&mut p).poll(&mut cx), Poll::Ready(Err(XDialogError::NoResult(_)))));
     }
 
     #[test]
