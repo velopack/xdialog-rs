@@ -411,7 +411,9 @@ mod tests {
         assert_eq!(two.line_count(), 2);
         assert_eq!(two.size().height, 60.0);
         let font = t.font(&fam, 400, 14.0);
-        let expected = font.ascent() + (30.0 - font.ascent() - font.descent()) / 2.0;
+        // SAFETY: metric getters on a live font.
+        let (ascent, descent) = unsafe { (font.ascent(), font.descent()) };
+        let expected = ascent + (30.0 - ascent - descent) / 2.0;
         assert!((tall.0.lines[0].baseline - expected).abs() < 1e-9, "{} {expected}", tall.0.lines[0].baseline);
         assert!(natural.0.lines[0].baseline < tall.0.lines[0].baseline);
         assert_eq!(two.0.lines[1].baseline - two.0.lines[0].baseline, 30.0);

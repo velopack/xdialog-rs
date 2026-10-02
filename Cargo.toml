@@ -163,6 +163,11 @@ name = "offscreen"
 required-features = ["_test-hooks"]
 
 [[test]]
+name = "fallback"
+harness = false
+required-features = ["_test-hooks"]
+
+[[test]]
 name = "winit_host"
 harness = false
 required-features = ["winit-host", "_test-hooks"]

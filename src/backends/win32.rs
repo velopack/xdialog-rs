@@ -39,6 +39,13 @@ impl TaskDialogManager {
     }
 
     pub(crate) fn show(&self, id: usize, data: XDialogOptions, has_progress: bool, reply: DialogReply, button_callback: Option<ProgressButtonCallback>) {
+        // Test builds: answer at once with the default (last) button and no window (the fallback
+        // tests; a real TaskDialog would take focus). Later requests for the id are ignored.
+        if crate::backends::gui::appearance::test_flag("XDIALOG_TEST_STUB_TASKDIALOG") {
+            let n = data.buttons.len();
+            reply.opened().send(if n == 0 { XDialogResult::WindowClosed } else { XDialogResult::ButtonPressed(n - 1) });
+            return;
+        }
         let (tx, rx) = channel();
         self.lock().insert(id, tx);
         let open_dialogs = self.open_dialogs.clone();

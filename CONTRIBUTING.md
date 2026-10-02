@@ -25,4 +25,6 @@ core, driven by design tokens. On macOS the `MacOS` look's window is transparent
   `XDIALOG_VISUAL_TEST=1` compares).
 - Hidden environment variables (testing only): `XDIALOG_BACKEND=auto|win32|fluent|ubuntu|macos|appkit`
   overrides the backend choice; `XDIALOG_TEST_NO_ACTIVATE`, and in debug or `_test-hooks` builds
-  `XDIALOG_TEST_POS` and `XDIALOG_TEST_ACCENT`.
+  `XDIALOG_TEST_POS`, `XDIALOG_TEST_ACCENT`, `XDIALOG_TEST_FAIL_DRAWN` (the drawn runtime fails to
+  show any dialog) and `XDIALOG_TEST_STUB_TASKDIALOG` (TaskDialogs answer at once with their
+  default button, no window); `tests/fallback.rs` uses the last two.

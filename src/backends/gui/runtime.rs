@@ -312,6 +312,10 @@ impl Runtime {
                 options: &XDialogOptions,
                 callback: &mut Option<ProgressButtonCallback>)
                 -> Result<(), XDialogError> {
+        // Test builds: fail like a broken drawing backend would (the fallback tests).
+        if super::appearance::test_flag("XDIALOG_TEST_FAIL_DRAWN") {
+            return Err(XDialogError::SystemError("xdialog: XDIALOG_TEST_FAIL_DRAWN is set".into()));
+        }
         let text = self.text()?;
         let primary = el.primary_monitor().or_else(|| el.available_monitors().next());
         let ppp = primary.as_ref().map_or(1.0, |m| m.scale_factor());
