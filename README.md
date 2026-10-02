@@ -34,7 +34,7 @@ update framework.
 Add the following to your `Cargo.toml`:
 ```toml
 [dependencies]
-xdialog = "4.0.0"
+xdialog = "4.0.1"
 ```
 
 Or, run the following command:
