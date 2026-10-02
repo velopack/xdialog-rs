@@ -109,7 +109,8 @@ mod capture {
         }
     }
 
-    /// The client area of the viewable window whose `_NET_WM_NAME` is `title`.
+    /// The client area of the viewable window whose `_NET_WM_NAME` is `title`: the smallest such
+    /// window, as some window managers (mutter) give the frame around it the same name.
     fn try_capture_x11(title: &str) -> Result<Option<RgbaImage>, Box<dyn std::error::Error>> {
         use x11rb::connection::Connection;
         use x11rb::protocol::xproto::{ConnectionExt, ImageFormat, MapState};
@@ -117,7 +118,7 @@ mod capture {
         let (conn, screen) = x11rb::connect(None)?;
         let net_wm_name = conn.intern_atom(false, b"_NET_WM_NAME")?.reply()?.atom;
         let utf8_string = conn.intern_atom(false, b"UTF8_STRING")?.reply()?.atom;
-        // Depth first: under a window manager the dialog is a child of its frame.
+        let mut client = None;
         let mut stack = vec![conn.setup().roots[screen].root];
         while let Some(w) = stack.pop() {
             stack.extend(conn.query_tree(w)?.reply()?.children);
@@ -127,12 +128,15 @@ mod capture {
                 continue;
             }
             let g = conn.get_geometry(w)?.reply()?;
-            let image = conn.get_image(ImageFormat::Z_PIXMAP, w, 0, 0, g.width, g.height, !0)?.reply()?;
-            // TrueColor, 32 bits per pixel: BGRX.
-            let rgba = image.data.as_chunks::<4>().0.iter().flat_map(|p| [p[2], p[1], p[0], 255]).collect();
-            return Ok(RgbaImage::from_raw(g.width.into(), g.height.into(), rgba));
+            if client.is_none_or(|(_, cw, ch)| u32::from(g.width) * u32::from(g.height) < u32::from(cw) * u32::from(ch)) {
+                client = Some((w, g.width, g.height));
+            }
         }
-        Ok(None)
+        let Some((w, width, height)) = client else { return Ok(None) };
+        let image = conn.get_image(ImageFormat::Z_PIXMAP, w, 0, 0, width, height, !0)?.reply()?;
+        // TrueColor, 32 bits per pixel: BGRX.
+        let rgba = image.data.as_chunks::<4>().0.iter().flat_map(|p| [p[2], p[1], p[0], 255]).collect();
+        Ok(RgbaImage::from_raw(width.into(), height.into(), rgba))
     }
 
     /// The whole compositor output, through `grim`.
