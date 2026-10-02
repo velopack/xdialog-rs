@@ -1,10 +1,11 @@
 //! Ubuntu theme: the look of xdialog 3.x's Linux dialogs.
 //!
-//! Layout ([`UbuntuTheme::ui`]): the window is 350-600 px wide depending on the natural text width.
-//! Inside a 16 px margin, an optional 48 px icon (a severity icon, or the custom image) sits left
-//! of a column of title (Ubuntu Bold 18), progress bar (6 px) and body (Ubuntu Regular 14), 16 px
-//! apart. With buttons, a 48 px footer holds them right-aligned, 7 px apart and 7 px from the
-//! right edge. Colours and metrics are in `tokens.rs`.
+//! Layout ([`UbuntuTheme::ui`]): the window is 350-600 px wide depending on the natural text width,
+//! or wider (up to 600) to fit the buttons, whose labels are elided beyond that. Inside a 16 px
+//! margin, an optional 48 px icon (a severity icon, or the custom image) sits left of a column of
+//! title (Ubuntu Bold 18), progress bar (6 px) and body (Ubuntu Regular 14), 16 px apart; a body
+//! too tall for the height limit scrolls. With buttons, a 48 px footer holds them right-aligned,
+//! 7 px apart and 7 px from the right edge. Colours and metrics are in `tokens.rs`.
 //!
 //! Animations: button colours fade linearly over 150 ms, the progress value tweens over 300 ms
 //! OutCubic, the indeterminate capsule loops every 3 s.
@@ -37,30 +38,32 @@ pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: F
 /// The Ubuntu theme.
 pub(crate) struct UbuntuTheme {
     tokens: UbuntuTokens,
-    /// The focus ring is hidden (the pointer moved over a button) ...
+    /// The focus ring is hidden (the pointer moved over a button).
     focus_suppressed: bool,
-    /// ... until focus moves away from this button.
-    suppressed_focus: Option<usize>,
+    /// The focused button at the last pass.
+    last_focus: Option<usize>,
+    /// Body scroll offset, logical px.
+    scroll: f64,
 }
 
 impl UbuntuTheme {
     pub(crate) fn new() -> Self {
-        UbuntuTheme { tokens: UbuntuTokens::resolve(&Appearance::default()), focus_suppressed: false, suppressed_focus: None }
+        UbuntuTheme { tokens: UbuntuTokens::resolve(&Appearance::default()), focus_suppressed: false, last_focus: None, scroll: 0.0 }
     }
 
     /// Focus-ring suppression: moving the pointer over any button hides the focused button's ring;
     /// any focus move (keyboard or press) or the pointer leaving the window shows it again.
     fn update_focus_suppression(&mut self, ui: &Ui<'_>, buttons: &[Rect]) {
         let focused = ui.focused_button();
-        if focused != self.suppressed_focus {
-            self.focus_suppressed = false;
-        }
-        if ui.pointer_gone() {
-            self.focus_suppressed = false;
+        let focus_moved = focused != self.last_focus;
+        self.focus_suppressed = if ui.pointer_gone() {
+            false
         } else if ui.pointer_moved() {
-            self.focus_suppressed = ui.pointer().is_some_and(|p| buttons.iter().any(|r| r.contains(p)));
-        }
-        self.suppressed_focus = focused;
+            ui.pointer().is_some_and(|p| buttons.iter().any(|r| r.contains(p)))
+        } else {
+            self.focus_suppressed && !focus_moved
+        };
+        self.last_focus = focused;
     }
 }
 
@@ -91,22 +94,32 @@ impl Theme for UbuntuTheme {
         let body_style = TextStyle::regular(BODY_SIZE);
         let mut out = DialogUiOutput::default();
 
-        // The window width follows the natural (unwrapped) width of the title and body.
+        // The window width follows the natural (unwrapped) width of the title and body, widened
+        // (up to MAX_WIDTH) to fit the buttons; beyond that their labels are elided to equal
+        // shares.
         let title_w = ui.layout(view.heading, &title_style, f64::INFINITY, None).size.width;
         let body_w = ui.layout(view.body, &body_style, f64::INFINITY, None).size.width;
-        let win_w = window_width(title_w.max(body_w));
+        let n = view.buttons.len();
+        let mut labels: Vec<_> = view.buttons.iter().map(|l| ui.layout(l, &body_style, f64::INFINITY, None)).collect();
+        let footer_gaps = 2.0 * FOOTER_MARGIN + BUTTON_GAP * n.saturating_sub(1) as f64;
+        let footer_w = if n > 0 { labels.iter().map(|l| widgets::button_width(l)).sum::<f64>() + footer_gaps } else { 0.0 };
+        let win_w = window_width(title_w.max(body_w)).max(footer_w.ceil()).min(MAX_WIDTH);
+        if footer_w > MAX_WIDTH {
+            let share = ((MAX_WIDTH - footer_gaps) / n as f64 - 2.0 * BUTTON_PAD_X).max(0.0);
+            labels = ui.elide_labels(labels, view.buttons, &body_style, share);
+        }
         let has_icon = view.has_icon();
         let x0 = MARGIN + if has_icon { ICON_SIZE + MARGIN } else { 0.0 };
         let col_w = win_w - MARGIN - x0;
+        let footer_h = if n > 0 { FOOTER_H } else { 0.0 };
 
         // Content: the icon (top-aligned) left of a column of title / progress / body, 16 apart.
         let mut col = Column::new(x0, x0 + col_w, MARGIN);
         let mut first = true;
-        let mut next = |col: &mut Column, h: f64| {
+        let mut gap = |col: &mut Column| {
             if !std::mem::take(&mut first) {
                 col.space(MARGIN);
             }
-            col.row(h)
         };
         if has_icon {
             let r = Rect::from_origin_size(Point::new(MARGIN, MARGIN), Size::new(ICON_SIZE, ICON_SIZE));
@@ -115,29 +128,43 @@ impl Theme for UbuntuTheme {
         }
         if !view.heading.is_empty() {
             let block = ui.layout(view.heading, &title_style, col_w, None);
-            let r = next(&mut col, block.size.height);
+            gap(&mut col);
+            let r = col.row(block.size.height);
             ui.text_in(&block, r.origin(), col_w, tk.title_text);
             out.parts.heading = Some(r);
         }
         if let Some(progress) = view.progress {
-            let r = next(&mut col, PROGRESS_H);
+            gap(&mut col);
+            let r = col.row(PROGRESS_H);
             widgets::progress(ui, r, progress, &tk);
             out.parts.progress = Some(r);
         }
         if !view.body.is_empty() {
+            // The body scrolls when the window would exceed the height limit.
             let block = ui.layout(view.body, &body_style, col_w, None);
-            let r = next(&mut col, block.size.height);
-            ui.text_in(&block, r.origin(), col_w, tk.body_text);
-            out.parts.body = Some(r);
+            gap(&mut col);
+            let rest = col.y + MARGIN + footer_h;
+            let r = col.row(block.size.height.min((view.max_height - rest).max(MIN_VIEWPORT)));
+            let viewport = Rect::new(x0, r.y0, win_w - SCROLLBAR_INSET, r.y1);
+            let parts = &mut out.parts;
+            ui.scroll_area(Id::new("ubuntu.scrollbar"),
+                           &mut self.scroll,
+                           viewport,
+                           block.size.height,
+                           &view.frame,
+                           &widgets::SCROLL_BAR,
+                           tk.scroll_thumb,
+                           |ui, top| {
+                               let at = Point::new(x0, top);
+                               ui.text_in(&block, at, col_w, tk.body_text);
+                               parts.body = Some(Rect::from_origin_size(at, Size::new(col_w, block.size.height)).intersect(viewport));
+                           });
         }
         let row_h = (col.y - MARGIN).max(if has_icon { ICON_SIZE } else { 0.0 });
         let mut bottom = MARGIN + row_h + MARGIN;
 
-        // Footer (only with buttons): buttons right-aligned in API order; they may overflow to
-        // the left.
-        let n = view.buttons.len();
+        // Footer (only with buttons): buttons right-aligned in API order.
         if n > 0 {
-            let labels: Vec<_> = view.buttons.iter().map(|l| ui.layout(l, &body_style, f64::INFINITY, None)).collect();
             let mut rects = vec![Rect::ZERO; n];
             let mut right = win_w - FOOTER_MARGIN;
             for i in (0..n).rev() {
@@ -151,7 +178,7 @@ impl Theme for UbuntuTheme {
                 let st = widgets::button(ui, rects[i], i, label, view, &tk, self.focus_suppressed);
                 out.push_button(&st);
             }
-            bottom += FOOTER_H;
+            bottom += footer_h;
         }
         out.desired_size = Size::new(win_w, bottom);
         out
@@ -186,6 +213,44 @@ mod tests {
         assert_eq!(ok.x0 - cancel.x1, BUTTON_GAP);
         assert_eq!((ok.height(), ok.y1 + FOOTER_MARGIN), (BUTTON_H, out.desired_size.height));
         assert_eq!(out.parts.icon, Some(Rect::new(16.0, 16.0, 64.0, 64.0)));
+    }
+
+    /// Buttons wider than the text widen the window; past the maximum width their labels are
+    /// elided, so every button stays inside the window.
+    #[test]
+    fn buttons_fit_the_window() {
+        let long = |s: &str| format!("{s} with a fairly long label");
+        let widened = vec!["Cancel".into(), "Don't Save".into(), "Save to Another Location".into()];
+        for buttons in [vec![long("Cancel"), long("Retry"), long("OK")], widened] {
+            let (out, _) = pass_with(&mut UbuntuTheme::new(), &content(&buttons), &mut state(), 0.0);
+            let w = out.desired_size.width;
+            assert!(w > MIN_WIDTH && w <= MAX_WIDTH, "{w}");
+            assert_eq!(out.buttons.len(), 3);
+            for b in &out.buttons {
+                assert!(b.rect.x0 >= FOOTER_MARGIN - 1e-9 && b.rect.x1 <= w, "{:?} in {w}", b.rect);
+            }
+        }
+    }
+
+    /// A body taller than the height limit scrolls instead of growing the window.
+    #[test]
+    fn long_body_scrolls() {
+        let buttons = vec!["OK".to_string()];
+        let body = "A line of body text.\n".repeat(200);
+        let v = DialogView { body: &body, max_height: 400.0, ..content(&buttons) };
+        let mut theme = UbuntuTheme::new();
+        let (out, shapes) = pass_with(&mut theme, &v, &mut state(), 0.0);
+        assert!(out.desired_size.height <= 400.0, "{:?}", out.desired_size);
+        let body_r = out.parts.body.expect("body");
+        assert!(body_r.y1 <= out.buttons[0].rect.y0, "{body_r:?}");
+        let thumb = UbuntuTokens::resolve(&Appearance::default()).scroll_thumb;
+        assert!(shapes.iter().any(|s| matches!(s, crate::backends::draw::Shape::Rect { color, .. } if *color == thumb)), "scroll bar");
+        // The wheel scrolls it while the pointer is over it.
+        let mut st = state();
+        st.pointer = Some(body_r.center());
+        let wheel = DialogView { frame: FrameInfo { wheel_request: 40.0, ..v.frame }, ..v };
+        pass_with(&mut theme, &wheel, &mut st, 0.0);
+        assert_eq!(theme.scroll, 40.0);
     }
 
     /// Hovering a button hides the focus border of the focused one; a focus move shows it again

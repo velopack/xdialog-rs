@@ -8,6 +8,7 @@ use std::rc::Rc;
 use super::anim::{capsule_pos, Lerp, Transition, Tweens};
 use super::clock::Wants;
 use super::text::{TextBlock, TextCache, TextStyle};
+use super::theme::FrameInfo;
 use crate::backends::draw::{Color, Image, LineCap, Point, Rect, Shape, Size, Text, Vec2};
 
 /// A stable widget identity (tweens, hit testing, focus).
@@ -194,10 +195,21 @@ impl<'a> Ui<'a> {
     }
 
     /// Paint `block` in a column of `width` starting at `pos`: right-aligned when it starts
-    /// right-to-left.
-    pub(crate) fn text_in(&mut self, block: &TextBlock, pos: Point, width: f64, color: Color) {
+    /// right-to-left. Returns where its top-left went.
+    pub(crate) fn text_in(&mut self, block: &TextBlock, pos: Point, width: f64, color: Color) -> Point {
         let x = if block.rtl { pos.x + width - block.size.width } else { pos.x };
-        self.text(block, Point::new(x, pos.y), color);
+        let at = Point::new(x, pos.y);
+        self.text(block, at, color);
+        at
+    }
+
+    /// `labels` (the layouts of `texts` in `style`) with every one wider than `max` laid out
+    /// again on one line, elided to `max`.
+    pub(crate) fn elide_labels(&mut self, labels: Vec<Rc<TextBlock>>, texts: &[String], style: &TextStyle, max: f64) -> Vec<Rc<TextBlock>> {
+        labels.into_iter()
+              .zip(texts)
+              .map(|(l, t)| if l.size.width > max { self.layout(t, style, max, Some(1)) } else { l })
+              .collect()
     }
 
     // ---- painting -------------------------------------------------------------------------------
@@ -248,6 +260,93 @@ impl<'a> Ui<'a> {
     pub(crate) fn pop_clip(&mut self) {
         self.shapes.push(Shape::PopClip);
     }
+
+    // ---- composite widgets ----------------------------------------------------------------------
+
+    /// The indeterminate "stretchy capsule" (see [`indeterminate_capsule`]) in `track`, restarted
+    /// at dialog time `restarted_at`: unsnapped (it glides), round ends; keeps smooth frames
+    /// coming.
+    pub(crate) fn indeterminate_capsule(&mut self, track: Rect, restarted_at: f64, color: Color) {
+        if let Some(c) = indeterminate_capsule(track, (self.time - restarted_at).max(0.0)) {
+            self.fill_rect_unsnapped(c, track.height() / 2.0, color);
+        }
+        self.request_smooth_frame();
+    }
+
+    /// A vertically scrolling `viewport` over content `content_h` tall at `*scroll`: applies the
+    /// frame's keyboard scroll, and its wheel scroll while the pointer is over the viewport (as a
+    /// native scroll view), to this pass's layout; `paint` gets the content's top and is clipped
+    /// to the viewport while it scrolls; then the overlay scroll bar `id`, which may drag `*scroll`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn scroll_area(&mut self,
+                              id: Id,
+                              scroll: &mut f64,
+                              viewport: Rect,
+                              content_h: f64,
+                              frame: &FrameInfo,
+                              bar: &ScrollBarSpec,
+                              color: Color,
+                              paint: impl FnOnce(&mut Self, f64)) {
+        let max_scroll = (content_h - viewport.height()).max(0.0);
+        let wheel = if self.pointer().is_some_and(|p| viewport.contains(p)) { frame.wheel_request } else { 0.0 };
+        *scroll = (*scroll + frame.scroll_request + wheel).clamp(0.0, max_scroll);
+        // Clip only while scrolling (a clip layer costs a full composite).
+        let clip = max_scroll > 0.0;
+        if clip {
+            self.push_clip(viewport);
+        }
+        paint(self, viewport.y0 - *scroll);
+        if clip {
+            self.pop_clip();
+        }
+        *scroll = self.overlay_scroll_bar(id, viewport, content_h, *scroll, bar, color);
+    }
+
+    /// An overlay scroll bar at the right edge of `viewport` for content `content_h` tall at
+    /// `offset`: a thumb that widens while the pointer is over the bar or drags it. Dragging
+    /// scrolls; returns the new offset (0 when nothing scrolls).
+    pub(crate) fn overlay_scroll_bar(&mut self,
+                                     id: Id,
+                                     viewport: Rect,
+                                     content_h: f64,
+                                     offset: f64,
+                                     s: &ScrollBarSpec,
+                                     color: Color)
+                                     -> f64 {
+        let (view_h, max) = (viewport.height(), (content_h - viewport.height()).max(0.0));
+        if max <= 0.0 {
+            return 0.0;
+        }
+        let x1 = viewport.x1 - s.inset;
+        let it = self.interact(id, Rect::new(x1 - s.wide, viewport.y0, x1, viewport.y1));
+        let thumb_h = (view_h * view_h / content_h).max(s.min_thumb).min(view_h - 2.0 * s.end_inset);
+        let travel = view_h - 2.0 * s.end_inset - thumb_h;
+        let mut offset = offset;
+        if it.pointer_down && travel > 0.0 {
+            offset = (offset + self.pointer_delta().y * max / travel).clamp(0.0, max);
+        }
+        let w = self.animate(id.with("width"), if it.hovered || it.pointer_down { s.wide as f32 } else { s.thin as f32 }, s.fade) as f64;
+        let y = viewport.y0 + s.end_inset + offset / max * travel;
+        let radius = s.max_radius.map_or(w / 2.0, |r| r.min(w / 2.0));
+        self.fill_rect_unsnapped(Rect::from_origin_size(Point::new(x1 - w, y), Size::new(w, thumb_h)), radius, color);
+        offset
+    }
+}
+
+/// The look of an overlay scroll bar ([`Ui::overlay_scroll_bar`]), logical px.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ScrollBarSpec {
+    /// Thumb width at rest, and while hovered or dragged (also the bar's hit width).
+    pub thin: f64,
+    pub wide: f64,
+    /// Gap between the thumb and the viewport's right edge, and its top and bottom.
+    pub inset: f64,
+    pub end_inset: f64,
+    pub min_thumb: f64,
+    /// The width change.
+    pub fade: Transition,
+    /// Thumb corner radius limit (`None`: a pill).
+    pub max_radius: Option<f64>,
 }
 
 // ---- layout helpers -----------------------------------------------------------------------------
@@ -301,18 +400,18 @@ pub(crate) fn caps_centered(outer: Rect, label: &TextBlock) -> Point {
 
 /// Cycle (s) and length (fraction of the free track) of the indeterminate "stretchy capsule"
 /// (the Ubuntu theme's timing; the macOS theme shares it).
-pub(crate) const CAPSULE_CYCLE: f64 = 3.0;
-pub(crate) const CAPSULE_STRETCH: f64 = 0.45;
+const CAPSULE_CYCLE: f64 = 3.0;
+const CAPSULE_STRETCH: f64 = 0.45;
 
 /// The indeterminate "stretchy capsule" in `track` at `elapsed` seconds into the animation: a
-/// capsule `stretch` of the free track long (plus the track's height) that sweeps right over
-/// 0-40 % of `cycle`, holds, sweeps back over 50-90 % and holds again (see [`capsule_pos`]),
-/// entering and leaving past the track's ends. Clipped to `track`; `None` while nothing of it is
-/// inside. Themes paint it with radius `track.height() / 2` (unsnapped, so it glides).
-pub(crate) fn indeterminate_capsule(track: Rect, elapsed: f64, cycle: f64, stretch: f64) -> Option<Rect> {
-    let pos = capsule_pos((elapsed.rem_euclid(cycle) / cycle) as f32) as f64;
+/// capsule `CAPSULE_STRETCH` of the free track long (plus the track's height) that sweeps right
+/// over 0-40 % of `CAPSULE_CYCLE`, holds, sweeps back over 50-90 % and holds again (see
+/// [`capsule_pos`]), entering and leaving past the track's ends. Clipped to `track`; `None` while
+/// nothing of it is inside.
+fn indeterminate_capsule(track: Rect, elapsed: f64) -> Option<Rect> {
+    let pos = capsule_pos((elapsed.rem_euclid(CAPSULE_CYCLE) / CAPSULE_CYCLE) as f32) as f64;
     let (w, d) = (track.width(), track.height());
-    let len = d + stretch * (w - d);
+    let len = d + CAPSULE_STRETCH * (w - d);
     let cx = (d - len / 2.0) + pos * (w - 2.0 * d + len);
     let (left, right) = ((cx - len / 2.0).max(0.0), (cx + len / 2.0).min(w));
     (right > left).then(|| Rect::new(track.x0 + left, track.y0, track.x0 + right, track.y1))

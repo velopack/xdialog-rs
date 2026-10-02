@@ -115,7 +115,7 @@ impl Theme for FluentTheme {
 
         // ---- measure (wrap once at the maximum column, then shrink to the widest line) ----
         // A custom image leads the whole content column; a severity icon sits left of the body.
-        let custom = view.custom_icon.filter(|_| view.has_icon() && *view.icon == XDialogIcon::Custom);
+        let custom = view.custom_icon.filter(|_| *view.icon == XDialogIcon::Custom);
         let lead = if custom.is_some() { CUSTOM_ICON_SIZE + CUSTOM_ICON_GAP } else { 0.0 };
         let has_icon = view.has_icon() && custom.is_none();
         let icon_col = if has_icon { ICON_SIZE + ICON_GAP } else { 0.0 };
@@ -143,11 +143,7 @@ impl Theme for FluentTheme {
         let (cx, ccol_w) = (PAD + lead, col_w - lead);
         // Labels wider than their column (window at MAX_W) are elided to it.
         let label_max = (col_w - BUTTON_GAP * (slots - 1) as f64) / slots as f64 - BUTTON_CHROME_W;
-        let labels: Vec<Rc<TextBlock>> =
-            labels.into_iter()
-                  .zip(view.buttons)
-                  .map(|(l, b)| if l.size.width > label_max { ui.layout(b, &body_style, label_max, Some(1)) } else { l })
-                  .collect();
+        let labels = ui.elide_labels(labels, view.buttons, &body_style, label_max);
 
         // ---- content area (painted first: it is the backdrop of everything above the bar) ----
         let has_row = has_icon || !body.is_empty();
@@ -185,31 +181,28 @@ impl Theme for FluentTheme {
             // The viewport reaches into the right padding, so the overlay scroll bar sits next to
             // the text, as WinUI's ScrollViewer around the padded content.
             let viewport = Rect::new(cx, col.y, win_w - SCROLLBAR_INSET, col.y + viewport_h);
-            let max_scroll = (row_h - viewport_h).max(0.0);
-            // Keyboard / wheel scroll applies to this pass's layout (no frame of lag); the wheel
-            // only over the viewport, as WinUI's ScrollViewer.
-            let wheel = if ui.pointer().is_some_and(|p| viewport.contains(p)) { view.frame.wheel_request } else { 0.0 };
-            self.scroll = (self.scroll + view.frame.scroll_request + wheel).clamp(0.0, max_scroll);
-            let top = viewport.y0 - self.scroll;
-            // Clip only while scrolling (a clip layer costs a full composite).
-            let clip = max_scroll > 0.0;
-            if clip {
-                ui.push_clip(viewport);
-            }
-            if has_icon {
-                // A short body is centred on the icon; a taller one starts level with it.
-                widgets::icon(ui, Point::new(cx, top), view.icon, &tk);
-                out.parts.icon = Some(Rect::from_origin_size(Point::new(cx, top), Size::new(ICON_SIZE, ICON_SIZE)).intersect(viewport));
-            }
-            if !body.is_empty() {
-                let pos = Point::new(cx + icon_col, top + (row_h - body.size.height) / 2.0);
-                ui.text_in(&body, pos, ccol_w - icon_col, tk.text);
-                out.parts.body = Some(Rect::from_origin_size(pos, Size::new(ccol_w - icon_col, body.size.height)).intersect(viewport));
-            }
-            if clip {
-                ui.pop_clip();
-            }
-            self.scroll = widgets::scroll_bar(ui, viewport, row_h, self.scroll, &tk);
+            let parts = &mut out.parts;
+            ui.scroll_area(Id::new("fluent.scrollbar"),
+                           &mut self.scroll,
+                           viewport,
+                           row_h,
+                           &view.frame,
+                           &widgets::SCROLL_BAR,
+                           tk.scroll_thumb,
+                           |ui, top| {
+                               if has_icon {
+                                   // A short body is centred on the icon; a taller one starts level with it.
+                                   widgets::icon(ui, Point::new(cx, top), view.icon, &tk);
+                                   let r = Rect::from_origin_size(Point::new(cx, top), Size::new(ICON_SIZE, ICON_SIZE));
+                                   parts.icon = Some(r.intersect(viewport));
+                               }
+                               if !body.is_empty() {
+                                   let pos = Point::new(cx + icon_col, top + (row_h - body.size.height) / 2.0);
+                                   ui.text_in(&body, pos, ccol_w - icon_col, tk.text);
+                                   let r = Rect::from_origin_size(pos, Size::new(ccol_w - icon_col, body.size.height));
+                                   parts.body = Some(r.intersect(viewport));
+                               }
+                           });
             col.space(viewport_h);
         }
         if let Some(p) = view.progress {
