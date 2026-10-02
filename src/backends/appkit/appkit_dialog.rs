@@ -23,6 +23,7 @@ const TITLE_FONT_SIZE: f64 = 13.0;
 const BODY_FONT_SIZE: f64 = 11.0;
 
 pub struct AppKitDialog {
+    mtm: MainThreadMarker,
     window: Retained<NSWindow>,
     title_field: Option<Retained<NSTextField>>,
     body_field: Option<Retained<NSTextField>>,
@@ -37,8 +38,8 @@ impl AppKitDialog {
         options: XDialogOptions,
         has_progress: bool,
         handler: &AnyObject,
+        mtm: MainThreadMarker,
     ) -> Self {
-        let mtm = unsafe { MainThreadMarker::new_unchecked() };
         let style = NSWindowStyleMask::Titled | NSWindowStyleMask::Closable;
 
         let window = unsafe {
@@ -117,8 +118,7 @@ impl AppKitDialog {
             btn.setBezelStyle(NSBezelStyle::Rounded);
             btn.setTitle(&NSString::from_str(button_text));
 
-            let tag = ((id << 16) | index) as isize;
-            btn.setTag(tag);
+            btn.setTag(super::button_tag(id, index));
 
             unsafe { btn.setTarget(Some(handler)) };
             unsafe { btn.setAction(Some(sel!(buttonClicked:))) };
@@ -137,7 +137,7 @@ impl AppKitDialog {
         }
         buttons.reverse(); // put back in original order
 
-        let dialog = Self { window, title_field, body_field, progress, icon_view, buttons };
+        let dialog = Self { mtm, window, title_field, body_field, progress, icon_view, buttons };
         dialog.layout();
         dialog
     }
@@ -281,12 +281,8 @@ impl AppKitDialog {
     pub fn show(&self) {
         self.window.center();
         self.window.makeKeyAndOrderFront(None);
-        unsafe {
-            let mtm = MainThreadMarker::new_unchecked();
-            let app = NSApplication::sharedApplication(mtm);
-            #[allow(deprecated)]
-            app.activateIgnoringOtherApps(true);
-        }
+        #[allow(deprecated)]
+        NSApplication::sharedApplication(self.mtm).activateIgnoringOtherApps(true);
     }
 
     pub fn is_visible(&self) -> bool {
@@ -325,8 +321,7 @@ impl AppKitDialog {
         if let Some(ref bf) = self.body_field {
             bf.setStringValue(&NSString::from_str(text));
         } else if !text.is_empty() {
-            let mtm = unsafe { MainThreadMarker::new_unchecked() };
-            let field = create_label(text, false, mtm);
+            let field = create_label(text, false, self.mtm);
             self.window.contentView().unwrap().addSubview(&field);
             self.body_field = Some(field);
         }

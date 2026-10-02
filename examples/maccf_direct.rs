@@ -21,16 +21,17 @@ fn main() {
             message: "This dialog was shown without any event loop.\nPick an option:".to_string(),
             icon: xdialog::XDialogIcon::Information,
             icon_source: None,
-            buttons: vec!["Save".to_string(), "Discard".to_string(), "Cancel".to_string()],
+            // The last button is the default (Return) button, as everywhere in xdialog.
+            buttons: vec!["Discard".to_string(), "Cancel".to_string(), "Save".to_string()],
         },
     )
     .wait()
     .unwrap();
 
     let msg = match result {
-        xdialog::XDialogResult::ButtonPressed(0) => "You chose Save.",
-        xdialog::XDialogResult::ButtonPressed(1) => "You chose Discard.",
-        xdialog::XDialogResult::ButtonPressed(2) => "You chose Cancel.",
+        xdialog::XDialogResult::ButtonPressed(0) => "You chose Discard.",
+        xdialog::XDialogResult::ButtonPressed(1) => "You chose Cancel.",
+        xdialog::XDialogResult::ButtonPressed(2) => "You chose Save.",
         _ => "Dialog was closed.",
     };
 
@@ -46,7 +47,7 @@ fn main() {
     )
     .unwrap();
 
-    // Determinate: a filled bar with a trailing percentage.
+    // Determinate: the bar fills to the value.
     for i in 0..=10 {
         progress.set_value(i as f32 / 10.0).unwrap();
         progress.set_text(format!("Downloading files ({}/10)", i)).unwrap();
