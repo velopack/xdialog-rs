@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 4.1.0
+
 ### Added
 
 - `winit-host`: **the host outlives the runs of your event loop.** `XDialogBuilder::into_host(waker)`
@@ -17,6 +19,10 @@
 - `XDialogApp` (`into_host_app`) is now built on `XDialogHost` and keeps its behaviour: for a loop
   that runs once with `run_app`; its `exiting` shuts the host down (later calls
   `NoBackendAvailable`). New accessors `XDialogApp::host` / `host_mut`.
+
+## 4.0.1
+
+- Dependency updates: skrifa 0.47 (the software renderer, Linux and the BSDs).
 
 ## 4.0.0
 
@@ -70,9 +76,9 @@ look of 3.x: same layout, Ubuntu font, colours, metrics, animations and keyboard
 - `XDialogError::NoResult` now carries `std::sync::mpsc::RecvError` (the `oneshot` dependency was
   dropped).
 - **The skia backend was removed**, together with the `skia-instrumentation` feature, the hidden
-  `xdialog::pixels` module, the `skia_bench` example and the benchmarks. Dependencies dropped:
-  tiny-skia, enum-map, mina, multiversion, sysinfo, oneshot, widestring, block2 (and
-  criterion, dev-only). cosmic-text is now used on Linux and the BSDs only.
+  `xdialog::pixels` module and the `skia_bench` example. Dependencies dropped: tiny-skia,
+  enum-map, mina, multiversion, sysinfo, oneshot, widestring, block2. cosmic-text is now used on
+  Linux and the BSDs only.
 
 ### Added
 

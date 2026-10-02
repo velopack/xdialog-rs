@@ -8,7 +8,8 @@ fn main() {
     if os != "windows" && os != "macos" {
         println!("cargo::rustc-cfg=draw_soft");
     }
-    if std::env::var("CARGO_CFG_WINDOWS").is_ok() {
+    // link.exe flags: GNU ld would take them for input files.
+    if std::env::var("CARGO_CFG_WINDOWS").is_ok() && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let manifest_path = format!("{}/app.manifest", manifest_dir);
         println!("cargo:rustc-link-arg-examples=/MANIFEST:EMBED");
