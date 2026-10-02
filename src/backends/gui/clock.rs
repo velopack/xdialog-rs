@@ -110,6 +110,12 @@ impl Schedule {
         self.anchor = self.next.take();
     }
 
+    /// The frame being painted is one this schedule asked for ([`Schedule::fired`]), not one the
+    /// window system needs (expose, resize, first show).
+    pub(crate) fn self_scheduled(&self) -> bool {
+        self.anchor.is_some()
+    }
+
     pub(crate) fn due(&self, now: Instant) -> bool {
         self.next.is_some_and(|t| t <= now)
     }
@@ -134,11 +140,14 @@ mod tests {
         s.after_frame(t0, Wants { repaint: true, smooth: false });
         assert_eq!(s.next, Some(t0 + FRAME_INTERVAL));
         assert!(s.due(t0 + FRAME_INTERVAL));
+        assert!(!s.self_scheduled());
         s.fired();
+        assert!(s.self_scheduled());
         assert!(!s.due(t0 + Duration::from_secs(5)));
         // Idle.
         s.after_frame(t0, Wants::default());
         assert_eq!(s.next, None);
+        assert!(!s.self_scheduled());
         // Input right after a paint waits for the cadence.
         s.asap(t0);
         assert_eq!(s.next, Some(t0 + FRAME_INTERVAL));

@@ -24,17 +24,17 @@ use super::a11y::{self, Request};
 use super::appearance::{resolve_appearance, Appearance};
 use super::clock::{DialogClock, Schedule};
 use super::input::{Event, PointerButton};
-use super::keyboard::{KeyAction, KeyboardState};
+use super::keyboard::{has_button, KeyAction, KeyboardState};
 use super::theme::{button_id, DialogKind, DialogUiOutput, DialogView, ProgressView, Theme};
 use super::ui::{Id, Ui, UiState};
 #[cfg(any(test, feature = "_test-hooks"))]
 use crate::backends::draw::MemorySurface;
-use crate::backends::draw::{DrawError, Frame, Image, Point, Rect, Shape, Size, Surface, Text, WindowSurface};
+use crate::backends::draw::{Color, DrawError, Frame, Image, Point, Rect, Shape, Size, Surface, Text, WindowSurface};
 use crate::icon::IconFile;
 use crate::model::{ResultSender, XDialogIcon, XDialogOptions, XDialogResult, XDialogTheme};
 use crate::{ProgressButtonCallback, ProgressDialogProxy};
 
-/// What the dialog shows (API strings, unchanged).
+/// What the dialog shows (the API strings, with `\n` line breaks).
 #[derive(Clone, Debug)]
 pub(crate) struct DialogContent {
     pub kind: DialogKind,
@@ -60,12 +60,12 @@ impl DialogContent {
                                                         }
                                                     });
         DialogContent { kind,
-                        title: options.title,
-                        heading: options.main_instruction,
-                        body: options.message,
+                        title: lf_newlines(options.title),
+                        heading: lf_newlines(options.main_instruction),
+                        body: lf_newlines(options.message),
                         icon: options.icon,
                         icon_file,
-                        buttons: options.buttons,
+                        buttons: options.buttons.into_iter().map(lf_newlines).collect(),
                         progress: (kind == DialogKind::Progress).then_some(ProgressView::Determinate { value: 0.0 }) }
     }
 
@@ -74,6 +74,16 @@ impl DialogContent {
         let mut v = vec![self.title.as_str(), self.heading.as_str(), self.body.as_str()];
         v.extend(self.buttons.iter().map(String::as_str));
         v
+    }
+}
+
+/// `text` with `\r\n` and `\r` line breaks as `\n` (what the themes, the elision and the
+/// accessibility tree see).
+fn lf_newlines(text: String) -> String {
+    if text.contains('\r') {
+        text.replace("\r\n", "\n").replace('\r', "\n")
+    } else {
+        text
     }
 }
 
@@ -104,8 +114,6 @@ pub(crate) struct DialogParams {
 pub(crate) enum Target {
     Window(WindowSurface),
     #[cfg(any(test, feature = "_test-hooks"))]
-    // Unit tests render with the software backend only until WP2 / WP3.
-    #[cfg_attr(not(any(draw_soft, feature = "_test-hooks")), allow(dead_code))]
     Memory(MemorySurface),
 }
 
@@ -134,6 +142,10 @@ pub(crate) struct Dialog {
     out: DialogUiOutput,
     shapes: Vec<Shape>,
     hits: Vec<(Id, Rect)>,
+    /// The drawing last presented to the target, and its size, scale and clear colour (`None`:
+    /// nothing presented yet, or presenting failed).
+    presented: Vec<Shape>,
+    presented_with: Option<([u32; 2], f64, Color)>,
     target: Option<Target>,
     ppp: f64,
     /// Client size in physical px.
@@ -175,6 +187,8 @@ impl Dialog {
                              out: DialogUiOutput::default(),
                              shapes: Vec::new(),
                              hits: Vec::new(),
+                             presented: Vec::new(),
+                             presented_with: None,
                              target: None,
                              ppp: p.ppp,
                              size_px: [0, 0],
@@ -253,6 +267,7 @@ impl Dialog {
     /// Attach the drawing target and the window's metrics (physical client size).
     pub(crate) fn attach(&mut self, target: Target, ppp: f64, size_px: [u32; 2]) {
         self.target = Some(target);
+        self.presented_with = None;
         self.ppp = ppp;
         self.size_px = size_px;
         if size_px != self.physical_size(ppp) {
@@ -266,7 +281,9 @@ impl Dialog {
         self.callback = callback;
     }
 
-    /// Run one frame: one theme pass, resize check, draw + present, schedule the next frame.
+    /// Run one frame: one theme pass, resize check, draw + present, schedule the next frame. A
+    /// frame the schedule asked for is not presented when it would draw what is already on
+    /// screen; one the window system asked for always is (its content may be gone).
     /// `Err`: presenting failed (the frame is otherwise complete).
     pub(crate) fn frame(&mut self) -> Result<(), DrawError> {
         if self.is_closed() {
@@ -283,12 +300,17 @@ impl Dialog {
 
         let mut presented = Ok(());
         let clear = self.clear_color();
-        if let Some(target) = self.target.as_mut() {
+        let with = (self.size_px, self.ppp, clear);
+        let unchanged = self.schedule.self_scheduled() && self.presented_with == Some(with) && self.presented == self.shapes;
+        if let Some(target) = self.target.as_mut().filter(|_| !unchanged) {
             presented = target.present(&Frame { shapes: &self.shapes, size_px: self.size_px, ppp: self.ppp, clear });
-        }
-        #[cfg(any(test, all(feature = "winit-host", feature = "_test-hooks")))]
-        {
-            self.frames += 1;
+            self.presented_with = presented.is_ok().then_some(with);
+            // The next pass records into the old buffer.
+            std::mem::swap(&mut self.presented, &mut self.shapes);
+            #[cfg(any(test, all(feature = "winit-host", feature = "_test-hooks")))]
+            {
+                self.frames += 1;
+            }
         }
         self.schedule.after_frame(Instant::now(), wants);
         presented
@@ -354,7 +376,7 @@ impl Dialog {
                 }
             }
         }
-        self.schedule.asap(Instant::now());
+        self.invalidate();
     }
 
     /// Whether `pos` (logical px) is on an interactive widget of the last pass.
@@ -378,14 +400,21 @@ impl Dialog {
 
     /// New client size in physical px (a zero side = minimised).
     pub(crate) fn resized(&mut self, size_px: [u32; 2]) {
-        self.size_px = size_px;
-        self.schedule.asap(Instant::now());
+        if size_px != self.size_px {
+            self.size_px = size_px;
+            self.invalidate();
+        }
     }
 
     /// New scale factor; the window system keeps the logical size and reports the new physical
     /// size with the next [`Dialog::resized`].
     pub(crate) fn scale_changed(&mut self, ppp: f64) {
         self.ppp = ppp;
+        self.invalidate();
+    }
+
+    /// State changed: repaint.
+    fn invalidate(&mut self) {
         self.schedule.asap(Instant::now());
     }
 
@@ -404,10 +433,10 @@ impl Dialog {
     pub(crate) fn a11y_request(&mut self, r: Request) {
         match r {
             Request::Click(b) => self.activate(b),
-            Request::Focus(b) if self.out.buttons.iter().any(|x| x.index == b) => self.keyboard.focus(&mut self.st.focus, b),
+            Request::Focus(b) if has_button(&self.out, b) => self.keyboard.focus(&mut self.st.focus, b),
             Request::Focus(_) => {}
         }
-        self.schedule.asap(Instant::now());
+        self.invalidate();
     }
 
     /// Activate button `i` (pointer, keyboard or screen reader): message -> `ButtonPressed(i)` and
@@ -431,7 +460,7 @@ impl Dialog {
             None => false,
         };
         if keep {
-            self.schedule.asap(Instant::now());
+            self.invalidate();
         } else {
             self.finish(XDialogResult::ButtonPressed(i));
         }
@@ -467,7 +496,7 @@ impl Dialog {
             return;
         }
         self.content.progress = Some(ProgressView::Determinate { value });
-        self.schedule.asap(Instant::now());
+        self.invalidate();
     }
 
     pub(crate) fn set_progress_indeterminate(&mut self) {
@@ -477,19 +506,20 @@ impl Dialog {
             Some(ProgressView::Indeterminate { since, .. }) => Some(ProgressView::Indeterminate { since, restarted_at: now }),
             Some(ProgressView::Determinate { .. }) => Some(ProgressView::Indeterminate { since: now, restarted_at: now }),
         };
-        self.schedule.asap(Instant::now());
+        self.invalidate();
     }
 
     /// New body text (`set_text`): the next pass relayouts and may resize. Never waits for the
     /// system font scan (this runs on the shared UI thread, possibly many times a second): an
     /// incomplete check is retried by [`Dialog::refresh_fonts`] when the scan ends.
     pub(crate) fn set_text(&mut self, text: &str) {
+        let text = lf_newlines(text.to_owned());
         if self.content.body == text {
             return;
         }
-        self.content.body = text.to_owned();
+        self.content.body = text;
         self.update_fonts(Duration::ZERO);
-        self.schedule.asap(Instant::now());
+        self.invalidate();
     }
 
     /// The system font scan finished: lay out again with the new faces.
@@ -497,7 +527,7 @@ impl Dialog {
         if !self.fonts_complete {
             self.update_fonts(Duration::ZERO);
         }
-        self.schedule.asap(Instant::now());
+        self.invalidate();
     }
 
     /// Re-resolve the platform appearance (portal change); no-op for a fixed appearance.
@@ -517,7 +547,7 @@ impl Dialog {
         self.appearance = a;
         self.theme.set_appearance(&a);
         self.st.tweens.reset();
-        self.schedule.asap(Instant::now());
+        self.invalidate();
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -525,7 +555,7 @@ impl Dialog {
     // ---------------------------------------------------------------------------------------------
 
     /// The colour frames are cleared with (see [`Theme::translucent_clear`]).
-    fn clear_color(&self) -> crate::backends::draw::Color {
+    fn clear_color(&self) -> Color {
         self.translucent.then(|| self.theme.translucent_clear()).flatten().unwrap_or_else(|| self.theme.clear_color())
     }
 
@@ -599,23 +629,12 @@ impl Dialog {
 
     /// The accessibility tree of the last pass.
     pub(crate) fn a11y_tree(&self) -> TreeUpdate {
-        let c = &self.content;
-        a11y::tree(&a11y::TreeSource { kind: c.kind,
-                                       title: &c.title,
-                                       heading: &c.heading,
-                                       body: &c.body,
-                                       icon: &c.icon,
-                                       buttons: &c.buttons,
-                                       progress: c.progress,
-                                       out: &self.out,
-                                       focus: self.st.focus,
-                                       ppp: self.ppp })
+        a11y::tree(&a11y::TreeSource { content: &self.content, out: &self.out, focus: self.st.focus, ppp: self.ppp })
     }
 }
 
 /// Introspection for the offscreen harness, the host test hooks and unit tests.
 #[cfg(any(test, feature = "_test-hooks"))]
-#[cfg_attr(not(any(draw_soft, feature = "_test-hooks")), allow(dead_code))]
 impl Dialog {
     /// The delivered result, once closed.
     #[cfg(feature = "_test-hooks")]
@@ -652,7 +671,7 @@ impl Dialog {
     /// Fix the dialog clock at `t` seconds; repaints.
     pub(crate) fn freeze_clock(&mut self, t: f64) {
         self.clock.freeze(t);
-        self.schedule.asap(Instant::now());
+        self.invalidate();
     }
 
     /// The last frame of a memory target as opaque RGBA8 `(width, height, pixels)`.
@@ -673,7 +692,7 @@ impl Drop for Dialog {
     }
 }
 
-#[cfg(all(test, draw_soft))]
+#[cfg(test)]
 mod tests {
     //! State-machine tests through real passes with a stub theme and a memory target.
 
@@ -914,6 +933,62 @@ mod tests {
         r.ev(key(Key::Space, true));
         assert!(r.d.is_closed());
         assert_eq!(r.result(), Some(XDialogResult::ButtonPressed(0)));
+    }
+
+    /// Pins the current behaviour: Escape closes a progress dialog without running its callback.
+    #[test]
+    fn escape_on_progress_with_callback() {
+        static CALLS: AtomicUsize = AtomicUsize::new(0);
+        let cb: ProgressButtonCallback = Box::new(|_, _| {
+            CALLS.fetch_add(1, Ordering::SeqCst);
+            false
+        });
+        let mut r = Rig::new(DialogKind::Progress, &["Cancel"], Some(cb));
+        r.at(0.0);
+        r.ev(key(Key::Escape, true));
+        assert!(r.d.is_closed());
+        assert_eq!(CALLS.load(Ordering::SeqCst), 0);
+        assert_eq!(r.result(), Some(XDialogResult::WindowClosed));
+    }
+
+    #[test]
+    fn unchanged_scheduled_frames_are_not_presented() {
+        let mut r = Rig::new(DialogKind::Message, &["Cancel", "OK"], None);
+        r.at(0.0);
+        assert_eq!((r.d.frames(), r.d.schedule.next), (1, None));
+        // The same size again schedules nothing.
+        r.d.resized(r.d.size_px());
+        assert_eq!(r.d.schedule.next, None);
+        // A pointer move over the background: a frame is scheduled, and draws what is on screen.
+        r.ev(Event::PointerMoved(Point::new(2.0, 2.0)));
+        r.d.schedule_mut().fired();
+        r.d.frame().unwrap();
+        assert_eq!(r.d.frames(), 1);
+        // Redraws the window system asks for always present.
+        r.d.frame().unwrap();
+        assert_eq!(r.d.frames(), 2);
+        // A hover fade starts at the old colour, then presents.
+        r.ev(Event::PointerMoved(r.center(0)));
+        for (t, frames) in [(0.1, 2), (0.175, 3)] {
+            r.d.freeze_clock(t);
+            r.d.schedule_mut().fired();
+            r.d.frame().unwrap();
+            assert_eq!(r.d.frames(), frames, "at {t}");
+        }
+    }
+
+    #[test]
+    fn line_breaks_are_newlines() {
+        let options = XDialogOptions { title: "a\r\nb".into(),
+                                       main_instruction: "c\rd".into(),
+                                       message: "e\r\nf\rg".into(),
+                                       buttons: vec!["O\r\nK".into()],
+                                       ..Default::default() };
+        let c = DialogContent::new(DialogKind::Message, options);
+        assert_eq!([&c.title, &c.heading, &c.body, &c.buttons[0]], ["a\nb", "c\nd", "e\nf\ng", "O\nK"]);
+        let mut r = Rig::new(DialogKind::Progress, &[], None);
+        r.d.set_text("x\r\ny");
+        assert_eq!(r.d.content.body, "x\ny");
     }
 
     #[test]

@@ -1,9 +1,10 @@
 //! Text for themes, measured and drawn with the drawing backend's layouts (so layout matches what
 //! the backend draws).
 //!
-//! A [`TextBlock`] is one layout per `\n` paragraph, stacked. Each paragraph is laid out in its
-//! own direction: a right-to-left paragraph (first strong character) is laid out at its own width
-//! with its lines right-aligned, and right-aligned within the block. A centred style
+//! A [`TextBlock`] is one layout per paragraph (ended by `\n`, `\r\n`, `\r` or U+2029), stacked.
+//! Each paragraph is laid out in its own direction: a right-to-left paragraph (first strong
+//! character) is laid out at its own width with its lines right-aligned, and right-aligned within
+//! the block. A centred style
 //! ([`TextStyle::centered`]) centres every line and paragraph in the block instead. The block itself records
 //! whether it starts right-to-left, so painters can right-align it in its column. `max_lines`
 //! elides the text (with `…`) until it fits.
@@ -150,7 +151,8 @@ impl<V: Clone> Cache<V> {
     }
 
     fn end_pass(&mut self) {
-        self.prev = std::mem::take(&mut self.cur);
+        std::mem::swap(&mut self.prev, &mut self.cur);
+        self.cur.clear();
     }
 
     fn clear(&mut self) {
@@ -251,7 +253,9 @@ impl TextCache {
         let wrap = wrap_width.is_finite().then_some(wrap_width);
         let mut paras = Vec::new();
         let (mut y, mut width, mut lines) = (0.0f64, 0.0f64, 0usize);
-        for para in text.split('\n') {
+        // A separator left in a paragraph would be one more paragraph to DirectWrite.
+        let text = if text.contains("\r\n") { std::borrow::Cow::Owned(text.replace("\r\n", "\n")) } else { text.into() };
+        for para in text.split(['\n', '\r', '\u{2029}']) {
             let rtl = starts_rtl(para);
             let mut layout = self.para(para, style, wrap, rtl);
             let mut w = layout.size().width;
@@ -285,9 +289,6 @@ impl TextCache {
 
 #[cfg(test)]
 mod tests {
-    //! TEMP (WP1): ignored off the software backend while d2d and cg are stubs; WP2 / WP3 remove
-    //! the `cfg_attr(not(draw_soft), ignore)`s.
-
     use super::*;
     use crate::backends::ubuntu::FONTS;
 
@@ -353,6 +354,17 @@ mod tests {
         let gap = block.size.width - (rtl.1.x + rtl.0.size().width);
         assert!((0.0..3.0).contains(&gap), "{gap}: {:?} {:?} {:?}", rtl.1, rtl.0.size(), block.size);
         assert!(!starts_rtl("abc \u{05e9}") && starts_rtl("\u{05e9} abc") && !starts_rtl("123"));
+    }
+
+    #[test]
+    fn every_line_break_is_one_paragraph_break() {
+        let mut c = cache();
+        let lf = c.layout("one\ntwo", &STYLE, f64::INFINITY, None);
+        assert_eq!((lf.lines, lf.paras.len()), (2, 2));
+        for text in ["one\r\ntwo", "one\rtwo", "one\u{2029}two"] {
+            let b = c.layout(text, &STYLE, f64::INFINITY, None);
+            assert_eq!((b.lines, b.paras.len(), b.size), (lf.lines, lf.paras.len(), lf.size), "{text:?}");
+        }
     }
 
     #[test]

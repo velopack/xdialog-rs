@@ -29,7 +29,6 @@ pub enum Key {
 pub enum PointerButton {
     Primary,
     Secondary,
-    Middle,
 }
 
 /// One input event, positions in logical px (client-relative).
@@ -96,7 +95,6 @@ impl WinitInput {
                 let button = match button {
                     MouseButton::Left => PointerButton::Primary,
                     MouseButton::Right => PointerButton::Secondary,
-                    MouseButton::Middle => PointerButton::Middle,
                     _ => return vec![],
                 };
                 vec![Event::PointerButton { pos: self.pointer.unwrap_or(OUTSIDE), button, pressed: *state == ElementState::Pressed }]

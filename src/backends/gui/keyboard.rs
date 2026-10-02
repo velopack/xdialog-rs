@@ -172,9 +172,14 @@ pub(crate) fn default_button(out: &DialogUiOutput) -> Option<usize> {
     out.buttons.iter().map(|b| b.index).max()
 }
 
+/// Whether button `index` (API index) is one of the last pass's buttons.
+pub(crate) fn has_button(out: &DialogUiOutput, index: usize) -> bool {
+    out.buttons.iter().any(|b| b.index == index)
+}
+
 /// `focus` if it is one of the last pass's buttons.
 pub(crate) fn focused_button(focus: Option<usize>, out: &DialogUiOutput) -> Option<usize> {
-    focus.filter(|f| out.buttons.iter().any(|b| b.index == *f))
+    focus.filter(|&f| has_button(out, f))
 }
 
 /// Next entry of `order` from `cur` in direction `dir` (±1); see [`KeyboardState::step`].
