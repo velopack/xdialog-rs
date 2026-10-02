@@ -348,8 +348,10 @@ mod tests {
         let (ltr, rtl) = (&block.paras[0], &block.paras[1]);
         assert_eq!(ltr.1.x, 0.0);
         assert!(rtl.1.x > 10.0, "{:?}", rtl.1);
-        // The RTL paragraph's box ends at the block's right edge.
-        assert!((rtl.1.x + rtl.0.size().width - block.size.width).abs() <= 2.0, "{:?} {:?} {:?}", rtl.1, rtl.0.size(), block.size);
+        // The RTL paragraph's box ends at the block's right edge. Its ink is up to 3 px short of it:
+        // it is laid out at `ceil(width) + 1`, and the block's width is rounded up.
+        let gap = block.size.width - (rtl.1.x + rtl.0.size().width);
+        assert!((0.0..3.0).contains(&gap), "{gap}: {:?} {:?} {:?}", rtl.1, rtl.0.size(), block.size);
         assert!(!starts_rtl("abc \u{05e9}") && starts_rtl("\u{05e9} abc") && !starts_rtl("123"));
     }
 
