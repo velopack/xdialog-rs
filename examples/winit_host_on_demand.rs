@@ -8,8 +8,11 @@
 //! One `XDialogHost` outlives the runs and wraps each run's app. Every run opens its own window:
 //! click it to ask a question from the event-loop thread (Yes ends the run), close it to end the
 //! run. A worker thread asks a question before the first run (queued, shown by the first run)
-//! and after every run (shown by the next one; a run that ends with a dialog open closes it with
-//! `WindowClosed`). After the last run the host is dropped and dialog calls fail fast.
+//! and, told by `main` each time a run has ended, another one (queued, shown by the next run; a
+//! run that ends with a dialog open closes it with `WindowClosed`). After the last run the host
+//! is dropped and dialog calls fail fast.
+
+use std::sync::mpsc;
 
 use xdialog::host::winit::application::ApplicationHandler;
 use xdialog::host::winit::event::{ElementState, WindowEvent};
@@ -48,8 +51,8 @@ impl ApplicationHandler for Run {
                                                main_instruction: format!("Run {}", self.n),
                                                message: "End this run?".into(),
                                                icon: XDialogIcon::Information,
-                                               icon_source: None,
-                                               buttons: vec!["No".into(), "Yes".into()] };
+                                               buttons: vec!["No".into(), "Yes".into()],
+                                               ..Default::default() };
                 self.question = Some(show_message(options));
             }
             _ => {}
@@ -70,7 +73,8 @@ impl ApplicationHandler for Run {
     }
 }
 
-fn worker() {
+/// `ended` yields the number of each run once it has ended.
+fn worker(ended: mpsc::Receiver<u32>) {
     let ask = |n: u32| {
         let text =
             if n == 0 { "Asked before the first run; shown by it.".to_owned() } else { format!("Asked after run {n}; shown by the next.") };
@@ -79,7 +83,7 @@ fn worker() {
         println!("worker: {result:?}");
     };
     ask(0);
-    for n in 1..=RUNS {
+    for n in ended {
         // Blocks until the next run shows the dialog and the user (or that run's end) answers it.
         ask(n);
     }
@@ -92,13 +96,16 @@ fn main() {
                                             let _ = proxy.send_event(()); // the waker's event: `Run` ignores it
                                         })
                                         .unwrap();
-    let worker = std::thread::spawn(worker);
+    let (run_ended, ended) = mpsc::channel();
+    let worker = std::thread::spawn(move || worker(ended));
     for n in 1..=RUNS {
         let mut run = Run { n, window: None, question: None };
         event_loop.run_app_on_demand(&mut host.wrap(&mut run)).unwrap();
+        run_ended.send(n).unwrap();
     }
     // The end: dialogs close and dialog calls fail fast, so the worker's last question doesn't
-    // wait for a run that never comes.
+    // wait for a run that never comes; closing the channel then ends its loop.
     drop(host);
+    drop(run_ended);
     worker.join().unwrap();
 }

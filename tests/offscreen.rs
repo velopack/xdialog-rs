@@ -8,12 +8,12 @@
 //! - Accessibility: the AccessKit tree of a message and a progress dialog (snapshots).
 //! - Goldens: each theme's `golden` variants vs
 //!   `tests/visual_references/offscreen/<renderer>/<theme>/<name>.png` (10/255 per channel, at most
-//!   0.5% of pixels). A missing golden is reported and skipped (a failure when `CI` is set);
-//!   `XDIALOG_BLESS=1` (re)writes the goldens (and `FONT_ID`).
+//!   0.5% of pixels). A missing golden fails the test, except for `soft` outside CI, where it is
+//!   reported and skipped; `XDIALOG_BLESS=1` (re)writes the goldens (and `FONT_ID`).
 //!   - `soft`: always compared (bundled Ubuntu fonts; the Fluent look uses them too).
 //!   - `d2d` / `cg`: the renders depend on the system fonts, so they are compared only when
 //!     `offscreen/<renderer>/FONT_ID` matches this machine ([`font_id`]); otherwise the test prints
-//!     a notice and skips.
+//!     a notice (a `::warning::` when `CI` is set) and skips.
 //!
 //!   Renders that were not compared (skipped by the font gate) or that differ are written to
 //!   `target/offscreen-actual/<renderer>/<theme>/` for inspection (a CI artifact).
@@ -28,6 +28,7 @@ mod fluent;
 mod macos;
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 pub use model::*;
 pub use xdialog::__test::{Event, Key, OffscreenDialog, Point, TestAppearance, TestKind, TestMacStyle, TestProgress, RENDERER};
@@ -144,8 +145,7 @@ fn px(img: &[u8], w: u32, x: f64, y: f64) -> [u8; 3] {
     [img[i], img[i + 1], img[i + 2]]
 }
 
-/// `hover`: the theme has a pointer-over look (AppKit's push buttons have none).
-fn harness_behaviour(backend: XDialogBackend, hover: bool) {
+fn harness_behaviour(backend: XDialogBackend) {
     let mut d = OffscreenDialog::new(backend, look(false), 1.0, TestKind::Message, two_buttons());
     let (w, h) = d.size_px();
     assert!(w >= 200 && h >= 80, "measured size {w}x{h}");
@@ -164,9 +164,7 @@ fn harness_behaviour(backend: XDialogBackend, hover: bool) {
     d.render_at(2.0);
     let (_, _, settled) = d.render_at(3.0);
     assert_eq!(d.render_at(3.0).2, settled);
-    if hover {
-        assert_ne!(px(&idle, w, probe.0, probe.1), px(&settled, w, probe.0, probe.1), "hover changes the button");
-    }
+    assert_ne!(px(&idle, w, probe.0, probe.1), px(&settled, w, probe.0, probe.1), "hover changes the button");
 
     // Press + release inside -> ButtonPressed; the dialog stops presenting (last image kept).
     d.event(button(c, true));
@@ -204,17 +202,17 @@ fn harness_behaviour(backend: XDialogBackend, hover: bool) {
 
 #[test]
 fn ubuntu_harness_behaviour() {
-    harness_behaviour(XDialogBackend::Ubuntu, true);
+    harness_behaviour(XDialogBackend::Ubuntu);
 }
 
 #[test]
 fn fluent_harness_behaviour() {
-    harness_behaviour(XDialogBackend::Fluent, true);
+    harness_behaviour(XDialogBackend::Fluent);
 }
 
 #[test]
 fn macos_harness_behaviour() {
-    harness_behaviour(XDialogBackend::MacOS, true);
+    harness_behaviour(XDialogBackend::MacOS);
 }
 
 #[test]
@@ -383,21 +381,27 @@ fn font_id() -> Option<String> {
 }
 
 /// Whether the goldens of this renderer apply to this machine (always for `soft`). Blessing
-/// writes `FONT_ID`.
+/// writes `FONT_ID`. Decided once per process: the golden tests run in parallel.
 fn goldens_apply() -> bool {
-    let Some(id) = font_id() else { return true };
-    let record = renderer_dir().join("FONT_ID");
-    if blessing() {
-        std::fs::create_dir_all(renderer_dir()).unwrap();
-        std::fs::write(&record, format!("{id}\n")).unwrap();
-        return true;
-    }
-    let recorded = std::fs::read_to_string(&record).map(|s| s.trim().to_owned()).unwrap_or_default();
-    if recorded != id {
-        println!("{RENDERER}: goldens skipped: they were made with `{recorded}`, this machine has `{id}`");
-        return false;
-    }
-    true
+    static APPLY: OnceLock<bool> = OnceLock::new();
+    *APPLY.get_or_init(|| {
+              let Some(id) = font_id() else { return true };
+              let record = renderer_dir().join("FONT_ID");
+              if blessing() {
+                  std::fs::create_dir_all(renderer_dir()).unwrap();
+                  std::fs::write(&record, format!("{id}\n")).unwrap();
+                  return true;
+              }
+              let recorded = std::fs::read_to_string(&record).map(|s| s.trim().to_owned()).unwrap_or_default();
+              if recorded != id {
+                  let notice = format!("{RENDERER}: goldens skipped: they were made with `{recorded}`, this machine has `{id}`");
+                  // On CI, a warning makes a runner image change visible in the run summary.
+                  let prefix = if std::env::var_os("CI").is_some() { "::warning::" } else { "" };
+                  println!("{prefix}{notice}");
+                  return false;
+              }
+              true
+          })
 }
 
 fn save(dir: &Path, name: &str, f: &Frame) {
@@ -447,8 +451,10 @@ fn check_goldens(backend: XDialogBackend, theme: &str, variants: &[Variant]) -> 
         println!("{RENDERER}/{theme}: no golden yet (skipped; XDIALOG_BLESS=1 writes them): {}", skipped.join(", "));
     }
     assert!(failures.is_empty(), "{RENDERER}/{theme} goldens differ (renders in {}):\n{}", actual.display(), failures.join("\n"));
-    // A golden that was never added must not pass unnoticed in CI.
-    assert!(skipped.is_empty() || std::env::var_os("CI").is_none(), "{RENDERER}/{theme}: goldens missing in CI");
+    // A golden that was never added must not pass unnoticed. d2d/cg goldens are compared only where
+    // FONT_ID matches (never on CI), so a local run is their only check.
+    let strict = RENDERER != "soft" || std::env::var_os("CI").is_some();
+    assert!(skipped.is_empty() || !strict, "{RENDERER}/{theme}: goldens missing: {}", skipped.join(", "));
     done
 }
 

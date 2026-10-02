@@ -89,7 +89,6 @@ fn run() {
     // Skin tone modifiers and complex emoji sequences
     let data = xdialog::XDialogOptions {
         icon: XDialogIcon::Information,
-        icon_source: None,
         title: "👨‍👩‍👧‍👦 Complex Emoji".to_string(),
         main_instruction: "Family & Skin Tone Modifiers 🏽".to_string(),
         message: "Skin tones: 👋🏻👋🏼👋🏽👋🏾👋🏿\n\
@@ -100,6 +99,7 @@ fn run() {
                   Clock faces: 🕐🕑🕒🕓🕔🕕🕖🕗🕘🕙🕚🕛"
             .to_string(),
         buttons: vec!["Looks Good! 👍".to_string(), "Broken 💔".to_string()],
+        ..Default::default()
     };
     let _ = xdialog::show_message(data).wait();
 
