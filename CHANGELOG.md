@@ -21,7 +21,7 @@ look of 3.x: same layout, Ubuntu font, colours, metrics, animations and keyboard
   `XDialogBuilder::new().with_backend(XDialogBackend::Win32)` for the previous behaviour.
 - **Rust 1.95** is now required on every platform. winit 0.30 is always compiled, softbuffer on
   Linux and macOS.
-- **One winit loop per process:** with a drawn backend (Fluent or Ubuntu; the default on Windows 10+ and Linux)
+- **One winit loop per process:** with a drawn backend (Fluent, Ubuntu or MacOS; the default everywhere but older Windows)
   `XDialogBuilder::run*` owns a winit 0.30 event loop. An application with its own winit loop must
   use `winit-host` instead.
 - **New error variant `XDialogError::BlockingCallOnUiThread`.** A blocking dialog call
@@ -58,20 +58,25 @@ look of 3.x: same layout, Ubuntu font, colours, metrics, animations and keyboard
 
 - `XDialogBackend` and `XDialogBuilder::with_backend`: choose the backend at runtime. `Auto` (the
   default) is Fluent with a Win32 TaskDialog fallback on Windows 10+, Win32 on older Windows,
-  Ubuntu on Linux (`NoBackendAvailable` without a display server) and AppKit on macOS. `Fluent`
-  and `Ubuntu` run wherever winit does.
+  Ubuntu on Linux (`NoBackendAvailable` without a display server) and MacOS on macOS. `Fluent`,
+  `Ubuntu` and `MacOS` run wherever winit does.
 - Fluent backend: WinUI 3 ContentDialog-style dialogs (Segoe UI Variable, system accent colour,
-  light/dark), drawn with Direct2D and DirectWrite on Windows.
+  light/dark), drawn with Direct2D and DirectWrite on Windows. The keyboard focus visual appears
+  only after keyboard navigation, not when the dialog opens.
+- MacOS backend: the macOS 11-15 alert (SF Pro, centred icon and text, accent default button,
+  stacked buttons when they don't fit side by side), drawn with CoreGraphics and CoreText over the
+  translucent alert material, with the system's alert icons and accent colour. Return activates
+  the default button, Space the focused one.
 - `winit-host` feature: `XDialogBuilder::into_host_app(app, waker)` wraps your winit
   `ApplicationHandler` in an `xdialog::host::XDialogApp` that runs xdialog's dialogs inside the
   event loop your application owns, with no xdialog code in your handler: it handles the dialog
   windows' events, merges their wake-up deadline into your control flow and closes the dialogs on
   `exiting`; everything else is forwarded. xdialog creates its windows through your `ActiveEventLoop`;
-  `xdialog::host::winit` re-exports its winit 0.30 so your loop uses the same version. On macOS
-  `Auto` uses the Ubuntu look in host mode (AppKit needs its own loop). See
+  `xdialog::host::winit` re-exports its winit 0.30 so your loop uses the same version. `AppKit` is
+  not available in host mode (it needs its own loop). See
   `examples/winit_host.rs`.
 - `XDialogOptions::icon_source` (`XDialogIconSource::File` or `::Bytes`: an `.ico`, `.png` or
-  `.icns` image) and `XDialogIcon::Custom`, for the drawn backends (Fluent, Ubuntu): the image is
+  `.icns` image) and `XDialogIcon::Custom`, for the drawn backends (Fluent, Ubuntu, MacOS): the image is
   the dialog's window and taskbar icon (Windows, X11; not Wayland or macOS), and `Custom` shows it
   in the dialog in place of the severity icon. `Custom` without a usable image shows no icon; an
   image that can't be read or decoded is logged and ignored. Win32 TaskDialog, AppKit and

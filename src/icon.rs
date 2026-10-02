@@ -122,7 +122,7 @@ fn fit(rgba: &[u8], w: u32, h: u32, size: u32) -> IconImage {
     let scale = size as f32 / w.max(h) as f32;
     let dw = ((w as f32 * scale).round() as u32).clamp(1, size);
     let dh = ((h as f32 * scale).round() as u32).clamp(1, size);
-    let premul: Vec<[f32; 4]> = rgba.chunks_exact(4)
+    let premul: Vec<[f32; 4]> = rgba.as_chunks::<4>().0.iter()
                                     .map(|p| {
                                         let a = p[3] as f32 / 255.0;
                                         [p[0] as f32 * a, p[1] as f32 * a, p[2] as f32 * a, p[3] as f32]

@@ -97,7 +97,7 @@ impl MemorySurface {
             self.rgba.reserve(w as usize * h as usize * 4);
             for y in 0..h as usize {
                 let row = &data[y * stride..y * stride + w as usize * 4];
-                self.rgba.extend(row.chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], 255]));
+                self.rgba.extend(row.as_chunks::<4>().0.iter().flat_map(|p| [p[2], p[1], p[0], 255]));
             }
         }
         Ok(())

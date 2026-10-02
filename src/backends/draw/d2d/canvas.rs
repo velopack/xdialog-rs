@@ -106,7 +106,7 @@ impl Canvas<'_> {
         let [w, h] = image.size();
         let buf = &mut self.dev.swizzle;
         buf.clear();
-        buf.extend(image.rgba().chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], p[3]]));
+        buf.extend(image.rgba().as_chunks::<4>().0.iter().flat_map(|p| [p[2], p[1], p[0], p[3]]));
         let props = D2D1_BITMAP_PROPERTIES1 { pixelFormat: D2D1_PIXEL_FORMAT { format: DXGI_FORMAT_B8G8R8A8_UNORM,
                                                                                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED },
                                               dpiX: 96.0,
