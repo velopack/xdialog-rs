@@ -59,6 +59,7 @@ pub(crate) struct Fonts {
     scan_merged: bool,
     faces: HashMap<(fontdb::ID, u16), Option<Face>>,
     metrics: HashMap<(String, u16), VMetrics>,
+    weights: HashMap<(String, u16), u16>,
 }
 
 /// The system font scan (an empty database if it failed).
@@ -105,7 +106,8 @@ impl Fonts {
                 generation: 0,
                 scan_merged: false,
                 faces: HashMap::new(),
-                metrics: HashMap::new() }
+                metrics: HashMap::new(),
+                weights: HashMap::new() }
     }
 
     /// Whether the database has a face of `family`.
@@ -121,6 +123,29 @@ impl Fonts {
         let face = self.system.get_font(id, fontdb::Weight(weight)).and_then(|font| drawable_face(font.as_peniko(), weight));
         self.faces.insert((id, weight), face.clone());
         face
+    }
+
+    /// The weight to shape `family` at for a requested `weight`: the weight of the family's
+    /// nearest face (CSS matching), or `weight` itself when that face is variable (its `wght`
+    /// axis reaches it) or the family is unknown. cosmic-text prefers an exact weight in any
+    /// family over the requested family, so asking Ubuntu (400/700) for 600 would draw in
+    /// another family's SemiBold once the system scan is merged.
+    pub(crate) fn family_weight(&mut self, family: &str, weight: u16) -> u16 {
+        if let Some(w) = self.weights.get(&(family.to_owned(), weight)) {
+            return *w;
+        }
+        let db = self.system.db();
+        let query = fontdb::Query { families: &[fontdb::Family::Name(family)], weight: fontdb::Weight(weight), ..Default::default() };
+        let w = db.query(&query)
+                  .and_then(|id| {
+                      let variable = db.with_face_data(id, |data, index| {
+                                           FontRef::from_index(data, index).is_ok_and(|f| f.axes().iter().any(|a| a.tag() == Tag::new(b"wght")))
+                                       })?;
+                      Some(if variable { weight } else { db.face(id)?.weight.0 })
+                  })
+                  .unwrap_or(weight);
+        self.weights.insert((family.to_owned(), weight), w);
+        w
     }
 
     /// Vertical metrics of the face of `family` matching `weight` (cached); Ubuntu-like defaults
@@ -176,6 +201,7 @@ impl Fonts {
         }
         self.scan_merged = true;
         self.metrics.clear();
+        self.weights.clear();
         self.generation += 1;
     }
 
@@ -265,6 +291,14 @@ mod tests {
         // Ubuntu: ascent 0.932 em, natural line height (ascent + descent + gap) about 1.149 em.
         assert!((m.ascent - 0.932).abs() < 0.01, "{m:?}");
         assert!((m.line_height - 1.149).abs() < 0.01, "{m:?}");
+    }
+
+    #[test]
+    fn weight_snaps_to_the_family() {
+        let mut f = lock();
+        assert_eq!(f.family_weight("Ubuntu", 400), 400);
+        assert_eq!(f.family_weight("Ubuntu", 600), 700);
+        assert_eq!(f.family_weight("Ubuntu", 300), 400);
     }
 
     #[test]

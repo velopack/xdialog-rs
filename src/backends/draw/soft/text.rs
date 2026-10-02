@@ -161,6 +161,7 @@ fn shape(text: &str, p: &TextParams<'_>) -> Shaped {
     let size = p.size as f32;
     let mut f = fonts::lock();
     let vm = f.vmetrics(family, p.weight.0);
+    let weight = f.family_weight(family, p.weight.0);
     let line_height = p.line_height.map_or(size * vm.line_height, |lh| lh as f32);
     let ascent = match p.line_height {
         Some(lh) => size * vm.ascent + (lh as f32 - size * (vm.ascent + vm.descent)) / 2.0,
@@ -173,7 +174,7 @@ fn shape(text: &str, p: &TextParams<'_>) -> Shaped {
         let mut b = buffer.borrow_with(&mut f.system);
         b.set_size(p.max_width.map(|w| w.max(0.0) as f32), None);
         b.set_wrap(if p.max_width.is_some() { Wrap::WordOrGlyph } else { Wrap::None });
-        let attrs = Attrs::new().family(cosmic_text::Family::Name(family)).weight(cosmic_text::Weight(p.weight.0));
+        let attrs = Attrs::new().family(cosmic_text::Family::Name(family)).weight(cosmic_text::Weight(weight));
         let align = if p.center {
             Align::Center
         } else if p.rtl {
