@@ -15,9 +15,6 @@ pub mod appkit;
 pub mod maccf_direct;
 
 /// The drawing layer (display list, snapping) and its one per-OS backend.
-// TEMP (WP1): the d2d / cg stubs never draw, so on Windows and macOS the display list and its
-// replay are unused until WP2 / WP3 land those backends; drop this allow then.
-#[cfg_attr(not(draw_soft), allow(dead_code))]
 pub(crate) mod draw;
 
 /// The core of the drawn backends (runtime, windows, input, animation, text, accessibility, ...).

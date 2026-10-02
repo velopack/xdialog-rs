@@ -92,11 +92,6 @@ impl Rect {
         Point::new(self.x0, self.y0)
     }
 
-    #[allow(dead_code)] // kurbo parity
-    pub fn size(&self) -> Size {
-        Size::new(self.width(), self.height())
-    }
-
     pub fn center(&self) -> Point {
         Point::new(0.5 * (self.x0 + self.x1), 0.5 * (self.y0 + self.y1))
     }
@@ -131,11 +126,6 @@ impl Rect {
         let x1 = self.x1.min(other.x1);
         let y1 = self.y1.min(other.y1);
         Rect::new(x0, y0, x1.max(x0), y1.max(y0))
-    }
-
-    /// Whether the area is zero (or negative).
-    pub fn is_empty(&self) -> bool {
-        self.x1 <= self.x0 || self.y1 <= self.y0
     }
 
     /// Every coordinate multiplied by `k` (logical -> physical px).
@@ -193,9 +183,9 @@ mod tests {
         let r = Rect::from_origin_size(Point::new(1.0, 2.0), Size::new(10.0, 4.0));
         assert_eq!(r, Rect::new(1.0, 2.0, 11.0, 6.0));
         assert_eq!(r.origin(), Point::new(1.0, 2.0));
-        assert_eq!(r.size(), Size::new(10.0, 4.0));
+        assert_eq!((r.width(), r.height()), (10.0, 4.0));
         assert_eq!(r.center(), Point::new(6.0, 4.0));
-        assert_eq!(Rect::from_center_size(r.center(), r.size()), r);
+        assert_eq!(Rect::from_center_size(r.center(), Size::new(r.width(), r.height())), r);
         assert_eq!(Rect::from_points(Point::new(11.0, 2.0), Point::new(1.0, 6.0)), r);
         assert_eq!(r.scale(1.5), Rect::new(1.5, 3.0, 16.5, 9.0));
     }
@@ -218,11 +208,7 @@ mod tests {
         assert_eq!(r.inset(2.0), Rect::new(8.0, 8.0, 22.0, 32.0));
         assert_eq!(r.inset(-2.0), Rect::new(12.0, 12.0, 18.0, 28.0));
         assert_eq!(r.intersect(Rect::new(15.0, 0.0, 40.0, 20.0)), Rect::new(15.0, 10.0, 20.0, 20.0));
-        let none = r.intersect(Rect::new(25.0, 35.0, 40.0, 40.0));
-        assert!(none.is_empty());
-        assert_eq!(none, Rect::new(25.0, 35.0, 25.0, 35.0));
-        assert!(!r.is_empty());
-        assert!(Rect::ZERO.is_empty());
+        assert_eq!(r.intersect(Rect::new(25.0, 35.0, 40.0, 40.0)), Rect::new(25.0, 35.0, 25.0, 35.0));
     }
 
     #[test]

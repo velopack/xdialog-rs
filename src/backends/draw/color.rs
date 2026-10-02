@@ -17,14 +17,14 @@ pub(crate) const fn mul_frac_round(val: u8, frac: u8) -> u8 {
     ((p + (p >> 8)) >> 8) as u8
 }
 
-// Part of the contract every backend and test uses; the software backend alone needs less.
-#[cfg_attr(draw_soft, allow(dead_code))]
 impl Color {
     pub const TRANSPARENT: Color = Color::from_rgba_premultiplied(0, 0, 0, 0);
     pub const BLACK: Color = Color::from_rgb(0, 0, 0);
     pub const WHITE: Color = Color::from_rgb(255, 255, 255);
     /// (160, 160, 160), as `Color32::GRAY`.
+    #[cfg(test)]
     pub const GRAY: Color = Color::from_rgb(160, 160, 160);
+    #[cfg(test)]
     pub const RED: Color = Color::from_rgb(255, 0, 0);
 
     /// Opaque.
@@ -66,6 +66,7 @@ impl Color {
     }
 
     /// Premultiplied RGBA.
+    #[cfg(test)]
     pub const fn to_array(self) -> [u8; 4] {
         self.0
     }
@@ -83,6 +84,7 @@ impl Color {
     }
 
     /// Straight-alpha RGBA in 0..=1 (`D2D1_COLOR_F`, `CGContextSetRGBFillColor`).
+    #[cfg_attr(draw_soft, allow(dead_code))]
     pub fn to_straight_f32(self) -> [f32; 4] {
         self.to_srgba_unmultiplied().map(|c| c as f32 / 255.0)
     }
@@ -107,11 +109,6 @@ impl Color {
     /// Perceived brightness in 0..=1.
     pub fn intensity(&self) -> f32 {
         (self.r() as f32 * 0.299 + self.g() as f32 * 0.587 + self.b() as f32 * 0.114) / 255.0
-    }
-
-    /// The four bytes as one number (cache keys).
-    pub const fn as_u32(self) -> u32 {
-        u32::from_le_bytes(self.0)
     }
 }
 
@@ -185,9 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn add_saturates_and_as_u32_distinguishes() {
+    fn add_saturates() {
         assert_eq!(Color::from_rgb(200, 10, 0) + Color::from_rgba_premultiplied(100, 10, 0, 0), Color::from_rgb(255, 20, 0));
-        assert_ne!(Color::RED.as_u32(), Color::BLACK.as_u32());
-        assert_eq!(Color::from_rgba_premultiplied(1, 2, 3, 4).as_u32(), 0x04030201);
     }
 }

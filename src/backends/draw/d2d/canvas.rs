@@ -61,7 +61,8 @@ fn vec2(p: Point) -> Vector2 {
 
 /// Draw `frame` on `dc` (a render target cast to a device context): BeginDraw, setup, replay,
 /// EndDraw. Images not drawn in the frame are released afterwards. A failing EndDraw
-/// (`D2DERR_RECREATE_TARGET`, or anything else) is `Lost`: the caller recreates the target.
+/// (`D2DERR_RECREATE_TARGET`, or anything else) is an error naming the HRESULT: the caller
+/// recreates the target.
 pub(crate) fn draw_frame(dc: &ID2D1DeviceContext, dev: &mut DeviceRes, text: &Text, frame: &Frame<'_>) -> Result<(), DrawError> {
     let dpi = (96.0 * frame.ppp) as f32;
     // SAFETY: plain calls on a live device context; BeginDraw is always paired with EndDraw.
@@ -77,10 +78,7 @@ pub(crate) fn draw_frame(dc: &ID2D1DeviceContext, dev: &mut DeviceRes, text: &Te
     // SAFETY: as above.
     let ended = unsafe { dc.EndDraw(None, None) };
     dev.images.retain(|_, (_, used)| std::mem::take(used));
-    ended.map_err(|e| {
-             debug!("xdialog: Direct2D EndDraw failed: {e}");
-             DrawError::Lost
-         })
+    ended.map_err(super::backend("EndDraw"))
 }
 
 /// A frame being drawn into a Direct2D device context (between BeginDraw and EndDraw), in DIPs

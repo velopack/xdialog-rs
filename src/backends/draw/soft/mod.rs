@@ -19,7 +19,7 @@ use canvas::Painter;
 pub(crate) use text::Text;
 
 use super::softbuffer_surface;
-use super::{list, DrawError, Frame};
+use super::{DrawError, Frame};
 
 /// Names the golden directory.
 pub const NAME: &str = "soft";
@@ -37,11 +37,8 @@ impl super::WindowTarget for WindowSurface {
 }
 
 impl super::Surface for WindowSurface {
-    fn present(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
-        if list::is_zero_size(frame.size_px) {
-            return Ok(()); // minimised / not laid out yet
-        }
-        self.painter.draw(frame);
+    fn present_nonzero(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
+        self.painter.draw(frame)?;
         self.surface.present_rgba(frame.size_px, self.painter.pixmap().data_as_u8_slice())
     }
 }
@@ -62,17 +59,14 @@ impl super::MemoryTarget for MemorySurface {
 
     fn read_rgba(&self) -> Option<(u32, u32, &[u8])> {
         // The clear colour is opaque, so the premultiplied pixels are plain opaque RGBA.
-        (!list::is_zero_size(self.size)).then(|| (self.size[0], self.size[1], self.painter.pixmap().data_as_u8_slice()))
+        (!super::list::is_zero_size(self.size)).then(|| (self.size[0], self.size[1], self.painter.pixmap().data_as_u8_slice()))
     }
 }
 
 #[cfg(any(test, feature = "_test-hooks"))]
 impl super::Surface for MemorySurface {
-    fn present(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
-        if list::is_zero_size(frame.size_px) {
-            return Ok(()); // the previous image is kept
-        }
-        self.painter.draw(frame);
+    fn present_nonzero(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
+        self.painter.draw(frame)?;
         self.size = [self.painter.pixmap().width() as u32, self.painter.pixmap().height() as u32];
         Ok(())
     }
