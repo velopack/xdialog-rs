@@ -1,6 +1,6 @@
 //! Host mode (`winit-host`) across several runs of one event loop: an `XDialogHost` wrapping a
-//! different app value for each run, driven with `pump_app_events` (runs 1 and 2, so the test can
-//! inject input) and `run_app_on_demand` (run 3). Input is injected with the `_test-hooks` API;
+//! different app value for each run, driven with `pump_app_events` (run 1, so the test can inject
+//! input) and `run_app_on_demand` (the later runs). Input is injected with the `_test-hooks` API;
 //! windows never activate and are placed off every monitor. `harness = false`: winit wants its
 //! loop on the main thread. `tests/winit_host.rs` covers the single-run `XDialogApp`.
 //!
@@ -157,7 +157,9 @@ fn run() {
         }
     }
 
-    // Run 1: a worker's dialog is answered; the run ends with another one open, which closes.
+    // Run 1 (`pump_app_events`, so the test can inject input): a worker's dialog is answered by a
+    // click; the event-loop thread's progress dialog closes when its proxy drops and the app's
+    // control flow comes back; the run ends with a dialog open, which closes.
     let mut first = Inner::default();
     {
         let mut app = host.wrap(&mut first);
@@ -166,6 +168,15 @@ fn run() {
         click(&mut el, &mut app, &d, 0);
         pump(&mut el, &mut app, 2_000, &|_| worker.is_finished());
         assert!(matches!(worker.join().unwrap(), Ok(XDialogResult::ButtonPressed(0))), "the click answered the dialog");
+
+        let progress = show_progress("run 1 progress", "Run 1", "body", XDialogIcon::Information).unwrap();
+        wait_titled(&mut el, &mut app, "run 1 progress");
+        drop(progress);
+        pump(&mut el, &mut app, 2_000, &|app| titled(app, "run 1 progress").is_none());
+        assert!(titled(&app, "run 1 progress").is_none(), "dropping the proxy closes the dialog");
+        pump(&mut el, &mut app, 100, &|_| false);
+        let far = Instant::now() + Duration::from_secs(1800);
+        assert!(matches!(app.test_control_flow(), Some(ControlFlow::WaitUntil(t)) if t > far), "idle: the host's flow is back");
 
         let worker = message("open at exit 1");
         wait_titled(&mut el, &mut app, "open at exit 1");
@@ -179,73 +190,47 @@ fn run() {
 
     // Between runs: a request queues (its caller blocks); a wake-up is outstanding for the next
     // run (this request's, or one coalesced with it: the closed dialog's proxy sent its close).
-    let between = std::thread::spawn(|| show_message_yes_no("between runs", "Between runs", "Yes or no?", XDialogIcon::Warning));
+    let between = message("between runs");
     std::thread::sleep(Duration::from_millis(300));
     assert!(!between.is_finished(), "queued until the next run");
 
-    // Run 2, another app value (`pump_app_events` after an exit is winit's re-run path too): the
-    // queued dialog opens in the first iteration, run 1's closed windows never reach the app
-    // (`Inner::window_event` panics on a foreign id), and the host's own flow is untouched again.
-    let mut second = Inner::default();
-    {
-        let mut app = host.wrap(&mut second);
-        let d = wait_titled(&mut el, &mut app, "between runs");
-        click(&mut el, &mut app, &d, 1);
-        pump(&mut el, &mut app, 2_000, &|_| between.is_finished());
-        assert!(matches!(between.join().unwrap(), Ok(true)), "the click answered the queued dialog");
-        assert!(app.inner().user_events > 0, "the between-runs wake-up reached this run");
-
-        // The event-loop thread works as before: a progress dialog, closed by dropping its proxy.
-        let progress = show_progress("run 2 progress", "Run 2", "body", XDialogIcon::Information).unwrap();
-        wait_titled(&mut el, &mut app, "run 2 progress");
-        drop(progress);
-        pump(&mut el, &mut app, 2_000, &|app| titled(app, "run 2 progress").is_none());
-        assert!(titled(&app, "run 2 progress").is_none(), "dropping the proxy closes the dialog");
-        pump(&mut el, &mut app, 100, &|_| false);
-        let far = Instant::now() + Duration::from_secs(1800);
-        assert!(matches!(app.test_control_flow(), Some(ControlFlow::WaitUntil(t)) if t > far), "idle: the host's flow is back");
-
-        app.inner_mut().quit = true;
-        pump_to_exit(&mut el, &mut app);
-    }
-    assert!(second.exited);
-
-    // Run 3: `run_app_on_demand` proper. A worker's `show_progress` returns once its dialog is
-    // open (proof that this run served it), then it tells the app to exit.
+    // Run 2 (`run_app_on_demand`, another app value; the only re-run path from here on: winit
+    // 0.30's `pump_app_events` doesn't clear the exit on X11/Wayland). A worker's `show_progress`
+    // returns once its dialog is open (proof that this run served the queue), then it tells the
+    // app to exit; the queued message dialog, open too, closes with the run. Run 1's closed
+    // windows never reach the app (`Inner::window_event` panics on a foreign id).
     let done = Arc::new(AtomicBool::new(false));
-    let mut third = Inner { quit_flag: Some(done.clone()), ..Default::default() };
+    let mut second = Inner { quit_flag: Some(done.clone()), ..Default::default() };
     let proxy = el.create_proxy();
     let worker = std::thread::spawn(move || {
-        let progress = show_progress("run 3", "Run 3", "body", XDialogIcon::None);
+        let progress = show_progress("run 2", "Run 2", "body", XDialogIcon::None);
         let opened = progress.is_ok();
         drop(progress);
         done.store(true, Ordering::SeqCst);
         let _ = proxy.send_event(());
         opened
     });
-    el.run_app_on_demand(&mut host.wrap(&mut third)).expect("run 3");
-    assert!(worker.join().unwrap(), "the progress dialog opened in run 3");
-    assert!(third.exited);
-    assert!(host.test_dialogs().is_empty(), "the run's end closed the dialog");
+    el.run_app_on_demand(&mut host.wrap(&mut second)).expect("run 2");
+    assert!(worker.join().unwrap(), "the progress dialog opened in run 2");
+    assert!(matches!(between.join().unwrap(), Ok(XDialogResult::WindowClosed)), "the queued dialog opened in run 2 and closed with it");
+    assert!(second.exited);
+    assert!(second.user_events > 0, "the wake-ups reached this run");
+    assert!(host.test_dialogs().is_empty(), "the run's end closed the dialogs");
 
-    // The host ends xdialog: a dialog open at shutdown closes, later calls fail fast, and a run
-    // after that only forwards.
-    let worker = message("open at shutdown");
-    let mut fourth = Inner::default();
-    {
-        let mut app = host.wrap(&mut fourth);
-        wait_titled(&mut el, &mut app, "open at shutdown");
-        app.host_mut().shutdown();
-        assert!(app.host().is_shut_down());
-        assert!(matches!(worker.join().unwrap(), Ok(XDialogResult::WindowClosed)));
-        assert!(matches!(show_progress("t", "a", "b", XDialogIcon::None), Err(XDialogError::NoBackendAvailable)));
-        assert!(matches!(show_message_info_ok("t", "a", "b"), Err(XDialogError::NoBackendAvailable)), "not the UI thread any more");
-        // The closed window's `Destroyed` arrives here, for the host to swallow.
-        pump(&mut el, &mut app, 300, &|_| false);
-        app.inner_mut().quit = true;
-        pump_to_exit(&mut el, &mut app);
-    }
-    assert!(fourth.exited);
+    // Shutdown between runs: the queue is rejected, later calls fail fast, and a run after that
+    // only forwards (run 2's closed windows report `Destroyed` there, for the host to swallow).
+    let queued = message("queued at shutdown");
+    std::thread::sleep(Duration::from_millis(300));
+    host.shutdown();
+    assert!(host.is_shut_down());
+    assert!(matches!(queued.join().unwrap(), Err(XDialogError::NoBackendAvailable)), "the queue is rejected");
+    assert!(matches!(show_progress("t", "a", "b", XDialogIcon::None), Err(XDialogError::NoBackendAvailable)));
+    assert!(matches!(show_message_info_ok("t", "a", "b"), Err(XDialogError::NoBackendAvailable)), "not the UI thread any more");
+    let done = Arc::new(AtomicBool::new(true));
+    let mut third = Inner { quit_flag: Some(done), ..Default::default() };
+    let _ = el.create_proxy().send_event(()); // exit from the first `user_event`
+    el.run_app_on_demand(&mut host.wrap(&mut third)).expect("run 3");
+    assert!(third.exited);
     drop(host);
     assert!(matches!(show_progress("t", "a", "b", XDialogIcon::None), Err(XDialogError::NoBackendAvailable)));
 }

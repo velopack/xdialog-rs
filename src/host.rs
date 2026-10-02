@@ -43,10 +43,11 @@
 //!
 //! # Several runs of one loop
 //!
-//! `run_app_on_demand` (and `pump_app_events` after it returned `PumpStatus::Exit`) runs the loop
-//! again, with any app value: winit emits `exiting` at the end of every run and carries no window
-//! over to the next. The host outlives the runs: create it once, wrap each run's app, and drop it
-//! after the last run.
+//! `run_app_on_demand` runs the loop again, with any app value: winit emits `exiting` at the end
+//! of every run and carries no window over to the next. The host outlives the runs: create it
+//! once, wrap each run's app, and drop it after the last run. (`pump_app_events` drives a run
+//! too, but once it returned `PumpStatus::Exit`, start the next run with `run_app_on_demand`:
+//! winit 0.30's `pump_app_events` doesn't clear the exit on X11/Wayland.)
 //!
 //! - A run ends with every dialog closed (`WindowClosed`), like a `run_app` host exits.
 //! - Between runs, requests (from other threads, or from the event-loop thread after the loop
