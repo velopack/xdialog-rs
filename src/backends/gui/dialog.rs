@@ -1149,7 +1149,8 @@ mod tests {
                 assert_eq!(d.icon.as_ref().map(|(px, img)| (*px, img.as_ref().map(Image::size))), Some((size, Some([size; 2]))));
                 // Some pixel of the window is the icon's red.
                 let (_, _, px) = d.read_rgba().unwrap();
-                assert!(px.chunks_exact(4).any(|p| p[0] > 240 && p[1] < 16 && p[2] < 16), "{backend:?} at {ppp}x: no red icon pixel");
+                let red = px.as_chunks::<4>().0.iter().any(|p| p[0] > 240 && p[1] < 16 && p[2] < 16);
+                assert!(red, "{backend:?} at {ppp}x: no red icon pixel");
                 // No accessibility node for a custom icon (decorative).
                 assert!(d.a11y_tree().nodes.iter().all(|(_, n)| n.value() != Some("Custom")), "{backend:?}");
                 assert_eq!(d.a11y_tree().nodes.len(), 3, "{backend:?}: root, body, button");

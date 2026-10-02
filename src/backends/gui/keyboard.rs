@@ -47,7 +47,7 @@ impl KeyboardState {
     /// The on-open step, after the measure pass: focus the default button, focus visible.
     pub(crate) fn on_open(&mut self, focus: &mut Option<usize>, out: &DialogUiOutput) {
         *focus = default_button(out);
-        self.focus_visible = self.policy.focus_visibility != FocusVisibility::KeyboardNavOnly;
+        self.focus_visible = self.policy.focus_visibility != FocusVisibility::KeyboardOnly;
     }
 
     /// Wheel scrolling (positive `dy`: reveal content further down).

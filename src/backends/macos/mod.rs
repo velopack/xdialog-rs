@@ -67,7 +67,7 @@ const MIN_VIEWPORT: f64 = 42.0;
 /// Keyboard policy (AppKit): the focus ring only after Tab, Return activates the default button,
 /// Space activates the focused button on release, Tab wraps, arrows don't move focus between
 /// push buttons (clamped), PageUp/PageDown/Home/End scroll the body.
-pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: FocusVisibility::KeyboardNavOnly,
+pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: FocusVisibility::KeyboardOnly,
                                                              arrows: ArrowNav::Clamp,
                                                              enter_falls_back_to_default: true,
                                                              enter_activates_default: true,

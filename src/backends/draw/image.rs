@@ -19,7 +19,7 @@ impl Image {
     pub(crate) fn from_straight_rgba(size: [u32; 2], rgba: &[u8]) -> Image {
         let len = size[0] as usize * size[1] as usize * 4;
         assert_eq!(rgba.len(), len, "image data does not match its size");
-        let rgba: Rc<[u8]> = rgba.chunks_exact(4)
+        let rgba: Rc<[u8]> = rgba.as_chunks::<4>().0.iter()
                                  .flat_map(|p| {
                                      let a = p[3];
                                      [mul_frac_round(p[0], a), mul_frac_round(p[1], a), mul_frac_round(p[2], a), a]

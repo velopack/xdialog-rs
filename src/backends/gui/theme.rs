@@ -148,12 +148,10 @@ impl DialogUiOutput {
 pub(crate) enum FocusVisibility {
     /// Whenever something is focused, also on open (the theme itself may hide it while hovering).
     Always,
-    /// On open and after keyboard navigation (":focus-visible", WinUI FocusState.Keyboard). A
-    /// pointer press anywhere in the window hides it until the next Tab/arrow key.
+    /// Only after keyboard navigation (":focus-visible", WinUI FocusState.Keyboard): hidden on
+    /// open (the default button is marked by its accent fill), shown once Tab or an arrow key
+    /// moves focus; a pointer press anywhere in the window hides it until the next one.
     KeyboardOnly,
-    /// As `KeyboardOnly`, but hidden on open (Fluent, macOS: the default button is marked by its
-    /// accent fill; the focus visual only appears once Tab or an arrow key moves focus).
-    KeyboardNavOnly,
 }
 
 /// Left/Right arrow focus navigation along [`DialogUiOutput::buttons`].

@@ -51,7 +51,7 @@ impl Surface {
                     return Err(DrawError::Backend(format!("{} bytes of RGBA for {} pixels", rgba.len(), buffer.len())));
                 }
                 // RGBA -> softbuffer's 0x00RRGGBB.
-                for (dst, p) in buffer.iter_mut().zip(rgba.chunks_exact(4)) {
+                for (dst, p) in buffer.iter_mut().zip(rgba.as_chunks::<4>().0.iter()) {
                     *dst = u32::from_be_bytes([0, p[0], p[1], p[2]]);
                 }
                 Ok(())

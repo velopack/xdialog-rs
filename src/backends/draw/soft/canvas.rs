@@ -78,7 +78,7 @@ struct CachedImage {
 
 impl CachedImage {
     fn new(image: &Image, w: u16, h: u16) -> Self {
-        let data = image.rgba().chunks_exact(4).map(|p| PremulRgba8 { r: p[0], g: p[1], b: p[2], a: p[3] }).collect();
+        let data = image.rgba().as_chunks::<4>().0.iter().map(|p| PremulRgba8 { r: p[0], g: p[1], b: p[2], a: p[3] }).collect();
         CachedImage { pixmap: Arc::new(Pixmap::from_parts(data, w, h)), used: true }
     }
 }
