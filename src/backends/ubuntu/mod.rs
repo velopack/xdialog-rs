@@ -188,16 +188,6 @@ mod tests {
         assert_eq!(out.parts.icon, Some(Rect::new(16.0, 16.0, 64.0, 64.0)));
     }
 
-    #[test]
-    fn capsule_timeline() {
-        use widgets::capsule_pos;
-        assert_eq!(capsule_pos(0.0), 0.0);
-        assert!((capsule_pos(0.2) - 0.5).abs() < 1e-6);
-        assert_eq!(capsule_pos(0.45), 1.0);
-        assert!((capsule_pos(0.7) - 0.5).abs() < 1e-6);
-        assert_eq!(capsule_pos(0.95), 0.0);
-    }
-
     /// Hovering a button hides the focus border of the focused one; a focus move shows it again
     /// until the pointer moves; leaving the window shows it again.
     #[test]

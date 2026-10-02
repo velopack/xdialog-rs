@@ -5,7 +5,7 @@
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use super::anim::{Lerp, Transition, Tweens};
+use super::anim::{capsule_pos, Lerp, Transition, Tweens};
 use super::clock::Wants;
 use super::text::{TextBlock, TextCache, TextStyle};
 use crate::backends::draw::{Color, Image, LineCap, Point, Rect, Shape, Size, Text, Vec2};
@@ -297,4 +297,23 @@ pub(crate) fn centered(outer: Rect, size: Size) -> Rect {
 /// vertically (see `TextBlock::cap_center`).
 pub(crate) fn caps_centered(outer: Rect, label: &TextBlock) -> Point {
     Point::new(centered(outer, label.size).x0, outer.center().y - label.cap_center())
+}
+
+/// Cycle (s) and length (fraction of the free track) of the indeterminate "stretchy capsule"
+/// (the Ubuntu theme's timing; the macOS theme shares it).
+pub(crate) const CAPSULE_CYCLE: f64 = 3.0;
+pub(crate) const CAPSULE_STRETCH: f64 = 0.45;
+
+/// The indeterminate "stretchy capsule" in `track` at `elapsed` seconds into the animation: a
+/// capsule `stretch` of the free track long (plus the track's height) that sweeps right over
+/// 0-40 % of `cycle`, holds, sweeps back over 50-90 % and holds again (see [`capsule_pos`]),
+/// entering and leaving past the track's ends. Clipped to `track`; `None` while nothing of it is
+/// inside. Themes paint it with radius `track.height() / 2` (unsnapped, so it glides).
+pub(crate) fn indeterminate_capsule(track: Rect, elapsed: f64, cycle: f64, stretch: f64) -> Option<Rect> {
+    let pos = capsule_pos((elapsed.rem_euclid(cycle) / cycle) as f32) as f64;
+    let (w, d) = (track.width(), track.height());
+    let len = d + stretch * (w - d);
+    let cx = (d - len / 2.0) + pos * (w - 2.0 * d + len);
+    let (left, right) = ((cx - len / 2.0).max(0.0), (cx + len / 2.0).min(w));
+    (right > left).then(|| Rect::new(track.x0 + left, track.y0, track.x0 + right, track.y1))
 }

@@ -31,7 +31,8 @@ enum Presenter {
 
 impl crate::backends::draw::WindowTarget for WindowSurface {
     fn new(window: &Rc<Window>, text: &Rc<Text>) -> Result<Self, DrawError> {
-        Ok(WindowSurface { target: Presenter::Soft(softbuffer_surface::Surface::new(window)?), painter: Painter::new(text.color_space.clone()) })
+        Ok(WindowSurface { target: Presenter::Soft(softbuffer_surface::Surface::new(window)?),
+                           painter: Painter::new(text.color_space.clone(), Painter::system_font_smoothing()) })
     }
 }
 
@@ -40,7 +41,7 @@ impl WindowSurface {
     /// `NSVisualEffectView`): a translucent clear colour lets the material show through.
     pub(crate) fn translucent(window: &Rc<Window>, text: &Rc<Text>) -> Result<Self, DrawError> {
         Ok(WindowSurface { target: Presenter::Layer(layer::LayerTarget::new(window, text.color_space.clone())?),
-                           painter: Painter::new(text.color_space.clone()) })
+                           painter: Painter::new(text.color_space.clone(), Painter::system_font_smoothing()) })
     }
 }
 
@@ -167,7 +168,9 @@ pub(crate) struct MemorySurface {
 #[cfg(any(test, feature = "_test-hooks"))]
 impl crate::backends::draw::MemoryTarget for MemorySurface {
     fn new(text: &Rc<Text>) -> Result<Self, DrawError> {
-        Ok(MemorySurface { painter: Painter::new(text.color_space.clone()), pixels: Vec::new(), rgba: Vec::new(), size: [0, 0] })
+        // Smoothing always on (AppKit's default, what a window shows unless the user turned it
+        // off): renders look like the real dialog and do not depend on the user's setting.
+        Ok(MemorySurface { painter: Painter::new(text.color_space.clone(), true), pixels: Vec::new(), rgba: Vec::new(), size: [0, 0] })
     }
 
     fn read_rgba(&self) -> Option<(u32, u32, &[u8])> {

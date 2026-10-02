@@ -17,7 +17,7 @@ pub(crate) use super::text::ThemeFonts;
 pub(crate) use super::ui::{Id, Ui};
 use crate::backends::draw::{Color, Image, Rect, Size};
 use crate::backends::fluent::FluentTheme;
-use crate::backends::macos::MacTheme;
+use crate::backends::macos::{MacStyle, MacTheme};
 use crate::backends::ubuntu::UbuntuTheme;
 use crate::model::{XDialogBackend, XDialogIcon};
 
@@ -223,6 +223,12 @@ pub(crate) trait Theme {
         None
     }
 
+    /// The behind-window material of a translucent theme (see [`Theme::translucent_clear`]) and
+    /// the window corner radius it is clipped to. Default: vibrancy, 10 px corners.
+    fn window_material(&self) -> WindowMaterial {
+        WindowMaterial { kind: MaterialKind::Vibrancy, corner_radius: 10.0 }
+    }
+
     /// The image file of a severity icon (`Information`, `Warning`, `Error`) this theme shows
     /// instead of drawing one (macOS: the system's alert icons). Core renders it at
     /// [`Theme::icon_size`] and hands it over as [`DialogView::custom_icon`]. `None` (the
@@ -243,13 +249,34 @@ pub(crate) trait Theme {
 }
 
 /// The theme of a drawn backend (`Fluent`, `MacOS`, anything else: `Ubuntu`), with default tokens until
-/// [`Theme::set_appearance`].
+/// [`Theme::set_appearance`]. `MacOS` takes the running system's style ([`MacStyle::current`]).
 pub(crate) fn new(backend: XDialogBackend) -> Box<dyn Theme> {
+    with_style(backend, MacStyle::current())
+}
+
+/// [`new`] with the `MacOS` theme in style `mac` (ignored by the other backends).
+pub(crate) fn with_style(backend: XDialogBackend, mac: MacStyle) -> Box<dyn Theme> {
     match backend {
         XDialogBackend::Fluent => Box::new(FluentTheme::new()),
-        XDialogBackend::MacOS => Box::new(MacTheme::new()),
+        XDialogBackend::MacOS => Box::new(MacTheme::new(mac)),
         _ => Box::new(UbuntuTheme::new()),
     }
+}
+
+/// The kind of behind-window material a translucent theme asks for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MaterialKind {
+    /// `NSVisualEffectView` (the alert's vibrancy, up to Sequoia).
+    Vibrancy,
+    /// Liquid Glass (`NSGlassEffectView`, macOS 26+); vibrancy where it doesn't exist.
+    Glass,
+}
+
+/// The behind-window material of a translucent theme and the window corner radius (logical px).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct WindowMaterial {
+    pub kind: MaterialKind,
+    pub corner_radius: f64,
 }
 
 // ------------------------------------------------------------------------------------------------

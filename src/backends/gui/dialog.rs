@@ -535,6 +535,12 @@ impl Dialog {
         self.theme.translucent_clear().is_some()
     }
 
+    /// The behind-window material the theme asks for (with [`Dialog::wants_translucency`]).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub(crate) fn window_material(&self) -> super::theme::WindowMaterial {
+        self.theme.window_material()
+    }
+
     /// The window got a behind-window material (call before the first frame).
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn set_translucent(&mut self, translucent: bool) {
@@ -1036,7 +1042,7 @@ mod tests {
                                     sender: Some(DialogReply::Message(tx).opened()),
                                     font_wait: Duration::ZERO,
                                     text: text.clone() };
-        let mut d = Dialog::new(super::super::theme::new(backend), params);
+        let mut d = Dialog::new(super::super::theme::with_style(backend, crate::backends::macos::MacStyle::Legacy), params);
         let size = d.physical_size(ppp);
         d.attach(Target::Memory(MemorySurface::new(&text).expect("memory surface")), ppp, size);
         d.frame().unwrap();

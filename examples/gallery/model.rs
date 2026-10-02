@@ -6,7 +6,7 @@
 //! Coordinates are LOGICAL px (client-relative), like the `Event`s the runner builds.
 #![allow(dead_code)]
 
-use xdialog::__test::{Event, Key, OffscreenDialog, PointerButton, Point, TestAppearance, TestKind, TestProgress};
+use xdialog::__test::{Event, Key, OffscreenDialog, PointerButton, Point, TestAppearance, TestKind, TestMacStyle, TestProgress};
 use xdialog::{XDialogBackend, XDialogIcon, XDialogOptions};
 
 /// A scripted state change applied at a dialog-clock time.
@@ -48,6 +48,8 @@ pub struct Variant {
     pub captures: Vec<(f64, String)>,
     /// Included in the offscreen goldens (`tests/offscreen.rs`).
     pub golden: bool,
+    /// The macOS theme's style (ignored by the other themes).
+    pub mac_style: TestMacStyle,
 }
 
 impl Variant {
@@ -60,7 +62,8 @@ impl Variant {
                   ppp: 1.0,
                   script: Vec::new(),
                   captures: Vec::new(),
-                  golden: false }
+                  golden: false,
+                  mac_style: TestMacStyle::Legacy }
     }
 
     /// A progress dialog (determinate 0 until scripted).
@@ -85,6 +88,12 @@ impl Variant {
 
     pub fn golden(mut self) -> Self {
         self.golden = true;
+        self
+    }
+
+    /// Draw the macOS theme in its Tahoe (macOS 26) style.
+    pub fn tahoe(mut self) -> Self {
+        self.mac_style = TestMacStyle::Tahoe;
         self
     }
 }
@@ -211,7 +220,7 @@ fn apply(d: &mut OffscreenDialog, p: &mut Pointer, a: &Action) -> Result<(), Str
 /// Time line: every distinct script/capture time `t` (ascending) is one `render_at(t)` with all
 /// actions at `t` applied first; a capture at `t` sees them. Same variant -> same bytes.
 pub fn run_variant(backend: XDialogBackend, v: &Variant) -> Result<Vec<Frame>, String> {
-    let mut d = OffscreenDialog::new(backend, v.appearance.clone(), v.ppp, v.kind, v.options.clone());
+    let mut d = OffscreenDialog::with_mac_style(backend, v.mac_style, v.appearance.clone(), v.ppp, v.kind, v.options.clone());
     let mut pointer = Pointer::default();
     let mut times: Vec<f64> = v.script.iter().map(|s| s.0).chain(v.captures.iter().map(|c| c.0)).collect();
     times.sort_by(f64::total_cmp);

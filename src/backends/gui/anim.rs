@@ -160,6 +160,26 @@ impl<T: Lerp> Tween<T> {
     }
 }
 
+/// Travel position 0..1 of the indeterminate "stretchy capsule" (see
+/// [`indeterminate_capsule`](super::ui::indeterminate_capsule)) at normalized cycle time `n`:
+/// 0-40 % sweep right, 40-50 % hold, 50-90 % sweep back, 90-100 % hold; each sweep eases with
+/// smoothstep.
+pub(crate) fn capsule_pos(n: f32) -> f32 {
+    let smooth = |t: f32| {
+        let t = t.clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    if n < 0.4 {
+        smooth(n / 0.4)
+    } else if n < 0.5 {
+        1.0
+    } else if n < 0.9 {
+        1.0 - smooth((n - 0.5) / 0.4)
+    } else {
+        0.0
+    }
+}
+
 /// The tweens of one dialog, keyed by widget [`Id`].
 #[derive(Default)]
 pub(crate) struct Tweens {
@@ -248,6 +268,15 @@ mod tests {
         assert!((tw.animate(id, 6.1, 1.0f32, tr).0 - 0.75).abs() < 1e-5);
         tw.reset();
         assert_eq!(tw.animate(id, 7.0, Color::BLACK, tr), (Color::BLACK, false));
+    }
+
+    #[test]
+    fn capsule_timeline() {
+        assert_eq!(capsule_pos(0.0), 0.0);
+        assert!((capsule_pos(0.2) - 0.5).abs() < 1e-6);
+        assert_eq!(capsule_pos(0.45), 1.0);
+        assert!((capsule_pos(0.7) - 0.5).abs() < 1e-6);
+        assert_eq!(capsule_pos(0.95), 0.0);
     }
 
     #[test]

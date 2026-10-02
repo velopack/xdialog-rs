@@ -2,10 +2,12 @@
 //!
 //! ```text
 //! cargo run --release --example gallery --features _test-hooks -- \
-//!     [--theme ubuntu|fluent|macos|all] [--out <dir>] [--filter <substr>]
+//!     [--theme ubuntu|fluent|macos|macos_legacy|macos_tahoe|all] [--out <dir>] [--filter <substr>]
 //! ```
 //!
-//! `<out>` defaults to `target/gallery/<renderer>` (`soft`, `d2d` or `cg`).
+//! `<out>` defaults to `target/gallery/<renderer>` (`soft`, `d2d` or `cg`). `--theme macos` renders
+//! both macOS styles: Sequoia into `macos/`, Tahoe into `macos_tahoe/` (`macos_legacy` only the
+//! former).
 //!
 //! Renders every variant of `ubuntu.rs` / `fluent.rs` / `macos.rs` with the deterministic offscreen renderer
 //! (injected clock, pointer, keyboard focus and appearance, light and dark) through this
@@ -29,10 +31,19 @@ pub use model::*;
 pub use xdialog::__test::{Key, TestAppearance, TestKind, TestProgress, RENDERER};
 pub use xdialog::{XDialogBackend, XDialogIcon, XDialogOptions};
 
-type Theme = (XDialogBackend, fn() -> Vec<Variant>);
+/// A gallery theme: its output directory name, backend and variant list.
+type Theme = (&'static str, XDialogBackend, fn() -> Vec<Variant>);
 
 /// The gallery themes and their variant lists.
-const THEMES: [Theme; 3] = [(XDialogBackend::Ubuntu, ubuntu::variants), (XDialogBackend::Fluent, fluent::variants), (XDialogBackend::MacOS, macos::variants)];
+const THEMES: [Theme; 4] = [("ubuntu", XDialogBackend::Ubuntu, ubuntu::variants),
+                            ("fluent", XDialogBackend::Fluent, fluent::variants),
+                            ("macos", XDialogBackend::MacOS, macos::variants),
+                            ("macos_tahoe", XDialogBackend::MacOS, macos::tahoe_variants)];
+
+/// Whether `--theme <arg>` selects the theme `name` ("macos" also selects "macos_tahoe").
+fn selects(arg: &str, name: &str) -> bool {
+    arg == "all" || arg == name || (arg == "macos_legacy" && name == "macos") || name.strip_prefix(arg).is_some_and(|r| r.starts_with('_'))
+}
 
 struct Args {
     themes: Vec<Theme>,
@@ -48,7 +59,7 @@ fn parse_args() -> Result<Args, String> {
         match arg.as_str() {
             "--theme" => {
                 let t = val()?;
-                a.themes = THEMES.into_iter().filter(|(b, _)| t == "all" || theme_name(*b) == t).collect();
+                a.themes = THEMES.into_iter().filter(|(name, ..)| selects(&t, name)).collect();
                 if a.themes.is_empty() {
                     return Err(format!("unknown theme {t}"));
                 }
@@ -69,18 +80,17 @@ fn main() {
             std::process::exit(2);
         }
     };
-    for &(backend, variants) in &args.themes {
+    for &(name, backend, variants) in &args.themes {
         let variants: Vec<Variant> = variants().into_iter().filter(|v| args.filter.as_deref().is_none_or(|f| v.name.contains(f))).collect();
-        if let Err(e) = run_theme(backend, &variants, &args) {
-            eprintln!("gallery: {}: {e}", theme_name(backend));
+        if let Err(e) = run_theme(name, backend, &variants, &args) {
+            eprintln!("gallery: {name}: {e}");
             std::process::exit(1);
         }
     }
 }
 
-fn run_theme(backend: XDialogBackend, variants: &[Variant], args: &Args) -> Result<(), String> {
-    let theme = theme_name(backend);
-    let dir = args.out.join(&theme);
+fn run_theme(theme: &str, backend: XDialogBackend, variants: &[Variant], args: &Args) -> Result<(), String> {
+    let dir = args.out.join(theme);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let t0 = Instant::now();
     let (mut frames_total, mut stills) = (0usize, Vec::new());

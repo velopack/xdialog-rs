@@ -8,16 +8,13 @@ use crate::backends::draw::{Color, LineCap, Point, Rect, Size, Vec2};
 use crate::backends::gui::anim::{Easing, Lerp, Transition};
 use crate::backends::gui::text::TextBlock;
 use crate::backends::gui::theme::{button_id, ButtonInteraction, DialogView, ProgressView};
-use crate::backends::gui::ui::{caps_centered, Id, Ui};
+use crate::backends::gui::ui::{caps_centered, indeterminate_capsule, Id, Ui, CAPSULE_CYCLE, CAPSULE_STRETCH};
 use crate::model::XDialogIcon;
 
 /// Button colour fade: 150 ms linear.
 const FADE: Transition = Transition::linear(0.15);
 /// Progress value animation: 300 ms OutCubic.
 const VALUE_ANIM: Transition = Transition::new(0.3, Easing::OutCubic);
-/// Indeterminate capsule cycle (s) and its length as a fraction of the free track.
-const CYCLE: f64 = 3.0;
-const STRETCH: f64 = 0.45;
 
 // ------------------------------------------------------------------------------------------------
 // Button
@@ -80,8 +77,8 @@ fn progress_id() -> Id {
 }
 
 /// The progress bar in `rect` (`PROGRESS_H` tall): a radius-2 track + bar animating to each new
-/// value over 300 ms OutCubic; indeterminate = a pill track with a "stretchy capsule" on a 3 s
-/// loop.
+/// value over 300 ms OutCubic; indeterminate = a pill track with the shared "stretchy capsule"
+/// (`ui::indeterminate_capsule`) on a 3 s loop.
 pub(crate) fn progress(ui: &mut Ui<'_>, rect: Rect, progress: ProgressView, tk: &UbuntuTokens) {
     match progress {
         ProgressView::Determinate { value } => {
@@ -99,34 +96,11 @@ pub(crate) fn progress(ui: &mut Ui<'_>, rect: Rect, progress: ProgressView, tk: 
             let r = rect.height() / 2.0;
             ui.fill_rect(rect, r, tk.progress_bg);
             let elapsed = (ui.time() - restarted_at).max(0.0);
-            let pos = capsule_pos((elapsed.rem_euclid(CYCLE) / CYCLE) as f32) as f64;
-            let (w, d) = (rect.width(), rect.height());
-            let len = d + STRETCH * (w - d);
-            let cx = (d - len / 2.0) + pos * (w - 2.0 * d + len);
-            let (left, right) = ((cx - len / 2.0).max(0.0), (cx + len / 2.0).min(w));
-            if right > left {
-                ui.fill_rect_unsnapped(Rect::new(rect.x0 + left, rect.y0, rect.x0 + right, rect.y1), r, tk.progress_fg);
+            if let Some(c) = indeterminate_capsule(rect, elapsed, CAPSULE_CYCLE, CAPSULE_STRETCH) {
+                ui.fill_rect_unsnapped(c, r, tk.progress_fg);
             }
             ui.request_smooth_frame();
         }
-    }
-}
-
-/// Capsule travel position 0..1 at normalized cycle time `n`: 0-40 % sweep right, 40-50 % hold,
-/// 50-90 % sweep back, 90-100 % hold; each sweep eases with smoothstep.
-pub(crate) fn capsule_pos(n: f32) -> f32 {
-    let smooth = |t: f32| {
-        let t = t.clamp(0.0, 1.0);
-        t * t * (3.0 - 2.0 * t)
-    };
-    if n < 0.4 {
-        smooth(n / 0.4)
-    } else if n < 0.5 {
-        1.0
-    } else if n < 0.9 {
-        1.0 - smooth((n - 0.5) / 0.4)
-    } else {
-        0.0
     }
 }
 

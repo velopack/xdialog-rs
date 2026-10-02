@@ -10,7 +10,10 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::ptr;
 
-use objc2_core_foundation::{CFData, CFRetained, CGAffineTransform, CGFloat, CGPoint, CGRect, CGSize};
+use objc2_core_foundation::{
+    kCFPreferencesCurrentApplication, CFData, CFPreferencesGetAppIntegerValue, CFRetained, CFString, CGAffineTransform, CGFloat, CGPoint,
+    CGRect, CGSize,
+};
 use objc2_core_graphics::{
     CGBitmapContextCreate, CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGContext, CGDataProvider, CGImage, CGImageAlphaInfo,
     CGGradient, CGGradientDrawingOptions, CGImageByteOrderInfo, CGInterpolationQuality, CGLineCap, CGPath,
@@ -100,11 +103,26 @@ fn new_image(image: &Image, space: &CGColorSpace) -> Option<CFRetained<CGImage>>
 pub(crate) struct Painter {
     space: CFRetained<CGColorSpace>,
     images: ImageCache,
+    /// Font smoothing (CG's stem darkening, as AppKit draws text): on for windows unless the
+    /// user turned it off, always on for offscreen renders (deterministic, and as a window
+    /// shows by default).
+    smooth: bool,
 }
 
 impl Painter {
-    pub(crate) fn new(space: CFRetained<CGColorSpace>) -> Self {
-        Painter { space, images: ImageCache::default() }
+    pub(crate) fn new(space: CFRetained<CGColorSpace>, smooth: bool) -> Self {
+        Painter { space, images: ImageCache::default(), smooth }
+    }
+
+    /// Whether text in a window should be smoothed: AppKit's default, unless the user set
+    /// `AppleFontSmoothing` to 0 ("Use font smoothing when available" off).
+    pub(crate) fn system_font_smoothing() -> bool {
+        let key = CFString::from_static_str("AppleFontSmoothing");
+        let mut valid: u8 = 0;
+        // SAFETY: a valid key and application id (a constant provided by CoreFoundation), and
+        // an out-pointer to a live `Boolean`.
+        let value = unsafe { CFPreferencesGetAppIntegerValue(&key, kCFPreferencesCurrentApplication, &mut valid) };
+        valid == 0 || value != 0
     }
 
     /// Draw `frame` into `pixels`: `frame.size_px` (non-zero), row-major top row first, each pixel
@@ -126,10 +144,11 @@ impl Painter {
         let cx = unsafe { CGBitmapContextCreate(pixels.as_mut_ptr().cast::<c_void>(), w, h, 8, w * 4, Some(&self.space), info) }
             .ok_or_else(|| DrawError::Backend(format!("cg: CGBitmapContextCreate failed for {w}x{h}")))?;
         let c = Some(&*cx);
-        // Deterministic output, independent of the user's font smoothing setting.
+        // Smoothing as decided at construction (offscreen: always on, independent of the user's
+        // font smoothing setting).
         CGContext::set_should_antialias(c, true);
-        CGContext::set_allows_font_smoothing(c, false);
-        CGContext::set_should_smooth_fonts(c, false);
+        CGContext::set_allows_font_smoothing(c, self.smooth);
+        CGContext::set_should_smooth_fonts(c, self.smooth);
         CGContext::set_allows_font_subpixel_positioning(c, true);
         CGContext::set_should_subpixel_position_fonts(c, true);
         CGContext::set_allows_font_subpixel_quantization(c, true);

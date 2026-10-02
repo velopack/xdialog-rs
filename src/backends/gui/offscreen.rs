@@ -23,6 +23,7 @@ use super::dialog::{Dialog, DialogContent, DialogParams, Target};
 use super::input::Event;
 use super::theme::DialogKind;
 use crate::backends::draw::{MemorySurface, MemoryTarget, Point, Text, TextSystem};
+use crate::backends::macos::MacStyle;
 use crate::model::{XDialogBackend, XDialogOptions, XDialogResult};
 
 /// Max client height (logical px) of every offscreen dialog: a 1080 px high monitor × 0.9, like
@@ -72,8 +73,23 @@ impl OffscreenDialog {
     /// Build a dialog of a drawn backend (`Fluent` or `Ubuntu`), rendered at `ppp` (in `(0, 8]`).
     /// Runs the measure pass, the keyboard on-open step and the open frame at `t = 0` (scripts
     /// should use `t > 0`). Panics if this platform's drawing backend is unavailable.
+    /// The `MacOS` backend draws its Sequoia style ([`MacStyle::Legacy`]) whatever the host runs, so
+    /// renders don't depend on the machine; [`OffscreenDialog::with_mac_style`] picks the style.
     pub fn new(backend: XDialogBackend, look: TestAppearance, ppp: f64, kind: DialogKind, options: XDialogOptions) -> Self {
-        assert!(matches!(backend, XDialogBackend::Fluent | XDialogBackend::Ubuntu | XDialogBackend::MacOS), "{backend:?} is not a drawn backend");
+        Self::with_mac_style(backend, MacStyle::Legacy, look, ppp, kind, options)
+    }
+
+    /// [`OffscreenDialog::new`] with the `MacOS` theme in style `mac` (both render on any OS;
+    /// ignored by the other backends).
+    pub fn with_mac_style(backend: XDialogBackend,
+                          mac: MacStyle,
+                          look: TestAppearance,
+                          ppp: f64,
+                          kind: DialogKind,
+                          options: XDialogOptions)
+                          -> Self {
+        assert!(matches!(backend, XDialogBackend::Fluent | XDialogBackend::Ubuntu | XDialogBackend::MacOS),
+                "{backend:?} is not a drawn backend");
         assert!(ppp > 0.0 && ppp <= 8.0, "invalid ppp {ppp}");
         let text = Text::shared().unwrap_or_else(|e| panic!("xdialog: no text system: {e}"));
         let params = DialogParams { id: 0,
@@ -86,7 +102,7 @@ impl OffscreenDialog {
                                     sender: None,
                                     font_wait: FONT_WAIT,
                                     text: text.clone() };
-        let mut d = Dialog::new(super::theme::new(backend), params);
+        let mut d = Dialog::new(super::theme::with_style(backend, mac), params);
         let surface = MemorySurface::new(&text).unwrap_or_else(|e| panic!("xdialog: no memory surface: {e}"));
         let size = d.physical_size(ppp);
         d.attach(Target::Memory(surface), ppp, size);
