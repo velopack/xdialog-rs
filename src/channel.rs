@@ -55,6 +55,8 @@ pub(crate) type WakeFn = Box<dyn Fn() + Send>;
 pub(crate) struct Inbox {
     tx: Sender<DialogMessageRequest>,
     wake_pending: AtomicBool,
+    /// Nobody drains any more ([`Inbox::close`]): wakes are no-ops.
+    closed: AtomicBool,
     /// `Mutex`: wakers need only be `Send` (a Windows `EventLoopProxy` isn't `Sync`).
     waker: Mutex<WakeFn>,
 }
@@ -62,7 +64,7 @@ pub(crate) struct Inbox {
 impl Inbox {
     pub(crate) fn new(waker: WakeFn) -> (Arc<Inbox>, Receiver<DialogMessageRequest>) {
         let (tx, rx) = channel();
-        (Arc::new(Inbox { tx, wake_pending: AtomicBool::new(false), waker: Mutex::new(waker) }), rx)
+        (Arc::new(Inbox { tx, wake_pending: AtomicBool::new(false), closed: AtomicBool::new(false), waker: Mutex::new(waker) }), rx)
     }
 
     /// An inbox nobody serves (no backend can run): every request is answered with
@@ -71,11 +73,17 @@ impl Inbox {
         Inbox::new(Box::new(|| {})).0
     }
 
-    /// Call the waker unless a wake is already outstanding.
+    /// Call the waker unless a wake is already outstanding or the inbox is closed.
     pub(crate) fn wake(&self) {
-        if !self.wake_pending.swap(true, Ordering::SeqCst) {
+        if !self.closed.load(Ordering::SeqCst) && !self.wake_pending.swap(true, Ordering::SeqCst) {
             (self.waker.lock().unwrap_or_else(|e| e.into_inner()))();
         }
+    }
+
+    /// The backend stopped draining for good (rejected requests still notify their callers, which
+    /// must not wake a loop that no longer serves dialogs).
+    pub(crate) fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
     }
 
     /// Replace the waker (macOS builder mode: the event loop is built when the first dialog is
@@ -177,5 +185,10 @@ mod tests {
         let opts = XDialogOptions::default();
         handler.send(DialogMessageRequest::ShowMessageWindow(1, opts, DialogReply::Message(tx))).unwrap();
         assert!(matches!(crx.try_recv(), Ok(Err(XDialogError::NoBackendAvailable))));
+
+        inbox.begin_drain();
+        inbox.close();
+        inbox.wake();
+        assert_eq!(calls.load(Ordering::SeqCst), 2, "a closed inbox never wakes");
     }
 }
