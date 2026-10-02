@@ -328,14 +328,14 @@ fn renderer_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/visual_references/offscreen").join(RENDERER)
 }
 
-fn golden_dir(backend: XDialogBackend) -> PathBuf {
-    renderer_dir().join(theme_name(backend))
+fn golden_dir(theme: &str) -> PathBuf {
+    renderer_dir().join(theme)
 }
 
 /// Where renders that were not compared, or that differ, are written.
-fn actual_dir(backend: XDialogBackend) -> PathBuf {
+fn actual_dir(theme: &str) -> PathBuf {
     let tmp = Path::new(env!("CARGO_TARGET_TMPDIR"));
-    tmp.parent().unwrap_or(tmp).join("offscreen-actual").join(RENDERER).join(theme_name(backend))
+    tmp.parent().unwrap_or(tmp).join("offscreen-actual").join(RENDERER).join(theme)
 }
 
 fn blessing() -> bool {
@@ -405,9 +405,10 @@ fn save(dir: &Path, name: &str, f: &Frame) {
     image::save_buffer(dir.join(name), &f.rgba, f.w, f.h, image::ColorType::Rgba8).unwrap();
 }
 
-/// Compare `theme`'s golden variants; returns the names compared (or blessed).
-fn check_goldens(backend: XDialogBackend, variants: &[Variant]) -> Vec<String> {
-    let (dir, actual, theme) = (golden_dir(backend), actual_dir(backend), theme_name(backend));
+/// Compare the golden variants of `backend` against the goldens in `theme` (the backend's name,
+/// or `macos_tahoe`); returns the names compared (or blessed).
+fn check_goldens(backend: XDialogBackend, theme: &str, variants: &[Variant]) -> Vec<String> {
+    let (dir, actual) = (golden_dir(theme), actual_dir(theme));
     let apply = goldens_apply();
     let (mut done, mut skipped, mut failures) = (Vec::new(), Vec::new(), Vec::new());
     for v in variants.iter().filter(|v| v.golden) {
@@ -453,18 +454,24 @@ fn check_goldens(backend: XDialogBackend, variants: &[Variant]) -> Vec<String> {
 
 #[test]
 fn ubuntu_goldens() {
-    let done = check_goldens(XDialogBackend::Ubuntu, &ubuntu::variants());
+    let done = check_goldens(XDialogBackend::Ubuntu, "ubuntu", &ubuntu::variants());
     println!("{RENDERER}/ubuntu: {} goldens {}", done.len(), if blessing() { "written" } else { "compared" });
 }
 
 #[test]
 fn fluent_goldens() {
-    let done = check_goldens(XDialogBackend::Fluent, &fluent::variants());
+    let done = check_goldens(XDialogBackend::Fluent, "fluent", &fluent::variants());
     println!("{RENDERER}/fluent: {} goldens {}", done.len(), if blessing() { "written" } else { "compared" });
 }
 
 #[test]
 fn macos_goldens() {
-    let done = check_goldens(XDialogBackend::MacOS, &macos::variants());
+    let done = check_goldens(XDialogBackend::MacOS, "macos", &macos::variants());
     println!("{RENDERER}/macos: {} goldens {}", done.len(), if blessing() { "written" } else { "compared" });
+}
+
+#[test]
+fn macos_tahoe_goldens() {
+    let done = check_goldens(XDialogBackend::MacOS, "macos_tahoe", &macos::tahoe_variants());
+    println!("{RENDERER}/macos_tahoe: {} goldens {}", done.len(), if blessing() { "written" } else { "compared" });
 }

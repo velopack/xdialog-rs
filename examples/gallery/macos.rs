@@ -134,7 +134,7 @@ pub fn variants() -> Vec<Variant> {
 
 /// The macOS 26 (Tahoe) style: the alerts captured from CFUserNotification on Tahoe for
 /// reference (`ref_<name>_<light|dark>`, at 2x like the captures: 520 px wide), then every
-/// Sequoia variant above in the Tahoe style (none of them golden).
+/// Sequoia variant above in the Tahoe style (golden: every `ref_` alert and the Sequoia goldens).
 ///
 /// `ref_plain_three` shows the note icon where CFUserNotification shows the generic app icon (the
 /// same 64 pt box).
@@ -167,9 +167,9 @@ pub fn tahoe_variants() -> Vec<Variant> {
     for dark in [false, true] {
         for (name, heading, body, icon, buttons) in &refs {
             let o = opts("x", heading, body, icon.clone(), buttons);
-            v.push(Variant::message(format!("ref_{name}_{}", theme_word(dark)), o, look(dark)).ppp(2.0).capture(1.0, "").tahoe());
+            v.push(Variant::message(format!("ref_{name}_{}", theme_word(dark)), o, look(dark)).ppp(2.0).capture(1.0, "").tahoe().golden());
         }
     }
-    v.extend(variants().into_iter().map(|v| Variant { golden: false, ..v }.tahoe()));
+    v.extend(variants().into_iter().map(Variant::tahoe));
     v
 }

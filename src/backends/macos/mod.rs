@@ -13,7 +13,7 @@
 //! │ 23.5 baseline to baseline│
 //! │  Body (11 pt), centred,  │  pitch 14
 //! │  wrapping at 220         │
-//! │ 14   ▬▬▬▬▬▬▬▬▬▬▬▬▬▬      │  progress bar (6), then 16
+//! │ 14   ▬▬▬▬▬▬▬▬▬▬▬▬▬▬      │  progress bar (6) as wide as the text, then 16
 //! │ 19.5                     │
 //! │ [ Cancel ] 8 [   OK   ]  │  28 tall, 16 from the sides and the bottom
 //! └──────────────────────────┘
@@ -365,7 +365,8 @@ impl Theme for MacTheme {
             self.scroll = widgets::scroll_bar(ui, viewport, content_h, self.scroll, &tk);
         }
         if let Some(p) = view.progress {
-            let r = Rect::new(PAD, anchor + m.text_to_progress, WIDTH - PAD, anchor + m.text_to_progress + PROGRESS_H);
+            // As wide as the text column.
+            let r = Rect::new(m.text_inset, anchor + m.text_to_progress, WIDTH - m.text_inset, anchor + m.text_to_progress + PROGRESS_H);
             widgets::progress(ui, r, p, &tk);
             out.parts.progress = Some(r);
         }
