@@ -44,15 +44,7 @@ pub fn show_progress<P1: AsRef<str>, P2: AsRef<str>, P3: AsRef<str>>(
     message: P3,
     icon: XDialogIcon,
 ) -> Result<ProgressDialogProxy, XDialogError> {
-    let data = XDialogOptions {
-        title: title.as_ref().to_string(),
-        main_instruction: main_instruction.as_ref().to_string(),
-        message: message.as_ref().to_string(),
-        icon,
-        icon_source: None,
-        buttons: vec![],
-    };
-    show_progress_internal(data, None)
+    show_progress_internal(XDialogOptions::basic(title.as_ref(), main_instruction.as_ref(), message.as_ref(), icon, &[]), None)
 }
 
 /// Shows a progress dialog with custom buttons. Like [`show_progress`], but the buttons in
@@ -133,9 +125,7 @@ fn show_progress_internal(options: XDialogOptions, on_button: Option<ProgressBut
         // logged by the backend.
         if !is_ui_thread() {
             // Wait until it opened (or failed to)
-            if let Some(opened) = opened.recv_with(&mut crate::oneshot::Wait::Until(None)) {
-                opened.map_err(XDialogError::NoResult)??;
-            }
+            opened.recv().map_err(XDialogError::NoResult)??;
         }
     }
     Ok(ProgressDialogProxy { id, silent, owned: true })
@@ -145,6 +135,7 @@ fn show_progress_internal(options: XDialogOptions, on_button: Option<ProgressBut
 pub(crate) type ProgressButtonCallback = Box<dyn FnMut(usize, &ProgressDialogProxy) -> bool + Send>;
 
 /// A proxy object to control a progress dialog. See `show_progress` for more information.
+#[must_use = "dropping the proxy closes the dialog"]
 pub struct ProgressDialogProxy {
     id: usize,
     silent: bool,
@@ -174,9 +165,10 @@ impl ProgressDialogProxy {
     }
 
     /// Sets the progress bar to a specific value between 0.0 and 1.0. Values outside that range
-    /// are clamped (e.g. `50.0` becomes `1.0`), matching the native progress controls.
+    /// are clamped (e.g. `50.0` becomes `1.0`), matching the native progress controls; NaN and
+    /// infinities become `0.0`.
     pub fn set_value(&self, value: f32) -> Result<(), XDialogError> {
-        self.send(DialogMessageRequest::SetProgressValue(self.id, value.clamp(0.0, 1.0)))
+        self.send(DialogMessageRequest::SetProgressValue(self.id, clamp_progress(value)))
     }
 
     /// Sets the text displayed below the progress bar.
@@ -194,6 +186,34 @@ impl Drop for ProgressDialogProxy {
     fn drop(&mut self) {
         if self.owned {
             let _ = self.close();
+        }
+    }
+}
+
+impl std::fmt::Debug for ProgressDialogProxy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProgressDialogProxy")
+         .field("id", &self.id)
+         .field("silent", &self.silent)
+         .field("owned", &self.owned)
+         .finish_non_exhaustive()
+    }
+}
+
+/// A progress value in `0.0..=1.0`; NaN (e.g. `done / total` with `total == 0`) and infinities
+/// are `0.0`.
+pub(crate) fn clamp_progress(value: f32) -> f32 {
+    if value.is_finite() { value.clamp(0.0, 1.0) } else { 0.0 }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn progress_value_is_clamped() {
+        for (value, clamped) in [(f32::NAN, 0.0), (f32::INFINITY, 0.0), (f32::NEG_INFINITY, 0.0), (-3.0, 0.0), (50.0, 1.0), (0.4, 0.4)] {
+            assert_eq!(clamp_progress(value), clamped, "{value}");
         }
     }
 }

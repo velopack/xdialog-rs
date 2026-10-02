@@ -24,3 +24,27 @@ fn progress_proxy_works_in_silent_mode() {
     progress.close().unwrap(); // double close should also be fine
     // Drop will call close() again
 }
+
+#[test]
+fn show_message_returns_silent_mode() {
+    set_silent_mode(true);
+    let dialog = show_message(XDialogOptions { title: "Silent".into(), buttons: vec!["OK".into()], ..Default::default() });
+    assert!(matches!(dialog.try_result(), Some(Ok(XDialogResult::SilentMode))));
+    assert!(matches!(dialog.wait_timeout(std::time::Duration::from_millis(1)), Ok(XDialogResult::SilentMode)));
+}
+
+#[test]
+fn progress_callback_never_runs_in_silent_mode() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    set_silent_mode(true);
+    let ran = Arc::new(AtomicBool::new(false));
+    let flag = ran.clone();
+    let options = XDialogOptions { title: "Silent".into(), buttons: vec!["Cancel".into()], ..Default::default() };
+    let progress = show_progress_with_callback(options, move |_, _| flag.swap(true, Ordering::SeqCst)).unwrap();
+    progress.set_value(0.5).unwrap();
+    progress.close().unwrap();
+    drop(progress);
+    assert!(!ran.load(Ordering::SeqCst));
+}
