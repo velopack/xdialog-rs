@@ -92,9 +92,9 @@ impl Inbox {
 }
 
 /// The installed request handler of builder mode for the drawn (Fluent, Ubuntu, MacOS) and AppKit backends (and "no
-/// backend"), and of `into_host_app`; Win32 TaskDialog installs `TaskDialogManager` itself. Once
-/// the receiver is gone (host app exited or dropped, builder loop ended) requests are answered with
-/// `NoBackendAvailable`.
+/// backend"), and of `into_host` / `into_host_app`; Win32 TaskDialog installs `TaskDialogManager`
+/// itself. Once the receiver is gone (host shut down or dropped, builder loop ended) requests are
+/// answered with `NoBackendAvailable`.
 pub(crate) struct InboxHandler(pub Arc<Inbox>);
 
 impl DialogRequestHandler for InboxHandler {
@@ -121,7 +121,7 @@ pub(crate) fn reject(message: DialogMessageRequest) {
 // ---- UI-thread marker (blocking-call detection) ----
 //
 // Set on the thread that runs xdialog's drawn-dialog event loop (builder mode), the thread that created an
-// `XDialogApp` (until it exits), and the AppKit loop thread (their button callbacks run there). Never set by
+// `XDialogHost` (until it is shut down), and the AppKit loop thread (their button callbacks run there). Never set by
 // win32 / win32-direct / maccf-direct, whose dialogs run on their own threads.
 
 thread_local! {

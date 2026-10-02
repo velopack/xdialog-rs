@@ -57,23 +57,37 @@ impl XDialogBuilder {
         crate::backends::run_builder(self.backend, self.theme, main)
     }
 
-    /// Wrap your winit 0.30 `ApplicationHandler` so it shows xdialog's dialogs, for an application
-    /// that runs its own event loop instead of xdialog's ([`run`](Self::run) and friends). Pass the
-    /// returned [`XDialogApp`](crate::host::XDialogApp) to `run_app`; your handler needs no xdialog
-    /// code (see the [`host`](crate::host) module). Call once, on the event-loop thread, before any
-    /// dialog function.
+    /// Show xdialog's dialogs inside a winit 0.30 event loop your application runs instead of
+    /// xdialog's ([`run`](Self::run) and friends). The returned [`XDialogHost`](crate::host::XDialogHost)
+    /// [wraps](crate::host::XDialogHost::wrap) your `ApplicationHandler` for each run of the loop
+    /// (`run_app_on_demand`, `pump_app_events`); your handler needs no xdialog code (see the
+    /// [`host`](crate::host) module). Call once, on the event-loop thread, before any dialog
+    /// function. For a loop that runs once with `run_app`, [`into_host_app`](Self::into_host_app)
+    /// is the shorter form.
     ///
     /// `waker` is called from any thread when xdialog needs an event-loop iteration. It must make
     /// the loop iterate (typically `let _ = proxy.send_event(MyEvent::XDialog)`; your `user_event`
     /// ignores it), must not block, and may be called redundantly (xdialog coalesces: at most one
-    /// outstanding call per `about_to_wait`).
+    /// outstanding call per `about_to_wait`). It is also called between runs of the loop, for the
+    /// next run to serve.
     ///
     /// Errors: `SystemError` if a dialog backend was already initialized (another
-    /// `XDialogBuilder`, `init_*`, or `into_host_app`); `NoBackendAvailable` if the chosen backend
-    /// can't run in host mode (`Win32` only on Windows, never `AppKit`; `Auto` always can). On
-    /// error nothing is installed and `app` is dropped.
+    /// `XDialogBuilder`, `init_*`, `into_host` or `into_host_app`); `NoBackendAvailable` if the
+    /// chosen backend can't run in host mode (`Win32` only on Windows, never `AppKit`; `Auto`
+    /// always can). On error nothing is installed.
+    #[cfg(feature = "winit-host")]
+    pub fn into_host(self, waker: impl Fn() + Send + 'static) -> Result<crate::host::XDialogHost, crate::XDialogError> {
+        crate::host::XDialogHost::new(self.backend, self.theme, Box::new(waker))
+    }
+
+    /// [`into_host`](Self::into_host) with `app` wrapped for good: pass the returned
+    /// [`XDialogApp`](crate::host::XDialogApp) to `run_app`. Its `exiting` ends xdialog for the
+    /// process (later calls `NoBackendAvailable`), which suits a loop that runs once; a loop that
+    /// runs several times (`run_app_on_demand`) uses `into_host` and wraps each run's app.
+    ///
+    /// `waker` and the errors are as for `into_host`; on error `app` is dropped.
     #[cfg(feature = "winit-host")]
     pub fn into_host_app<A>(self, app: A, waker: impl Fn() + Send + 'static) -> Result<crate::host::XDialogApp<A>, crate::XDialogError> {
-        crate::host::XDialogApp::new(app, self.backend, self.theme, Box::new(waker))
+        Ok(crate::host::XDialogApp::new(app, self.into_host(waker)?))
     }
 }

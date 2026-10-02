@@ -75,8 +75,9 @@ pub enum XDialogError {
     #[error("xdialog generic error: {0}")]
     SystemError(String),
     /// No backend can show dialogs: no display server (X11 or Wayland) on Linux, the chosen
-    /// [`XDialogBackend`] can't run on this platform or in host mode, or the host app
-    /// (`XDialogApp`) exited / the builder's event loop ended.
+    /// [`XDialogBackend`] can't run on this platform or in host mode, or the host
+    /// (`XDialogHost`) was shut down / the host app (`XDialogApp`) exited / the builder's event
+    /// loop ended.
     #[error("no xdialog backend available (no display server, backend not available here, or dialogs shut down)")]
     NoBackendAvailable,
     /// A blocking dialog function (such as `show_message`) was called on xdialog's UI thread,

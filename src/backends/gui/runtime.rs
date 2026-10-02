@@ -519,8 +519,10 @@ impl Runtime {
         }
     }
 
-    /// Close every dialog, drawn (`WindowClosed`, windows hidden and dropped) and TaskDialog.
-    fn close_all(&mut self) {
+    /// Close every dialog, drawn (`WindowClosed`, windows hidden and dropped) and TaskDialog. The
+    /// runtime keeps serving (host mode: a run of the loop ended, the next one shows the queued
+    /// requests).
+    pub(crate) fn close_all(&mut self) {
         for (_, mut w) in std::mem::take(&mut self.dialogs) {
             w.dialog.finish(XDialogResult::WindowClosed);
             self.retire(&w.window);
@@ -644,7 +646,7 @@ fn test_position(size_px: [u32; 2], virtual_left: impl FnOnce() -> i32) -> Optio
 }
 
 // -------------------------------------------------------------------------------------------------
-// Test hooks (`XDialogApp::test_*`)
+// Test hooks (`XDialogHost::test_*`)
 // -------------------------------------------------------------------------------------------------
 
 #[cfg(all(feature = "winit-host", feature = "_test-hooks"))]

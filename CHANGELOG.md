@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `winit-host`: **the host outlives the runs of your event loop.** `XDialogBuilder::into_host(waker)`
+  returns an `xdialog::host::XDialogHost`, created once per process, whose `wrap(&mut app)` adds
+  the dialogs to the app of one run (a `HostedApp`, for `run_app_on_demand` or
+  `pump_app_events`); a different app value per run is fine. A run's `exiting` closes its dialogs
+  (`WindowClosed`) but keeps the host serving: requests made between runs are queued, the waker is
+  called, and the next run shows them in its first `about_to_wait`. `XDialogHost::shutdown`
+  (or dropping the host) ends xdialog for the process: queued requests and later calls get
+  `NoBackendAvailable`. The `Destroyed` events of dialog windows closed at the end of a run (or at
+  shutdown) are kept from your app in later runs too. New example `winit_host_on_demand`, new test
+  `tests/winit_host_on_demand.rs`.
+- `XDialogApp` (`into_host_app`) is now built on `XDialogHost` and keeps its behaviour: for a loop
+  that runs once with `run_app`; its `exiting` shuts the host down (later calls
+  `NoBackendAvailable`). New accessors `XDialogApp::host` / `host_mut`.
+
 ## 4.0.0
 
 The Linux backend was rewritten on winit with xdialog's own small drawing layer, which also

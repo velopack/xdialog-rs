@@ -16,13 +16,14 @@ default = []
 win32-direct = []
 # `init_maccf_direct()` (macOS).
 maccf-direct = ["dep:core-foundation", "dep:core-foundation-sys"]
-# `XDialogBuilder::into_host_app` + `xdialog::host` (incl. `xdialog::host::winit`, a re-export of the
-# winit 0.30 xdialog uses): run xdialog's dialogs inside an event loop your application owns.
+# `XDialogBuilder::into_host` / `into_host_app` + `xdialog::host` (incl. `xdialog::host::winit`, a
+# re-export of the winit 0.30 xdialog uses): run xdialog's dialogs inside an event loop your
+# application owns, for one run (`run_app`) or many (`run_app_on_demand`, `pump_app_events`).
 # Purely additive: it only exposes API; nothing changes for XDialogBuilder::run.
 winit-host = []
 
 # ---- private (underscore = not part of the public contract) ----
-# Offscreen renderer (`xdialog::__test`) and `XDialogApp::test_*` (doc(hidden)). NEVER lists a
+# Offscreen renderer (`xdialog::__test`) and `XDialogHost::test_*` (doc(hidden)). NEVER lists a
 # `dep:`: offscreen rendering uses the platform's own drawing backend.
 _test-hooks = []
 
@@ -146,6 +147,10 @@ name = "winit_host"
 required-features = ["winit-host"]
 
 [[example]]
+name = "winit_host_on_demand"
+required-features = ["winit-host"]
+
+[[example]]
 name = "gallery"
 path = "examples/gallery/main.rs"
 required-features = ["_test-hooks"]
@@ -173,6 +178,11 @@ required-features = ["_test-hooks"]
 
 [[test]]
 name = "winit_host"
+harness = false
+required-features = ["winit-host", "_test-hooks"]
+
+[[test]]
+name = "winit_host_on_demand"
 harness = false
 required-features = ["winit-host", "_test-hooks"]
 

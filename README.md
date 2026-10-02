@@ -151,21 +151,26 @@ None are on by default.
 
 | Feature | What it does |
 |---|---|
-| `winit-host` | `XDialogBuilder::into_host_app` and `xdialog::host` (with `xdialog::host::winit`, a re-export of xdialog's winit 0.30): run the dialogs inside a winit event loop your application owns |
+| `winit-host` | `XDialogBuilder::into_host` / `into_host_app` and `xdialog::host` (with `xdialog::host::winit`, a re-export of xdialog's winit 0.30): run the dialogs inside a winit event loop your application owns |
 | `win32-direct` | `init_win32_direct()` (Windows): Win32 TaskDialog without an `XDialogBuilder` |
 | `maccf-direct` | `init_maccf_direct()` (macOS): CFUserNotification without an `XDialogBuilder` |
 
 ### Using your own winit event loop
 
 winit allows one event loop per process, and `XDialogBuilder::run` runs one for the drawn
-backends (Fluent, Ubuntu, MacOS). An application with its own winit loop enables `winit-host`, wraps its
-`ApplicationHandler` with `XDialogBuilder::into_host_app` on its event-loop thread instead of
-calling `run`, and passes the wrapper to `run_app`. The handler needs no xdialog code: the wrapper
-handles the dialog windows' events, merges their wake-up deadline into your control flow and
-closes the dialogs on exit. `AppKit` is not available there, since it needs its own loop. See the
-[`xdialog::host`](https://docs.rs/xdialog/latest/xdialog/host/index.html) documentation and
+backends (Fluent, Ubuntu, MacOS). An application with its own winit loop enables `winit-host`, creates an
+`XDialogHost` with `XDialogBuilder::into_host` on its event-loop thread instead of calling `run`,
+and passes `host.wrap(&mut app)` to `run_app_on_demand` (or `pump_app_events`) for each run of
+its loop; a loop that runs once with `run_app` can use `XDialogBuilder::into_host_app` instead,
+which wraps the app for good. The handler needs no xdialog code: the wrapper handles the dialog
+windows' events, merges their wake-up deadline into your control flow and closes the dialogs when
+a run ends. Dialogs requested between runs are shown by the next run; dropping the host ends
+xdialog for the process. `AppKit` is not available there, since it needs its own loop. See the
+[`xdialog::host`](https://docs.rs/xdialog/latest/xdialog/host/index.html) documentation,
 [`examples/winit_host.rs`](https://github.com/velopack/xdialog/blob/master/examples/winit_host.rs),
-a complete host.
+a complete host, and
+[`examples/winit_host_on_demand.rs`](https://github.com/velopack/xdialog/blob/master/examples/winit_host_on_demand.rs),
+which runs its loop several times.
 
 ### Threads
 
