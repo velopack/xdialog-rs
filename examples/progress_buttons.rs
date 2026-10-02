@@ -30,8 +30,8 @@ fn run() {
             main_instruction: "Downloading updates".to_string(),
             message: "Starting...".to_string(),
             icon: XDialogIcon::Information,
-            icon_source: None,
             buttons: vec!["Cancel".to_string()],
+            ..Default::default()
         },
         move |button_index, proxy| {
             println!("Progress button {} clicked -> cancelling", button_index);
@@ -60,8 +60,8 @@ fn run() {
         main_instruction: "Background task running".to_string(),
         message: "Click Hide to dismiss this window.".to_string(),
         icon: XDialogIcon::Information,
-        icon_source: None,
         buttons: vec!["Hide".to_string()],
+        ..Default::default()
     })
     .unwrap();
     hide.set_indeterminate().unwrap();

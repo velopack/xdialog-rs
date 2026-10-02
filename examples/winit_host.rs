@@ -86,8 +86,8 @@ impl App {
                                        main_instruction: "Event-loop thread".into(),
                                        message: "Show a progress dialog?".into(),
                                        icon: XDialogIcon::Information,
-                                       icon_source: None,
-                                       buttons: vec!["No".into(), "Yes".into()] };
+                                       buttons: vec!["No".into(), "Yes".into()],
+                                       ..Default::default() };
         self.question = Some(show_message(options));
     }
 }
