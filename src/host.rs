@@ -119,8 +119,9 @@ use crate::XDialogError;
 pub struct XDialogHost {
     /// `None` after `shutdown`.
     rt: Option<Runtime>,
-    /// After `shutdown`: the dialogs' windows, until their `Destroyed` (never forwarded).
-    closed: Vec<WindowId>,
+    /// After `shutdown`: the dialogs' windows (never forwarded) until the iteration of their
+    /// `Destroyed` ends (`true`: seen).
+    closed: Vec<(WindowId, bool)>,
     /// The app's control flow, while ours replaces it (from `about_to_wait` to `new_events`).
     flow: Option<ControlFlow>,
     #[cfg(feature = "_test-hooks")]
@@ -172,13 +173,7 @@ impl XDialogHost {
         // Undo our deadline so the app sees its own flow, and a wake-up for it as a cancelled wait.
         if let Some(host) = self.flow.take() {
             el.set_control_flow(host);
-            if let StartCause::ResumeTimeReached { start, .. } | StartCause::WaitCancelled { start, .. } = cause {
-                cause = match host {
-                    ControlFlow::WaitUntil(h) if Instant::now() >= h => StartCause::ResumeTimeReached { start, requested_resume: h },
-                    ControlFlow::WaitUntil(h) => StartCause::WaitCancelled { start, requested_resume: Some(h) },
-                    _ => StartCause::WaitCancelled { start, requested_resume: None },
-                };
-            }
+            cause = app_cause(host, cause, Instant::now());
         }
         app.new_events(el, cause);
     }
@@ -186,20 +181,28 @@ impl XDialogHost {
     fn window_event<T: 'static>(&mut self, app: &mut impl ApplicationHandler<T>, el: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
         let ours = match &mut self.rt {
             Some(rt) => rt.window_event(id, &event),
-            None => {
-                let ours = self.closed.contains(&id);
-                if matches!(event, WindowEvent::Destroyed) {
-                    self.closed.retain(|c| *c != id);
-                }
-                ours
-            }
+            None => self.closed_event(id, &event),
         };
         if !ours {
             app.window_event(el, id, event);
         }
     }
 
+    /// After `shutdown`: whether `event` is a closed dialog window's. Its `Destroyed` retires the
+    /// id when the iteration ends (`forget_destroyed`): X11 still delivers a redraw requested
+    /// before the close after it, and the id may be reused later.
+    fn closed_event(&mut self, id: WindowId, event: &WindowEvent) -> bool {
+        let Some(c) = self.closed.iter_mut().find(|c| c.0 == id) else { return false };
+        c.1 |= matches!(event, WindowEvent::Destroyed);
+        true
+    }
+
+    fn forget_destroyed(&mut self) {
+        self.closed.retain(|c| !c.1);
+    }
+
     fn about_to_wait<T: 'static>(&mut self, app: &mut impl ApplicationHandler<T>, el: &ActiveEventLoop) {
+        self.forget_destroyed();
         // The app first: dialogs it requests here appear in this iteration.
         app.about_to_wait(el);
         if el.exiting() {
@@ -220,14 +223,26 @@ impl XDialogHost {
     }
 
     /// A run of the loop is ending: close every dialog (`WindowClosed`), keep serving. Queued
-    /// requests stay queued for the next run (their wake-up is already on its way or, once the
-    /// next run drains the queue, sent again).
+    /// requests stay queued for the next run, whose first `about_to_wait` drains them; a request
+    /// made between runs wakes the loop.
     fn end_run(&mut self) {
         if let Some(rt) = &mut self.rt {
             rt.close_all();
+            rt.rearm_wake();
         }
         // Never restore this run's flow onto the next run.
         self.flow = None;
+    }
+}
+
+/// The `StartCause` the app sees when its own control flow `host` was replaced by our deadline:
+/// our deadline firing is a cancelled wait of the app's, unless its own deadline passed too.
+fn app_cause(host: ControlFlow, cause: StartCause, now: Instant) -> StartCause {
+    let (StartCause::ResumeTimeReached { start, .. } | StartCause::WaitCancelled { start, .. }) = cause else { return cause };
+    match host {
+        ControlFlow::WaitUntil(h) if now >= h => StartCause::ResumeTimeReached { start, requested_resume: h },
+        ControlFlow::WaitUntil(h) => StartCause::WaitCancelled { start, requested_resume: Some(h) },
+        _ => StartCause::WaitCancelled { start, requested_resume: None },
     }
 }
 
@@ -270,45 +285,72 @@ impl<A> HostedApp<'_, A> {
     }
 }
 
-impl<T: 'static, A: ApplicationHandler<T>> ApplicationHandler<T> for HostedApp<'_, A> {
-    fn new_events(&mut self, el: &ActiveEventLoop, cause: StartCause) {
-        self.host.new_events(&mut self.app, el, cause);
-    }
+/// The `ApplicationHandler` of a wrapper (`host` and `app` fields) and its test hooks; `$on_exit`
+/// is the host method `exiting` calls before forwarding.
+macro_rules! forward_handler {
+    ($ty:ty, $on_exit:ident) => {
+        impl<T: 'static, A: ApplicationHandler<T>> ApplicationHandler<T> for $ty {
+            fn new_events(&mut self, el: &ActiveEventLoop, cause: StartCause) {
+                self.host.new_events(&mut self.app, el, cause);
+            }
 
-    fn resumed(&mut self, el: &ActiveEventLoop) {
-        self.app.resumed(el);
-    }
+            fn resumed(&mut self, el: &ActiveEventLoop) {
+                self.app.resumed(el);
+            }
 
-    fn user_event(&mut self, el: &ActiveEventLoop, event: T) {
-        // xdialog's wake-up is one of these; `about_to_wait` (always next) serves the requests.
-        self.app.user_event(el, event);
-    }
+            fn user_event(&mut self, el: &ActiveEventLoop, event: T) {
+                // xdialog's wake-up is one of these; `about_to_wait` (always next) serves the requests.
+                self.app.user_event(el, event);
+            }
 
-    fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        self.host.window_event(&mut self.app, el, id, event);
-    }
+            fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+                self.host.window_event(&mut self.app, el, id, event);
+            }
 
-    fn device_event(&mut self, el: &ActiveEventLoop, id: DeviceId, event: DeviceEvent) {
-        self.app.device_event(el, id, event);
-    }
+            fn device_event(&mut self, el: &ActiveEventLoop, id: DeviceId, event: DeviceEvent) {
+                self.app.device_event(el, id, event);
+            }
 
-    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        self.host.about_to_wait(&mut self.app, el);
-    }
+            fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+                self.host.about_to_wait(&mut self.app, el);
+            }
 
-    fn suspended(&mut self, el: &ActiveEventLoop) {
-        self.app.suspended(el);
-    }
+            fn suspended(&mut self, el: &ActiveEventLoop) {
+                self.app.suspended(el);
+            }
 
-    fn exiting(&mut self, el: &ActiveEventLoop) {
-        // Close the dialogs first: the app may join threads blocked on one.
-        self.host.end_run();
-        self.app.exiting(el);
-    }
+            fn exiting(&mut self, el: &ActiveEventLoop) {
+                // Close the dialogs first: the app may join threads blocked on one, and (`shutdown`)
+                // a dialog call they make afterwards must fail fast rather than wait for a run that
+                // never comes.
+                self.host.$on_exit();
+                self.app.exiting(el);
+            }
 
-    fn memory_warning(&mut self, el: &ActiveEventLoop) {
-        self.app.memory_warning(el);
-    }
+            fn memory_warning(&mut self, el: &ActiveEventLoop) {
+                self.app.memory_warning(el);
+            }
+        }
+
+        #[cfg(feature = "_test-hooks")]
+        #[doc(hidden)]
+        impl<A> $ty {
+            /// See [`XDialogHost::test_dialogs`].
+            pub fn test_dialogs(&self) -> Vec<LiveDialog> {
+                self.host.test_dialogs()
+            }
+
+            /// See [`XDialogHost::test_inject`].
+            pub fn test_inject(&mut self, id: usize, event: crate::__test::Event) {
+                self.host.test_inject(id, event);
+            }
+
+            /// See [`XDialogHost::test_control_flow`].
+            pub fn test_control_flow(&self) -> Option<ControlFlow> {
+                self.host.test_control_flow()
+            }
+        }
+    };
 }
 
 /// Your `ApplicationHandler` with xdialog's dialogs added, owning its [`XDialogHost`]: for a loop
@@ -356,46 +398,8 @@ impl<A> XDialogApp<A> {
     }
 }
 
-impl<T: 'static, A: ApplicationHandler<T>> ApplicationHandler<T> for XDialogApp<A> {
-    fn new_events(&mut self, el: &ActiveEventLoop, cause: StartCause) {
-        self.host.new_events(&mut self.app, el, cause);
-    }
-
-    fn resumed(&mut self, el: &ActiveEventLoop) {
-        self.app.resumed(el);
-    }
-
-    fn user_event(&mut self, el: &ActiveEventLoop, event: T) {
-        self.app.user_event(el, event);
-    }
-
-    fn window_event(&mut self, el: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        self.host.window_event(&mut self.app, el, id, event);
-    }
-
-    fn device_event(&mut self, el: &ActiveEventLoop, id: DeviceId, event: DeviceEvent) {
-        self.app.device_event(el, id, event);
-    }
-
-    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
-        self.host.about_to_wait(&mut self.app, el);
-    }
-
-    fn suspended(&mut self, el: &ActiveEventLoop) {
-        self.app.suspended(el);
-    }
-
-    fn exiting(&mut self, el: &ActiveEventLoop) {
-        // End xdialog first: the app may join threads blocked on a dialog, and a dialog call
-        // they make afterwards must fail fast rather than wait for a run that never comes.
-        self.host.shutdown();
-        self.app.exiting(el);
-    }
-
-    fn memory_warning(&mut self, el: &ActiveEventLoop) {
-        self.app.memory_warning(el);
-    }
-}
+forward_handler!(HostedApp<'_, A>, end_run);
+forward_handler!(XDialogApp<A>, shutdown);
 
 /// The host's control flow, woken no later than `next`.
 fn merge(host: ControlFlow, next: Instant) -> ControlFlow {
@@ -444,44 +448,6 @@ impl XDialogHost {
     }
 }
 
-#[cfg(feature = "_test-hooks")]
-#[doc(hidden)]
-impl<A> HostedApp<'_, A> {
-    /// See [`XDialogHost::test_dialogs`].
-    pub fn test_dialogs(&self) -> Vec<LiveDialog> {
-        self.host.test_dialogs()
-    }
-
-    /// See [`XDialogHost::test_inject`].
-    pub fn test_inject(&mut self, id: usize, event: crate::__test::Event) {
-        self.host.test_inject(id, event);
-    }
-
-    /// See [`XDialogHost::test_control_flow`].
-    pub fn test_control_flow(&self) -> Option<ControlFlow> {
-        self.host.test_control_flow()
-    }
-}
-
-#[cfg(feature = "_test-hooks")]
-#[doc(hidden)]
-impl<A> XDialogApp<A> {
-    /// See [`XDialogHost::test_dialogs`].
-    pub fn test_dialogs(&self) -> Vec<LiveDialog> {
-        self.host.test_dialogs()
-    }
-
-    /// See [`XDialogHost::test_inject`].
-    pub fn test_inject(&mut self, id: usize, event: crate::__test::Event) {
-        self.host.test_inject(id, event);
-    }
-
-    /// See [`XDialogHost::test_control_flow`].
-    pub fn test_control_flow(&self) -> Option<ControlFlow> {
-        self.host.test_control_flow()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -502,6 +468,45 @@ mod tests {
         assert_eq!(merge(ControlFlow::WaitUntil(later), next), ControlFlow::WaitUntil(next));
     }
 
+    #[test]
+    fn app_sees_its_own_start_cause() {
+        let now = Instant::now();
+        let (start, ours) = (now - Duration::from_millis(20), now - Duration::from_millis(1));
+        let (past, future) = (now - Duration::from_millis(10), now + Duration::from_secs(1));
+        let reached = |t| StartCause::ResumeTimeReached { start, requested_resume: t };
+        let cancelled = |t| StartCause::WaitCancelled { start, requested_resume: t };
+        // Our deadline fired: a cancelled wait for an app that waited for events ...
+        assert_eq!(app_cause(ControlFlow::Wait, reached(ours), now), cancelled(None));
+        // ... or for a later deadline, and its own deadline when that passed too.
+        assert_eq!(app_cause(ControlFlow::WaitUntil(future), reached(ours), now), cancelled(Some(future)));
+        assert_eq!(app_cause(ControlFlow::WaitUntil(past), cancelled(Some(ours)), now), reached(past));
+        assert_eq!(app_cause(ControlFlow::WaitUntil(future), cancelled(Some(ours)), now), cancelled(Some(future)));
+        // Nothing to undo in the other causes.
+        assert_eq!(app_cause(ControlFlow::WaitUntil(past), StartCause::Poll, now), StartCause::Poll);
+        assert_eq!(app_cause(ControlFlow::Wait, StartCause::Init, now), StartCause::Init);
+    }
+
+    /// After `shutdown`, closed windows' events are swallowed until the iteration of their
+    /// `Destroyed` ends; a `Destroyed` seen before the shutdown counts too.
+    #[test]
+    fn closed_windows_are_forgotten_after_their_destroyed() {
+        let (a, b, c) = (WindowId::from(1u64), WindowId::from(2u64), WindowId::from(3u64));
+        let mut host = XDialogHost { rt: None,
+                                     closed: vec![(a, false), (b, true)],
+                                     flow: None,
+                                     #[cfg(feature = "_test-hooks")]
+                                     last_flow: None };
+        let focus = WindowEvent::Focused(false);
+        assert!(host.closed_event(a, &focus) && host.closed_event(b, &focus), "both still this iteration's");
+        assert!(!host.closed_event(c, &focus), "a foreign window");
+        host.forget_destroyed();
+        assert_eq!(host.closed, vec![(a, false)]);
+        assert!(host.closed_event(a, &WindowEvent::Destroyed) && host.closed_event(a, &WindowEvent::RedrawRequested));
+        host.forget_destroyed();
+        assert!(host.closed.is_empty());
+        assert!(!host.closed_event(a, &focus), "a reused id is the app's again");
+    }
+
     /// No event loop: the host's state around the request queue. (It installs the process's
     /// request handler, which every unit test of this binary shares: none may rely on one being
     /// absent, such as expecting `NotInitialized` from a dialog call.)
@@ -519,25 +524,33 @@ mod tests {
                 "one host per process");
         assert!(!host.is_shut_down());
 
-        // Between runs (nothing drains): requests queue, the waker is called once.
+        // Requests a run doesn't get to (its last iteration never drains) queue, the waker is
+        // called once.
         let ask = |title: &str| show_message(XDialogOptions { title: title.into(), ..Default::default() });
         let (a, b) = (ask("a"), ask("b"));
         assert!(a.try_result().is_none() && b.try_result().is_none(), "queued, not answered");
         assert_eq!(wakes.load(Ordering::SeqCst), 1, "wake-ups coalesce until the next drain");
 
-        // A run ends: the queue is kept for the next one.
+        // The run ends: the queue is kept for the next one, and a request between runs wakes the
+        // loop again (once).
         host.end_run();
         assert!(a.try_result().is_none() && b.try_result().is_none());
         assert!(!host.is_shut_down());
+        let (c, d) = (ask("c"), ask("d"));
+        assert!(c.try_result().is_none() && d.try_result().is_none());
+        assert_eq!(wakes.load(Ordering::SeqCst), 2, "a request between runs wakes the next run");
 
-        // Shutdown: the queue is rejected, later requests fail fast; a second shutdown is a no-op.
+        // Shutdown: the queue is rejected, later requests fail fast, nothing wakes any more; a
+        // second shutdown is a no-op.
         host.shutdown();
         assert!(host.is_shut_down());
-        assert!(matches!(a.try_result(), Some(Err(XDialogError::NoBackendAvailable))));
-        assert!(matches!(b.try_result(), Some(Err(XDialogError::NoBackendAvailable))));
-        assert!(matches!(ask("c").try_result(), Some(Err(XDialogError::NoBackendAvailable))));
+        for queued in [&a, &b, &c, &d] {
+            assert!(matches!(queued.try_result(), Some(Err(XDialogError::NoBackendAvailable))));
+        }
+        assert_eq!(wakes.load(Ordering::SeqCst), 2, "rejections don't wake");
+        assert!(matches!(ask("e").try_result(), Some(Err(XDialogError::NoBackendAvailable))));
         host.shutdown();
         assert!(host.is_shut_down());
-        assert_eq!(wakes.load(Ordering::SeqCst), 1, "no wake-ups after shutdown");
+        assert_eq!(wakes.load(Ordering::SeqCst), 2, "no wake-ups after shutdown");
     }
 }
