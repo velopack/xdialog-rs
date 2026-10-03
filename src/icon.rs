@@ -1,6 +1,8 @@
 //! Icon images ([`XDialogOptions::icon_source`](crate::XDialogOptions::icon_source)) decoded to
 //! RGBA: `.ico` and `.png` with the `ico` crate (every PNG and BMP frame of an `.ico`), `.icns`
 //! with the `icns` crate (every PNG, ARGB and 24-bit + mask frame; JPEG 2000 frames are skipped).
+//! PNGs (a `.png` or an `.ico` frame) must be 8-bit RGB, RGBA, gray or gray + alpha: `ico` rejects
+//! palette (indexed) and 16-bit ones. Frames over 1024 px are skipped.
 //! [`IconFile::render`] picks the best frame for a pixel size (the title bar, the taskbar and the
 //! dialog each ask for their own) and resamples it to exactly that size.
 
@@ -9,7 +11,6 @@ use icns::{Encoding, IconFamily, IconType, PixelFormat};
 use crate::XDialogIconSource;
 
 /// A square, straight-alpha (not premultiplied) RGBA image.
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct IconImage {
     pub size: u32,
     /// `size * size * 4` bytes, rows top to bottom.
@@ -36,6 +37,14 @@ impl std::fmt::Debug for IconFile {
 
 const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
 
+/// Frames bigger than this (px, either side) are skipped: `fit` holds 16 bytes per source pixel
+/// to draw a small icon. The largest ICNS size.
+const MAX_SIDE: u32 = 1024;
+
+fn too_big(w: u32, h: u32) -> bool {
+    w.max(h) > MAX_SIDE
+}
+
 impl IconFile {
     /// Read (a file) and parse `source` (the format is detected from the content, not the
     /// extension).
@@ -60,8 +69,11 @@ impl IconFile {
             return Err("not an .ico, .png or .icns image".into());
         };
         let empty = match &file {
+            IconFile::Png(img) if too_big(img.width(), img.height()) => {
+                return Err(format!("PNG: {}x{} px is over {MAX_SIDE} px", img.width(), img.height()));
+            }
             IconFile::Png(_) => false,
-            IconFile::Ico(dir) => dir.entries().is_empty(),
+            IconFile::Ico(dir) => dir.entries().iter().all(|e| too_big(e.width(), e.height())),
             IconFile::Icns(family) => icns_frames(family, 0).is_empty(),
         };
         if empty {
@@ -79,7 +91,11 @@ impl IconFile {
         match self {
             IconFile::Png(img) => Some(fit(img.rgba_data(), img.width(), img.height(), size)),
             IconFile::Ico(dir) => {
-                let mut entries: Vec<&ico::IconDirEntry> = dir.entries().iter().collect();
+                let (mut entries, skipped): (Vec<&ico::IconDirEntry>, Vec<_>) =
+                    dir.entries().iter().partition(|e| !too_big(e.width(), e.height()));
+                for e in skipped {
+                    warn!("xdialog: skipping a {}x{} px ICO frame (over {MAX_SIDE} px)", e.width(), e.height());
+                }
                 // Deepest colour first among frames of the same size.
                 entries.sort_by_key(|e| (frame_order(e.width().max(e.height()), size), std::cmp::Reverse(e.bits_per_pixel())));
                 entries.into_iter().find_map(|e| e.decode().map(fit_ico).map_err(|err| warn!("xdialog: skipping an ICO frame: {err}")).ok())
@@ -283,6 +299,25 @@ pub(crate) mod tests {
         assert_eq!(pixel(&icon.render(32).unwrap(), 8, 8), [0, 9, 0, 255]);
         assert_eq!(pixel(&icon.render(64).unwrap(), 8, 8), [255, 0, 0, 255]);
         assert_eq!(pixel(&icon.render(512).unwrap(), 8, 8), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn oversized_frames_are_skipped() {
+        let wide = || ico::IconImage::from_rgba_data(MAX_SIDE + 1, 8, vec![255; (4 * (MAX_SIDE + 1) * 8) as usize]);
+        let mut png = Vec::new();
+        wide().write_png(&mut png).unwrap();
+        assert!(IconFile::parse(&png).unwrap_err().contains("over 1024 px"));
+
+        let ico = |frames: &[ico::IconImage]| {
+            let mut dir = ico::IconDir::new(ico::ResourceType::Icon);
+            frames.iter().for_each(|f| dir.add_entry(ico::IconDirEntry::encode_as_png(f).unwrap()));
+            let mut out = Vec::new();
+            dir.write(&mut out).unwrap();
+            out
+        };
+        let icon = IconFile::parse(&ico(&[ico_image(16, [0, 255, 0]), wide()])).unwrap();
+        assert_eq!(pixel(&icon.render(64).unwrap(), 32, 32), [0, 255, 0, 255], "the 16 px frame, grown");
+        assert!(IconFile::parse(&ico(&[wide()])).is_err(), "no frame left");
     }
 
     #[test]

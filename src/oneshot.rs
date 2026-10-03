@@ -117,6 +117,11 @@ impl<T: Clone> Receiver<T> {
         }
     }
 
+    /// Block until the value is set or the sender is gone.
+    pub(crate) fn recv(&self) -> Result<T, RecvError> {
+        self.recv_with(&mut Wait::Until(None)).expect("blocks until set or closed")
+    }
+
     /// Set the value from the receiving side (e.g. a timeout), unless the sender set one first.
     pub(crate) fn set(&self, value: T) {
         let _ = self.0.set(value);
@@ -156,7 +161,7 @@ mod tests {
         let (tx, rx) = channel::<u32>();
         assert_eq!(rx.try_recv(), Err(TryRecvError::Empty));
         drop(tx);
-        assert_eq!(rx.recv_with(&mut Wait::Until(None)), Some(Err(RecvError)));
+        assert_eq!(rx.recv(), Err(RecvError));
     }
 
     #[test]
@@ -168,7 +173,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
             tx.send(5).unwrap();
         });
-        assert_eq!(rx.recv_with(&mut Wait::Until(None)), Some(Ok(5)));
+        assert_eq!(rx.recv(), Ok(5));
         t.join().unwrap();
     }
 

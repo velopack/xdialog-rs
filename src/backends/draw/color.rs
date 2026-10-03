@@ -1,12 +1,12 @@
 //! Colours: a bit-for-bit port of `ecolor::Color32` 0.36.2 (the representation and maths the
 //! themes' tokens were written against).
 
-/// Premultiplied, sRGB-encoded (gamma space) RGBA8 — identical representation and maths to
-/// ecolor::Color32 0.36.2. All blending on every backend is gamma-space source-over.
+/// Premultiplied, sRGB-encoded (gamma space) RGBA8. All blending on every backend is gamma-space
+/// source-over.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Color([u8; 4]);
 
-/// `(r + 0.5) as u8`: rounds, saturating (ecolor's `fast_round`).
+/// Rounds, saturating (ecolor's `fast_round`).
 const fn fast_round(r: f32) -> u8 {
     (r + 0.5) as u8
 }
@@ -17,14 +17,14 @@ pub(crate) const fn mul_frac_round(val: u8, frac: u8) -> u8 {
     ((p + (p >> 8)) >> 8) as u8
 }
 
-// Part of the contract every backend and test uses; the software backend alone needs less.
-#[cfg_attr(draw_soft, allow(dead_code))]
 impl Color {
     pub const TRANSPARENT: Color = Color::from_rgba_premultiplied(0, 0, 0, 0);
     pub const BLACK: Color = Color::from_rgb(0, 0, 0);
     pub const WHITE: Color = Color::from_rgb(255, 255, 255);
-    /// (160, 160, 160), as `Color32::GRAY`.
+    /// As `Color32::GRAY`.
+    #[cfg(test)]
     pub const GRAY: Color = Color::from_rgb(160, 160, 160);
+    #[cfg(test)]
     pub const RED: Color = Color::from_rgb(255, 0, 0);
 
     /// Opaque.
@@ -60,12 +60,12 @@ impl Color {
         self.0[2]
     }
 
-    /// Alpha (opacity).
     pub const fn a(self) -> u8 {
         self.0[3]
     }
 
     /// Premultiplied RGBA.
+    #[cfg(test)]
     pub const fn to_array(self) -> [u8; 4] {
         self.0
     }
@@ -83,6 +83,7 @@ impl Color {
     }
 
     /// Straight-alpha RGBA in 0..=1 (`D2D1_COLOR_F`, `CGContextSetRGBFillColor`).
+    #[cfg_attr(draw_soft, allow(dead_code))]
     pub fn to_straight_f32(self) -> [f32; 4] {
         self.to_srgba_unmultiplied().map(|c| c as f32 / 255.0)
     }
@@ -108,17 +109,11 @@ impl Color {
     pub fn intensity(&self) -> f32 {
         (self.r() as f32 * 0.299 + self.g() as f32 * 0.587 + self.b() as f32 * 0.114) / 255.0
     }
-
-    /// The four bytes as one number (cache keys).
-    pub const fn as_u32(self) -> u32 {
-        u32::from_le_bytes(self.0)
-    }
 }
 
 impl core::ops::Add for Color {
     type Output = Color;
 
-    /// Saturating per channel.
     fn add(self, o: Color) -> Color {
         Color([self.0[0].saturating_add(o.0[0]),
                self.0[1].saturating_add(o.0[1]),
@@ -169,7 +164,6 @@ mod tests {
         let additive = Color::from_rgba_premultiplied(255, 127, 10, 0);
         assert_eq!(additive.blend(opaque), opaque);
         assert_eq!(opaque.blend(additive), Color::from_rgb(255, 177, 70));
-        // Half-transparent black over white.
         assert_eq!(Color::WHITE.blend(Color::from_rgba_unmultiplied(0, 0, 0, 128)), Color::from_rgb(127, 127, 127));
         assert_eq!(Color::WHITE.gamma_multiply_u8(128).to_array(), [128, 128, 128, 128]);
     }
@@ -185,9 +179,7 @@ mod tests {
     }
 
     #[test]
-    fn add_saturates_and_as_u32_distinguishes() {
+    fn add_saturates() {
         assert_eq!(Color::from_rgb(200, 10, 0) + Color::from_rgba_premultiplied(100, 10, 0, 0), Color::from_rgb(255, 20, 0));
-        assert_ne!(Color::RED.as_u32(), Color::BLACK.as_u32());
-        assert_eq!(Color::from_rgba_premultiplied(1, 2, 3, 4).as_u32(), 0x04030201);
     }
 }

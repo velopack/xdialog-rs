@@ -59,8 +59,8 @@ enum Queued {
     Text(String),
 }
 
-/// Deterministic window-less dialog. Same `Dialog` code path as real windows. Not `Send` (the
-/// drawing backend's resources belong to the creating thread).
+/// Deterministic window-less dialog (see the module docs). Not `Send`: the drawing backend's
+/// resources belong to the creating thread.
 pub struct OffscreenDialog {
     d: Dialog,
     // `set_progress`/`set_text` are applied with the clock time of the next render, so they are
@@ -106,11 +106,10 @@ impl OffscreenDialog {
         let surface = MemorySurface::new(&text).unwrap_or_else(|e| panic!("xdialog: no memory surface: {e}"));
         let size = d.physical_size(ppp);
         d.attach(Target::Memory(surface), ppp, size);
-        // Present the open frame at t = 0, like the runtime does right after creating a window.
-        // Without it the first scripted event would land in the first real pass, where every
-        // tween is sighted for the first time after the reset and snaps to its target (a hover
-        // at t0 would show the settled look at t0 instead of starting the fade). It also lays out
-        // the buttons the first scripted pointer events are hit-tested against.
+        // Present the open frame at t = 0, as the runtime does on window creation. Otherwise
+        // every tween is first seen in the first scripted pass and snaps (a hover at t0 would
+        // show the settled look instead of starting the fade). It also lays out the buttons the
+        // first pointer events hit-test.
         d.frame().expect("memory surface");
         OffscreenDialog { d, queue: Vec::new(), last_t: 0.0 }
     }

@@ -19,7 +19,7 @@ use vello_cpu::peniko::{ImageQuality, ImageSampler};
 use vello_cpu::{Glyph, ImageSource, Pixmap, RenderContext, Resources};
 
 use super::text::Shaped;
-use crate::backends::draw::{list, Color, Frame, Image, LineCap, Point, Rect, TextLayout};
+use crate::backends::draw::{list, Color, DrawError, Frame, Image, LineCap, Point, Rect, TextLayout};
 
 /// Path flattening tolerance, physical px.
 const TOLERANCE: f64 = 0.1;
@@ -42,8 +42,11 @@ impl TextRaster {
         // Lines aligned to the far end of a wide box (right-to-left paragraphs) start past the
         // measured width: cover every glyph origin (the pad covers the last glyph's advance).
         let right = shaped.runs.iter().flat_map(|r| &r.glyphs).map(|g| g.x as f64).fold(size.width, f64::max);
-        let w = (right * scale + 2.0 * pad).ceil().clamp(1.0, u16::MAX as f64) as u16;
-        let h = (size.height * scale + 2.0 * pad).ceil().clamp(1.0, u16::MAX as f64) as u16;
+        let (w, h) = ((right * scale + 2.0 * pad).ceil(), (size.height * scale + 2.0 * pad).ceil());
+        if w > u16::MAX as f64 || h > u16::MAX as f64 {
+            warn!("xdialog: a {w}x{h} px text raster exceeds vello_cpu's 65535 px limit; the text is cut off");
+        }
+        let (w, h) = (w.clamp(1.0, u16::MAX as f64) as u16, h.clamp(1.0, u16::MAX as f64) as u16);
         let mut layer = |color: bool| {
             let runs: Vec<_> = shaped.runs.iter().filter(|r| r.face.color == color).collect();
             if runs.is_empty() {
@@ -104,23 +107,23 @@ impl Painter {
     }
 
     /// Draw `frame` (both sides of `size_px` non-zero) into [`Painter::pixmap`].
-    pub(crate) fn draw(&mut self, frame: &Frame<'_>) {
-        let (w, h) = (frame.size_px[0].min(u16::MAX as u32) as u16, frame.size_px[1].min(u16::MAX as u32) as u16);
+    pub(crate) fn draw(&mut self, frame: &Frame<'_>) -> Result<(), DrawError> {
+        let [fw, fh] = frame.size_px;
+        let (Ok(w), Ok(h)) = (u16::try_from(fw), u16::try_from(fh)) else {
+            return Err(DrawError::Backend(format!("soft: {fw}x{fh} frame exceeds vello_cpu's 65535 px limit")));
+        };
         if (self.ctx.width(), self.ctx.height()) != (w, h) {
             self.ctx = RenderContext::new(w, h);
             self.pixmap = Pixmap::new(w, h);
         } else {
             self.ctx.reset();
         }
-        let mut canvas = Canvas { root: Affine::scale(frame.ppp), ppp: frame.ppp, clips: 0, p: self };
-        list::replay(&mut canvas, frame);
-        while canvas.clips > 0 {
-            crate::backends::draw::Canvas::pop_clip(&mut canvas);
-        }
+        list::replay(&mut Canvas { root: Affine::scale(frame.ppp), ppp: frame.ppp, p: self }, frame);
         self.ctx.flush();
         self.ctx.render(&mut self.pixmap, &mut self.resources);
         self.texts.retain(|_, t| std::mem::take(&mut t.used));
         self.images.retain(|_, i| std::mem::take(&mut i.used));
+        Ok(())
     }
 
     /// The last frame (premultiplied RGBA8; opaque, as the clear colour is).
@@ -134,8 +137,6 @@ pub(crate) struct Canvas<'a> {
     p: &'a mut Painter,
     root: Affine,
     ppp: f64,
-    /// Clip layers open.
-    clips: usize,
 }
 
 fn vcolor(c: Color) -> vello_cpu::peniko::Color {
@@ -234,14 +235,10 @@ impl crate::backends::draw::Canvas for Canvas<'_> {
         let ctx = &mut self.p.ctx;
         ctx.set_transform(self.root);
         ctx.push_clip_layer(&vrect(rect).to_path(TOLERANCE));
-        self.clips += 1;
     }
 
     fn pop_clip(&mut self) {
-        if self.clips > 0 {
-            self.p.ctx.pop_layer();
-            self.clips -= 1;
-        }
+        self.p.ctx.pop_layer();
     }
 
     fn draw_text(&mut self, layout: &super::text::Layout, top_left: Point, color: Color) {
@@ -266,7 +263,7 @@ impl crate::backends::draw::Canvas for Canvas<'_> {
 
     fn draw_image(&mut self, image: &Image, dst: Rect) {
         let [iw, ih] = image.size();
-        if iw == 0 || ih == 0 || dst.is_empty() || iw > u16::MAX as u32 || ih > u16::MAX as u32 {
+        if iw == 0 || ih == 0 || dst.width() <= 0.0 || dst.height() <= 0.0 || iw > u16::MAX as u32 || ih > u16::MAX as u32 {
             return;
         }
         let cached = self.p.images.entry(image.id()).or_insert_with(|| CachedImage::new(image, iw as u16, ih as u16));
@@ -281,5 +278,20 @@ impl crate::backends::draw::Canvas for Canvas<'_> {
         ctx.set_paint_transform(Affine::translate((d.x0, d.y0)) * Affine::scale_non_uniform(d.width() / iw as f64, d.height() / ih as f64));
         ctx.fill_rect(&vrect(d));
         ctx.reset_paint_transform();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oversize_frames_are_an_error() {
+        let mut painter = Painter::new();
+        let frame = |size_px| Frame { shapes: &[], size_px, ppp: 1.0, clear: Color::WHITE };
+        let err = painter.draw(&frame([70_000, 10])).unwrap_err();
+        assert!(err.to_string().contains("70000x10"), "{err}");
+        painter.draw(&frame([20, 10])).unwrap();
+        assert_eq!((painter.pixmap().width(), painter.pixmap().height()), (20, 10));
     }
 }

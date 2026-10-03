@@ -1,5 +1,5 @@
 //! Fluent theme widgets: the button (Button / AccentButtonStyle), the progress bar (ProgressBar),
-//! the severity icon (InfoBar-style) and the body scroll bar (ScrollBar).
+//! the severity icon (InfoBar-style) and the look of the body scroll bar (ScrollBar).
 
 use std::rc::Rc;
 
@@ -8,7 +8,7 @@ use crate::backends::draw::{LineCap, Point, Rect, Size, Vec2};
 use crate::backends::gui::anim::{Easing, Transition};
 use crate::backends::gui::text::TextBlock;
 use crate::backends::gui::theme::{button_id, ButtonInteraction, DialogView, ProgressView};
-use crate::backends::gui::ui::{centered, Id, Ui};
+use crate::backends::gui::ui::{centered, Id, ScrollBarSpec, Ui};
 use crate::model::XDialogIcon;
 
 /// Button height (padding 5/6 + one text line + 1 px borders).
@@ -34,7 +34,7 @@ pub(crate) const ICON_SIZE: f64 = 32.0;
 /// A ContentDialog command button in `rect`: standard (DefaultButtonStyle) or accent
 /// (AccentButtonStyle).
 ///
-/// - Both styles: the background fades over 150 ms (linear); label and border switch instantly.
+/// - Both styles: the background fades (`FADE`); label and border switch instantly.
 /// - Standard border = ControlElevationBorderBrush (rest, pointer-over) or flat
 ///   ControlStrokeColorDefault (pressed).
 /// - Accent: no border when pressed.
@@ -47,8 +47,7 @@ pub(crate) fn button(ui: &mut Ui<'_>,
                      label: &Rc<TextBlock>,
                      accent: bool,
                      view: &DialogView<'_>,
-                     tk: &FluentTokens)
-                     -> ButtonInteraction {
+                     tk: &FluentTokens) {
     let st = ButtonInteraction::interact(ui, rect, index, view);
     let (std, acc) = if st.pointer_down && st.contains_pointer || st.key_pressed {
         (tk.std_pressed, tk.acc_pressed)
@@ -62,15 +61,12 @@ pub(crate) fn button(ui: &mut Ui<'_>,
     let std_fill = ui.animate(button_id(index).with("fluent.bg"), std.fill, if accent { Transition::INSTANT } else { FADE });
     let acc_fill = ui.animate(button_id(index).with("fluent.acc_bg"), acc.fill, if accent { FADE } else { Transition::INSTANT });
     let colors = if accent { ButtonColors { fill: acc_fill, ..acc } } else { ButtonColors { fill: std_fill, ..std } };
-    // The elevation edge: top for the dark standard button, else bottom.
     paint_box(ui, rect, &colors, !accent && tk.std_elevation_top);
     if st.focus_visible {
-        // Both rings outside the button: 1 px inner, 2 px outer.
         ui.stroke_rect(rect.inflate(0.5, 0.5), CORNER + 0.5, 1.0, tk.focus_inner);
         ui.stroke_rect(rect.inflate(2.0, 2.0), CORNER + 2.0, 2.0, tk.focus_outer);
     }
     ui.text(label, centered(rect, label.size).origin(), colors.text);
-    st
 }
 
 /// Button background: a 1 px border (`stroke`, with the `stroke_2` elevation edge at the top or
@@ -194,39 +190,14 @@ pub(crate) fn icon(ui: &mut Ui<'_>, origin: Point, icon: &XDialogIcon, tk: &Flue
 // Scroll bar
 // ------------------------------------------------------------------------------------------------
 
-/// Thumb width at rest and while the pointer is over the bar or dragging it.
-const THUMB_THIN: f64 = 2.0;
-const THUMB_WIDE: f64 = 6.0;
-/// Gap between the thumb and the viewport's right edge; shortest thumb.
-const BAR_MARGIN: f64 = 2.0;
-const MIN_THUMB: f64 = 12.0;
-
-/// WinUI's overlay scroll bar at the right edge of `viewport` for content `content_h` tall at
-/// `offset`: a thin thumb (ControlStrongFillColorDefault) that widens while hovered. Dragging it
-/// scrolls; returns the new offset.
-pub(crate) fn scroll_bar(ui: &mut Ui<'_>, viewport: Rect, content_h: f64, offset: f64, tk: &FluentTokens) -> f64 {
-    let (view_h, max) = (viewport.height(), (content_h - viewport.height()).max(0.0));
-    if max <= 0.0 {
-        return 0.0;
-    }
-    let x1 = viewport.x1 - BAR_MARGIN;
-    let bar = Rect::new(x1 - THUMB_WIDE, viewport.y0, x1, viewport.y1);
-    let it = ui.interact(Id::new("fluent.scrollbar"), bar);
-    let thumb_h = (view_h * view_h / content_h).max(MIN_THUMB).min(view_h);
-    let travel = view_h - thumb_h;
-    let mut offset = offset;
-    if it.pointer_down && travel > 0.0 {
-        offset = (offset + ui.pointer_delta().y * max / travel).clamp(0.0, max);
-    }
-    let w = ui.animate(Id::new("fluent.scrollbar.width"),
-                       if it.hovered || it.pointer_down { THUMB_WIDE as f32 } else { THUMB_THIN as f32 },
-                       Transition::linear(0.1));
-    let y = viewport.y0 + offset / max * travel;
-    ui.fill_rect_unsnapped(Rect::from_origin_size(Point::new(x1 - w as f64, y), Size::new(w as f64, thumb_h)),
-                           3.0f64.min(w as f64 / 2.0),
-                           tk.scroll_thumb);
-    offset
-}
+/// WinUI's overlay scroll bar (ScrollBar), in `FluentTokens::scroll_thumb`.
+pub(crate) const SCROLL_BAR: ScrollBarSpec = ScrollBarSpec { thin: 2.0,
+                                                             wide: 6.0,
+                                                             inset: 2.0,
+                                                             end_inset: 0.0,
+                                                             min_thumb: 12.0,
+                                                             fade: Transition::linear(0.1),
+                                                             max_radius: Some(3.0) };
 
 #[cfg(test)]
 mod tests {
@@ -239,7 +210,6 @@ mod tests {
         assert_eq!(indeterminate_bars(0.0, w), vec![(-120.0, 120.0)]);
         // Both visible between 0.75 and 1.5 s.
         assert_eq!(indeterminate_bars(1.0, w).len(), 2);
-        // Bar 2 ends at 0.996 w.
         let end = indeterminate_bars(1.9999, w);
         assert_eq!(end.len(), 1);
         assert!((end[0].0 - 0.996 * w).abs() < 0.5, "{end:?}");

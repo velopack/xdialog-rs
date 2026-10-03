@@ -24,3 +24,23 @@ fn progress_proxy_works_in_silent_mode() {
     progress.close().unwrap(); // double close should also be fine
     // Drop will call close() again
 }
+
+#[test]
+fn show_message_returns_silent_mode() {
+    set_silent_mode(true);
+    let dialog = show_message(XDialogOptions { title: "Silent".into(), buttons: vec!["OK".into()], ..Default::default() });
+    assert!(matches!(dialog.try_result(), Some(Ok(XDialogResult::SilentMode))));
+    assert!(matches!(dialog.wait_timeout(std::time::Duration::from_millis(1)), Ok(XDialogResult::SilentMode)));
+}
+
+/// Without a backend (none is initialized here), only silent mode lets this return `Ok`; the
+/// proxy's calls and its drop are no-ops.
+#[test]
+fn progress_with_callback_works_in_silent_mode() {
+    set_silent_mode(true);
+    let options = XDialogOptions { title: "Silent".into(), buttons: vec!["Cancel".into()], ..Default::default() };
+    let progress = show_progress_with_callback(options, |_, _| true).unwrap();
+    progress.set_value(0.5).unwrap();
+    progress.close().unwrap();
+    drop(progress);
+}

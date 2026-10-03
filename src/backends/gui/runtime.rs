@@ -51,7 +51,6 @@ const DEFAULT_MAX_HEIGHT: f64 = 800.0;
 /// How long a dialog that needs fallback fonts waits for the system font scan when it opens.
 const FONT_WAIT: Duration = Duration::from_millis(300);
 
-/// One dialog and its window.
 struct DialogWindow {
     dialog: Dialog,
     /// `Rc`: the drawing surface holds a clone.
@@ -61,6 +60,8 @@ struct DialogWindow {
     /// Cached monitor refresh period and when it was read (re-read about once a second, so a
     /// window dragged to another monitor picks up its rate).
     period: Option<(Instant, Option<Duration>)>,
+    /// Fully hidden (macOS, X11): frames are skipped until `Occluded(false)`.
+    occluded: bool,
 }
 
 /// Every dialog of one event loop (builder or host). Dropping it closes them all (callers get
@@ -102,7 +103,7 @@ impl Runtime {
         let _ = fallback;
         let (inbox, rx) = Inbox::new(waker);
         if !init_handler(Box::new(InboxHandler(inbox.clone()))) {
-            return Err(XDialogError::SystemError("xdialog: a dialog backend is already initialized".into()));
+            return Err(XDialogError::SystemError("a dialog backend is already initialized".into()));
         }
         #[cfg(draw_soft)]
         crate::backends::draw::start_font_scan();
@@ -188,9 +189,12 @@ impl Runtime {
             let s = w.dialog.schedule_mut();
             if s.due(now) {
                 s.fired();
-                w.window.request_redraw();
-            } else if let Some(t) = s.next {
-                next = Some(next.map_or(t, |n| n.min(t)));
+                w.window.request_redraw(); // its frame publishes the tree
+            } else {
+                if let Some(t) = s.next {
+                    next = Some(next.map_or(t, |n| n.min(t)));
+                }
+                w.publish_a11y();
             }
         }
         next
@@ -207,10 +211,17 @@ impl Runtime {
         true
     }
 
-    /// Every dialog window (open, or closed and not yet Destroyed).
+    /// Every dialog window (open, or closed) with whether its `Destroyed` was already seen.
     #[cfg(feature = "winit-host")]
-    pub(crate) fn window_ids(&self) -> Vec<WindowId> {
-        self.dialogs.values().map(|w| w.window.id()).chain(self.retired.iter().map(|r| r.0)).collect()
+    pub(crate) fn window_ids(&self) -> Vec<(WindowId, bool)> {
+        self.dialogs.values().map(|w| (w.window.id(), false)).chain(self.retired.iter().copied()).collect()
+    }
+
+    /// Host mode, a run of the loop ended: the next request wakes the loop again (the exiting
+    /// iteration never drained, so `close_all`'s notifications left a wake outstanding).
+    #[cfg(feature = "winit-host")]
+    pub(crate) fn rearm_wake(&self) {
+        self.inbox.begin_drain();
     }
 
     fn dialog_event(&mut self, key: usize, ev: &WindowEvent) {
@@ -222,6 +233,13 @@ impl Runtime {
         w.a11y.process_event(&w.window, ev);
         match ev {
             WindowEvent::RedrawRequested => w.redraw(),
+            WindowEvent::Occluded(occluded) => {
+                // A window placed by `XDIALOG_TEST_POS` may be off every monitor, which X11 reports as occluded.
+                w.occluded = *occluded && test_position_raw().is_none();
+                if !occluded {
+                    w.window.request_redraw(); // the schedule went idle while hidden
+                }
+            }
             WindowEvent::Resized(s) => w.dialog.resized([s.width, s.height]),
             // winit keeps the logical size itself; the following `Resized` has the new size.
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => w.dialog.scale_changed(*scale_factor),
@@ -291,13 +309,13 @@ impl Runtime {
             return;
         }
         if self.dialogs.contains_key(&id) {
-            reply.failed(XDialogError::SystemError(format!("xdialog: dialog id {id} already exists")));
+            reply.failed(XDialogError::SystemError(format!("dialog id {id} already exists")));
             return;
         }
         // A panic while building the dialog or in its first frame is a failure like any other:
         // the request is still intact here.
         let shown = catch_unwind(AssertUnwindSafe(|| self.try_show(el, id, kind, &options, &mut callback)))
-            .unwrap_or_else(|_| Err(XDialogError::SystemError("xdialog: building the dialog panicked".into())));
+            .unwrap_or_else(|_| Err(XDialogError::SystemError("building the dialog panicked".into())));
         match shown {
             Ok(()) => {
                 if let Some(w) = self.dialogs.get_mut(&id) {
@@ -319,12 +337,11 @@ impl Runtime {
         }
     }
 
-    /// The runtime's text system (created on first use).
     fn text(&mut self) -> Result<Rc<Text>, XDialogError> {
         if let Some(t) = &self.text {
             return Ok(t.clone());
         }
-        let text = Text::shared().map_err(|e| XDialogError::SystemError(format!("xdialog: no text system: {e}")))?;
+        let text = Text::shared().map_err(|e| XDialogError::SystemError(format!("no text system: {e}")))?;
         Ok(self.text.insert(text).clone())
     }
 
@@ -340,7 +357,7 @@ impl Runtime {
                 -> Result<(), XDialogError> {
         // Test builds: fail like a broken drawing backend would (the fallback tests).
         if super::appearance::test_flag("XDIALOG_TEST_FAIL_DRAWN") {
-            return Err(XDialogError::SystemError("xdialog: XDIALOG_TEST_FAIL_DRAWN is set".into()));
+            return Err(XDialogError::SystemError("XDIALOG_TEST_FAIL_DRAWN is set".into()));
         }
         let text = self.text()?;
         let primary = el.primary_monitor().or_else(|| el.available_monitors().next());
@@ -367,17 +384,13 @@ impl Runtime {
 
         let size = dialog.desired_size();
         let dark = dialog.dark_titlebar();
-        // On Windows winit only reports `ThemeChanged` for windows created WITHOUT a preferred
-        // theme, so a dialog that follows the system gets `None` there (the title bar is set
-        // through DWM right after creation and on every appearance change).
-        let follow_system = cfg!(windows) && self.xtheme == XDialogTheme::SystemDefault;
         let mut attrs = Window::default_attributes().with_title(dialog.title())
                                                     .with_inner_size(LogicalSize::new(size.width, size.height))
                                                     .with_resizable(false)
                                                     .with_enabled_buttons(WindowButtons::CLOSE)
                                                     .with_visible(false)
                                                     .with_active(!no_activate())
-                                                    .with_theme((!follow_system).then_some(winit_theme(dark)));
+                                                    .with_theme((!self.follows_system()).then_some(winit_theme(dark)));
         if let Some(file) = dialog.icon_file() {
             // Windows: the title bar (small) and taskbar / Alt+Tab (big) icons at the system
             // metrics' sizes; X11: one image the window manager scales (_NET_WM_ICON). Wayland and
@@ -391,13 +404,12 @@ impl Runtime {
         }
         #[cfg(windows)]
         {
-            // No title bar and no close button: the dialog draws its whole client area and is
-            // moved by dragging its background (`dialog_event`). The title still names the window
-            // in the taskbar, Alt+Tab and to screen readers; Alt+F4 still closes it (WS_SYSMENU
-            // stays). The DWM shadow and rounded corners (Windows 11) keep it looking like a
-            // window. No drag and drop: winit's default registers an OLE drop target, which needs
-            // (and on an uninitialised host thread silently makes) an STA thread and aborts on an
-            // MTA one. Dialogs take no drops.
+            // No title bar or close button: the dialog draws its whole client area and is moved by
+            // dragging its background (`dialog_event`). The title still names the window in the
+            // taskbar, Alt+Tab and to screen readers; Alt+F4 still closes it (WS_SYSMENU stays).
+            // DWM shadow and Windows 11 rounded corners keep it looking like a window. No drag and
+            // drop: winit's default registers an OLE drop target, which needs (and on an
+            // uninitialised host thread silently makes) an STA thread and aborts on an MTA one.
             use winit::platform::windows::{CornerPreference, WindowAttributesExtWindows};
             attrs = attrs.with_decorations(false)
                          .with_undecorated_shadow(true)
@@ -433,8 +445,7 @@ impl Runtime {
         if let Some([x, y]) = position {
             attrs = attrs.with_position(PhysicalPosition::new(x, y));
         }
-        let window =
-            Rc::new(el.create_window(attrs).map_err(|e| XDialogError::SystemError(format!("xdialog: could not create a window: {e}")))?);
+        let window = Rc::new(el.create_window(attrs).map_err(|e| XDialogError::SystemError(format!("could not create a window: {e}")))?);
         // Until the dialog is complete: a failure (or panic) below drops the window, and its late
         // `Destroyed` must still be recognised as xdialog's.
         self.retired.push((window.id(), false));
@@ -450,7 +461,7 @@ impl Runtime {
         let surface = if translucent { WindowSurface::translucent(&window, &text) } else { WindowSurface::new(&window, &text) };
         #[cfg(not(target_os = "macos"))]
         let surface = WindowSurface::new(&window, &text);
-        let surface = surface.map_err(|e| XDialogError::SystemError(format!("xdialog: could not create a surface: {e}")))?;
+        let surface = surface.map_err(|e| XDialogError::SystemError(format!("could not create a surface: {e}")))?;
         #[cfg(target_os = "macos")]
         dialog.set_translucent(translucent);
         let s = window.inner_size();
@@ -458,15 +469,23 @@ impl Runtime {
         window.set_visible(true);
         // Present right away: presenting to a hidden window is a no-op on Win32/X11 and the class
         // background would flash.
-        dialog.frame().map_err(|e| XDialogError::SystemError(format!("xdialog: could not present: {e}")))?;
+        dialog.frame().map_err(|e| XDialogError::SystemError(format!("could not present: {e}")))?;
         #[cfg(target_os = "macos")]
         if translucent {
             super::platform_mac::invalidate_shadow(&window);
         }
         dialog.set_callback(callback.take());
         self.retired.retain(|r| r.0 != window.id());
-        self.dialogs.insert(id, DialogWindow { dialog, window, input: WinitInput::default(), a11y, period: None });
+        self.dialogs.insert(id, DialogWindow { dialog, window, input: WinitInput::default(), a11y, period: None, occluded: false });
         Ok(())
+    }
+
+    /// Whether dialog windows are created without a preferred theme, so that winit reports the
+    /// system's light/dark switches as `ThemeChanged`: Windows and macOS only report them for such
+    /// windows (the macOS delegate ignores `effectiveAppearance` changes once an appearance is
+    /// pinned, Windows never sends them to a themed window). Elsewhere the portal reports them.
+    fn follows_system(&self) -> bool {
+        cfg!(any(windows, target_os = "macos")) && self.xtheme == XDialogTheme::SystemDefault
     }
 
     /// Hide `window` now and remember its id until winit reports it destroyed (the caller drops it).
@@ -481,8 +500,11 @@ impl Runtime {
     }
 
     /// Post-processing after anything touched dialog `key`: remove a closed dialog (hide, drop
-    /// surface and window), forward resize / title-bar requests, publish the accessibility tree.
+    /// surface and window), forward resize / title-bar requests. The accessibility tree is
+    /// published once per iteration (`about_to_wait`) or frame, not here.
     fn after(&mut self, key: usize) {
+        #[cfg(not(windows))]
+        let follows_system = self.follows_system();
         let Some(w) = self.dialogs.get_mut(&key) else { return };
         if w.dialog.is_closed() {
             let w = self.dialogs.remove(&key).expect("present");
@@ -497,14 +519,15 @@ impl Runtime {
         }
         if let Some(dark) = w.dialog.take_titlebar_change() {
             // Windows: DWM directly (`Window::set_theme` doesn't change winit's preferred theme,
-            // and `ThemeChanged` must keep flowing for system-following dialogs).
+            // and `ThemeChanged` must keep flowing for system-following dialogs). A
+            // system-following window elsewhere keeps its appearance unpinned for the same reason.
             #[cfg(windows)]
             super::platform_win::set_dark_titlebar(&w.window, dark);
             #[cfg(not(windows))]
-            w.window.set_theme(Some(winit_theme(dark)));
+            if !follows_system {
+                w.window.set_theme(Some(winit_theme(dark)));
+            }
         }
-        let dialog = &w.dialog;
-        w.a11y.update(|| dialog.a11y_tree());
     }
 
     /// Fonts or the appearance may have changed (a background thread woke the loop).
@@ -557,18 +580,38 @@ impl Runtime {
 impl Drop for Runtime {
     fn drop(&mut self) {
         self.close_all();
+        self.inbox.close();
         self.pending.take().into_iter().chain(self.rx.try_iter()).for_each(crate::channel::reject);
     }
 }
 
 impl DialogWindow {
-    /// Render a frame (`RedrawRequested`).
+    /// Render a frame (`RedrawRequested`). Nothing is drawn while the window is occluded or has no
+    /// area (minimised): the schedule was cleared when this redraw was requested, so the dialog
+    /// idles until `Occluded(false)` / `Resized` ask for a frame again.
     fn redraw(&mut self) {
+        let size = self.window.inner_size();
+        if self.occluded || size.width == 0 || size.height == 0 {
+            // The frame that reveals the window must present.
+            self.dialog.schedule_mut().skipped();
+            return;
+        }
         let period = self.monitor_period();
         self.dialog.schedule_mut().set_monitor_period(period);
-        if let Err(e) = self.dialog.frame() {
+        // Wayland: requests the frame callback that throttles redraws of a hidden surface. Only
+        // before an actual present: winit withholds redraws until the callback, which only a
+        // commit brings.
+        let window = &self.window;
+        if let Err(e) = self.dialog.frame_with(|| window.pre_present_notify()) {
             warn!("xdialog: present failed: {e}");
         }
+        self.publish_a11y();
+    }
+
+    /// Publish the accessibility tree (a no-op without an assistive technology, or unchanged).
+    fn publish_a11y(&mut self) {
+        let dialog = &self.dialog;
+        self.a11y.update(|| dialog.a11y_tree());
     }
 
     /// Refresh period of the monitor showing the window; `None` when unknown (60 Hz is assumed).
@@ -629,13 +672,18 @@ pub(super) fn no_activate() -> bool {
     std::env::var_os("XDIALOG_TEST_NO_ACTIVATE").is_some_and(|v| !v.is_empty() && v != "0")
 }
 
-/// `XDIALOG_TEST_POS=x,y|offscreen` (test builds only): physical top-left of a new window of
-/// `size_px`; `virtual_left` is the left edge of the whole virtual desktop (physical px).
-fn test_position(size_px: [u32; 2], virtual_left: impl FnOnce() -> i32) -> Option<[i32; 2]> {
+/// `XDIALOG_TEST_POS`, when test env vars are honoured.
+fn test_position_raw() -> Option<String> {
     if !test_env_enabled() {
         return None;
     }
-    let v = std::env::var("XDIALOG_TEST_POS").ok()?;
+    std::env::var("XDIALOG_TEST_POS").ok()
+}
+
+/// `XDIALOG_TEST_POS=x,y|offscreen` (test builds only): physical top-left of a new window of
+/// `size_px`; `virtual_left` is the left edge of the whole virtual desktop (physical px).
+fn test_position(size_px: [u32; 2], virtual_left: impl FnOnce() -> i32) -> Option<[i32; 2]> {
+    let v = test_position_raw()?;
     let v = v.trim();
     if v.eq_ignore_ascii_case("offscreen") {
         // Left of the whole virtual desktop: never on a real monitor.

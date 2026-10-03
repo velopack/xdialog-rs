@@ -33,7 +33,6 @@ struct FamilyInner {
     key: u32,
 }
 
-/// A laid-out paragraph.
 pub(crate) struct DwLayout {
     id: u64,
     /// `None`: DirectWrite failed (logged); nothing is drawn.
@@ -98,7 +97,6 @@ pub(crate) struct Text {
     families: RefCell<Vec<Family>>,
 }
 
-/// `s` as a NUL-terminated UTF-16 string.
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
 }
@@ -227,9 +225,10 @@ impl Text {
             let layout = self.dwrite.CreateTextLayout(&utf16, &format, width, f32::MAX)?;
             let mut m = DWRITE_TEXT_METRICS::default();
             layout.GetMetrics(&mut m)?;
-            if p.rtl && p.max_width.is_none() {
-                // Unwrapped right-to-left lines align to the box's right edge: make the box the
-                // widest line (trailing whitespace, on the left, hangs outside).
+            if (p.rtl || p.center) && p.max_width.is_none() {
+                // Unwrapped right-to-left or centred lines align to the box's far edge or centre,
+                // which a zero-width box puts at or left of x = 0: make the box the widest line
+                // (trailing whitespace, on the left of a right-to-left line, hangs outside).
                 layout.SetMaxWidth(m.width)?;
                 layout.GetMetrics(&mut m)?;
             }
@@ -351,6 +350,19 @@ mod tests {
         let boxed = t.layout(text, &TextParams { rtl: true, ..params(&fam, Some(300.0), None, None) });
         assert!(natural.size().width > 20.0 && natural.size().width < 150.0, "{:?}", natural.size());
         assert!((boxed.size().width - natural.size().width).abs() < 0.5, "{:?} {:?}", boxed.size(), natural.size());
+    }
+
+    /// An unwrapped centred paragraph is drawn inside its layout box, not centred on its left edge.
+    #[test]
+    fn unwrapped_centred_text_is_inside_its_box() {
+        let t = Text::shared().unwrap();
+        let fam = t.resolve_family(&["Segoe UI"]);
+        let l = t.layout("Hello", &TextParams { center: true, ..params(&fam, None, None, None) });
+        let mut m = DWRITE_TEXT_METRICS::default();
+        // SAFETY: an out-pointer to a local.
+        unsafe { l.0.layout.as_ref().unwrap().GetMetrics(&mut m).unwrap() };
+        assert!(m.left >= 0.0 && m.width > 20.0, "left {} width {}", m.left, m.width);
+        assert!((m.width as f64 - l.size().width).abs() < 1e-3, "{} {:?}", m.width, l.size());
     }
 
     /// Fluent's variable-font path (optical size) lays out like the plain one, roughly.

@@ -128,6 +128,8 @@ struct Metrics {
     /// Gap between side-by-side buttons, and between stacked ones.
     row_gap: f64,
     stack_gap: f64,
+    /// Push button corner radius.
+    button_radius: f64,
     /// Window corner radius (the material is clipped to it).
     window_radius: f64,
 }
@@ -145,15 +147,13 @@ impl Metrics {
                                       progress_to_buttons: 16.0,
                                       row_gap: 8.0,
                                       stack_gap: 8.0,
+                                      button_radius: 6.0,
                                       window_radius: 10.0 };
 
-    /// Tahoe (measured on macOS 26.6 at 2x): the icon at (20, 20), text at x = 22 wrapping at 216
-    /// (the longest unwrapped line measured 211, the shortest wrapped one 217), the first
-    /// baseline 29 below the icon, 26 between the title's last baseline and the body's first, 19
-    /// from the last baseline to the buttons; side-by-side buttons 110 wide (8 apart), stacked
-    /// ones 34 apart (6 gap); 14 pt capsule corners; a 26 pt continuous window corner (fitted to
-    /// the window's alpha). These reproduce the reference window heights (176 to 330) exactly. The
-    /// progress bar distances are not in the references: Sequoia's.
+    /// Tahoe, measured on macOS 26.6 at 2x. Wrap width 216: the longest unwrapped line measured 211,
+    /// the shortest wrapped one 217. The 26 pt continuous window corner is fitted to the window's
+    /// alpha. These reproduce the reference window heights (176 to 330) exactly. The progress bar
+    /// distances are not in the references: Sequoia's.
     const TAHOE: Metrics = Metrics { text_inset: 22.0,
                                      icon_top: 20.0,
                                      icon_left: Some(20.0),
@@ -165,6 +165,7 @@ impl Metrics {
                                      progress_to_buttons: 16.0,
                                      row_gap: 8.0,
                                      stack_gap: 6.0,
+                                     button_radius: BUTTON_H / 2.0,
                                      window_radius: 26.0 };
 }
 
@@ -178,7 +179,6 @@ pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: F
                                                              space: SpaceKey::ActivateOnRelease,
                                                              scroll_keys: true };
 
-/// The macOS theme.
 pub(crate) struct MacTheme {
     style: MacStyle,
     tokens: MacTokens,
@@ -264,11 +264,7 @@ impl Theme for MacTheme {
         let stacked = n > 2 || labels.iter().any(|l| l.size.width + 2.0 * BUTTON_PAD_X > half);
         // Labels wider than their button are elided to it.
         let label_max = if stacked || n == 1 { row } else { half } - 2.0 * BUTTON_PAD_X;
-        let labels: Vec<Rc<TextBlock>> =
-            labels.into_iter()
-                  .zip(view.buttons)
-                  .map(|(l, b)| if l.size.width > label_max { ui.layout(b, &label_style, label_max, Some(1)) } else { l })
-                  .collect();
+        let labels = ui.elide_labels(labels, view.buttons, &label_style, label_max);
         let buttons_h = match n {
             0 => 0.0,
             _ if stacked => n as f64 * BUTTON_H + (n - 1) as f64 * m.stack_gap,
@@ -321,16 +317,13 @@ impl Theme for MacTheme {
         // A text block's left edge: centred, or start-aligned in the text column.
         let cx = WIDTH / 2.0;
         let paint_text = |ui: &mut Ui<'_>, block: &TextBlock, top: f64| {
-            let x = if centred {
-                cx - block.size.width / 2.0
-            } else if block.rtl {
-                m.text_inset + text_w - block.size.width
+            if centred {
+                let pos = Point::new(cx - block.size.width / 2.0, top);
+                ui.text(block, pos, tk.text);
+                pos
             } else {
-                m.text_inset
-            };
-            let pos = Point::new(x, top);
-            ui.text(block, pos, tk.text);
-            pos
+                ui.text_in(block, Point::new(m.text_inset, top), text_w, tk.text)
+            }
         };
         if icon {
             let left = match m.icon_left {
@@ -350,22 +343,20 @@ impl Theme for MacTheme {
         }
         if let (Some(b), Some(top)) = (&body, body_top) {
             let viewport = Rect::new(PAD / 2.0, top, WIDTH - PAD / 2.0, top + viewport_h);
-            let max_scroll = (content_h - viewport_h).max(0.0);
-            let wheel = if ui.pointer().is_some_and(|p| viewport.contains(p)) { view.frame.wheel_request } else { 0.0 };
-            self.scroll = (self.scroll + view.frame.scroll_request + wheel).clamp(0.0, max_scroll);
-            let clip = max_scroll > 0.0;
-            if clip {
-                ui.push_clip(viewport);
-            }
-            let pos = paint_text(ui, b, top - self.scroll);
-            if clip {
-                ui.pop_clip();
-            }
-            out.parts.body = Some(Rect::from_origin_size(pos, b.size).intersect(viewport));
-            self.scroll = widgets::scroll_bar(ui, viewport, content_h, self.scroll, &tk);
+            let parts = &mut out.parts;
+            ui.scroll_area(Id::new("macos.scroller"),
+                           &mut self.scroll,
+                           viewport,
+                           content_h,
+                           &view.frame,
+                           &widgets::SCROLL_BAR,
+                           tk.scroll_thumb,
+                           |ui, top| {
+                               let pos = paint_text(ui, b, top);
+                               parts.body = Some(Rect::from_origin_size(pos, b.size).intersect(viewport));
+                           });
         }
         if let Some(p) = view.progress {
-            // As wide as the text column.
             let r = Rect::new(m.text_inset, anchor + m.text_to_progress, WIDTH - m.text_inset, anchor + m.text_to_progress + PROGRESS_H);
             widgets::progress(ui, r, p, &tk);
             out.parts.progress = Some(r);
@@ -377,7 +368,6 @@ impl Theme for MacTheme {
             let default_button = n - 1;
             let is_default = |i: usize| view.progress.is_none() && i == default_button;
             if stacked {
-                // Default on top, then the others in reversed API order.
                 let mut col = Column::new(PAD, WIDTH - PAD, top);
                 for k in 0..n {
                     let index = n - 1 - k;
@@ -385,15 +375,13 @@ impl Theme for MacTheme {
                         col.space(m.stack_gap);
                     }
                     let r = col.row(BUTTON_H);
-                    let st = widgets::button(ui, r, index, &labels[index], is_default(index), view, &tk);
-                    out.push_button(&st);
+                    widgets::button(ui, r, index, &labels[index], m.button_radius, is_default(index), view, &tk);
                 }
             } else {
                 // Side by side in API order; one button spans the row.
                 let cells = columns(Rect::new(PAD, top, WIDTH - PAD, top + BUTTON_H), n, m.row_gap);
                 for (index, cell) in cells.into_iter().enumerate() {
-                    let st = widgets::button(ui, cell, index, &labels[index], is_default(index), view, &tk);
-                    out.push_button(&st);
+                    widgets::button(ui, cell, index, &labels[index], m.button_radius, is_default(index), view, &tk);
                 }
             }
         }

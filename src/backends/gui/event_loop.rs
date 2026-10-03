@@ -12,6 +12,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::WindowId;
 
 use super::runtime::Runtime;
+use crate::channel::WakeFn;
 use crate::model::{XDialogBackend, XDialogTheme};
 
 /// Build the event loop on this thread and install its request handler. The returned closure runs
@@ -39,37 +40,37 @@ pub(crate) fn start(backend: XDialogBackend, fallback: bool, xtheme: XDialogThem
                     return;
                 }
             };
-            let proxy = event_loop.create_proxy();
-            rt.attach(first,
-                      Box::new(move || {
-                          let _ = proxy.send_event(());
-                      }));
-            if let Err(e) = event_loop.run_app(&mut rt) {
-                error!("xdialog: event loop error: {e}");
-            }
+            rt.attach(first, waker(&event_loop));
+            run(event_loop, &mut rt);
         }))
     }
     #[cfg(not(target_os = "macos"))]
     {
         let event_loop = build()?;
-        let proxy = event_loop.create_proxy();
-        let waker = Box::new(move || {
-            let _ = proxy.send_event(());
-        });
-        let mut rt = Runtime::install(backend, fallback, xtheme, waker).map_err(|e| e.to_string())?;
-        Ok(Box::new(move || {
-            if let Err(e) = event_loop.run_app(&mut rt) {
-                error!("xdialog: event loop error: {e}");
-            }
-        }))
+        let mut rt = Runtime::install(backend, fallback, xtheme, waker(&event_loop)).map_err(|e| e.to_string())?;
+        Ok(Box::new(move || run(event_loop, &mut rt)))
+    }
+}
+
+/// A waker that makes `el` iterate (its `user_event` is winit's default no-op).
+fn waker(el: &EventLoop<()>) -> WakeFn {
+    let proxy = el.create_proxy();
+    Box::new(move || {
+        let _ = proxy.send_event(());
+    })
+}
+
+/// Run the loop here until `ExitEventLoop`.
+fn run(el: EventLoop<()>, rt: &mut Runtime) {
+    if let Err(e) = el.run_app(rt) {
+        error!("xdialog: event loop error: {e}");
     }
 }
 
 /// Build the event loop: `with_any_thread(true)` (tests and `XDialogBuilder` run on arbitrary
 /// threads), Windows `with_dpi_aware(false)` (the thread sets per-monitor-v2 itself; a library
 /// must not change process DPI state), macOS an accessory app (no Dock icon or menu bar, like
-/// CFUserNotification alerts; windows still take focus) without winit's default menu. A panic
-/// inside `build()` is caught.
+/// CFUserNotification alerts; windows still take focus) without winit's default menu.
 fn build() -> Result<EventLoop<()>, String> {
     let built = catch_unwind(AssertUnwindSafe(|| {
                                  let mut b = EventLoop::<()>::with_user_event();

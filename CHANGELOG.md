@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Changed
+
+- `ProgressDialogProxy` is `#[must_use]` (dropping it closes the dialog, so `show_progress(..)?;`
+  now warns) and implements `Debug`.
+- `ProgressDialogProxy::set_value` maps NaN and both infinities to 0 (`+inf` used to give 1.0).
+- `icon_source`: PNG images and ICO frames over 1024 px are rejected or skipped, so an oversized PNG
+  now gives no icon (an `.ico` falls back to its other frames).
+- Win32 TaskDialog no longer needs a Common Controls v6 manifest in your executable: without one,
+  xdialog activates v6 for its dialogs itself (an executable without the manifest used to fail to
+  start once the TaskDialog backend was linked in).
+- maccf-direct: the last button is the default (Return) button, as on every other backend.
+
+### Fixed
+
+- `MessageDialogProxy::wait_timeout(Duration::MAX)` no longer panics.
+- Win32 TaskDialog: Esc and the close button report `WindowClosed` (with three or more buttons they
+  reported `ButtonPressed(2)` and ran the progress callback), as does the implicit OK button of a
+  dialog without buttons; a `TaskDialogIndirect` failure is reported as `SystemError`.
+- windows-gnu: tests and examples link (the manifest linker flags are passed on MSVC only).
+- `winit-host`: the waker is rearmed between runs, and dialog windows idle while occluded.
+
+## 4.1.0
+
 ### Added
 
 - `winit-host`: **the host outlives the runs of your event loop.** `XDialogBuilder::into_host(waker)`
@@ -17,6 +40,10 @@
 - `XDialogApp` (`into_host_app`) is now built on `XDialogHost` and keeps its behaviour: for a loop
   that runs once with `run_app`; its `exiting` shuts the host down (later calls
   `NoBackendAvailable`). New accessors `XDialogApp::host` / `host_mut`.
+
+## 4.0.1
+
+- Dependency updates: skrifa 0.47 (the software renderer, Linux and the BSDs).
 
 ## 4.0.0
 
@@ -70,9 +97,9 @@ look of 3.x: same layout, Ubuntu font, colours, metrics, animations and keyboard
 - `XDialogError::NoResult` now carries `std::sync::mpsc::RecvError` (the `oneshot` dependency was
   dropped).
 - **The skia backend was removed**, together with the `skia-instrumentation` feature, the hidden
-  `xdialog::pixels` module, the `skia_bench` example and the benchmarks. Dependencies dropped:
-  tiny-skia, enum-map, mina, multiversion, sysinfo, oneshot, widestring, block2 (and
-  criterion, dev-only). cosmic-text is now used on Linux and the BSDs only.
+  `xdialog::pixels` module and the `skia_bench` example. Dependencies dropped: tiny-skia,
+  enum-map, mina, multiversion, sysinfo, oneshot, widestring, block2. cosmic-text is now used on
+  Linux and the BSDs only.
 
 ### Added
 

@@ -36,7 +36,6 @@ pub(crate) struct Line {
     pub(crate) baseline: f64,
 }
 
-/// A laid out paragraph.
 pub(crate) struct CtLayout {
     id: u64,
     size: Size,
@@ -314,9 +313,6 @@ fn lay_out(text: &str, font: &CTFont, p: &TextParams<'_>) -> CtLayout {
                 (line.typographic_bounds(ptr::null_mut(), ptr::null_mut(), ptr::null_mut()) - line.trailing_whitespace_width()).max(0.0);
             lines.push((line, width));
             start += n;
-        }
-        if lines.is_empty() {
-            return empty_layout(pitch, ascent, cap);
         }
         let width = lines.iter().map(|l| l.1).fold(0.0, f64::max);
         let flush_width = p.max_width.unwrap_or(width);

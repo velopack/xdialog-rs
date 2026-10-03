@@ -36,7 +36,7 @@ fn run() {
 
 #[cfg(not(target_os = "macos"))]
 fn run() {
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::Instant;
 
@@ -111,10 +111,13 @@ fn run() {
         Err(e) => return println!("winit_host_on_demand: skipped, no event loop: {e}"),
     };
     let proxy = el.create_proxy();
+    let wakes = Arc::new(AtomicUsize::new(0));
+    let w = wakes.clone();
     // Windows: Fluent without the TaskDialog fallback (TaskDialogs take focus).
     let backend = if cfg!(windows) { XDialogBackend::Fluent } else { XDialogBackend::Auto };
     let mut host = XDialogBuilder::new().with_backend(backend)
                                         .into_host(move || {
+                                            w.fetch_add(1, Ordering::SeqCst);
                                             let _ = proxy.send_event(());
                                         })
                                         .expect("into_host");
@@ -158,9 +161,11 @@ fn run() {
     }
 
     // Run 1 (`pump_app_events`, so the test can inject input): a worker's dialog is answered by a
-    // click; the event-loop thread's progress dialog closes when its proxy drops and the app's
-    // control flow comes back; the run ends with a dialog open, which closes.
+    // click; the wrapper is dropped mid-run and the host re-wrapped around another app, which
+    // keeps serving the open dialog; the event-loop thread's progress dialog closes when its proxy
+    // drops and the app's control flow comes back; the run ends with a dialog open, which closes.
     let mut first = Inner::default();
+    let mut rewrapped = Inner::default();
     {
         let mut app = host.wrap(&mut first);
         let worker = message("run 1");
@@ -168,6 +173,15 @@ fn run() {
         click(&mut el, &mut app, &d, 0);
         pump(&mut el, &mut app, 2_000, &|_| worker.is_finished());
         assert!(matches!(worker.join().unwrap(), Ok(XDialogResult::ButtonPressed(0))), "the click answered the dialog");
+
+        let worker = message("rewrap");
+        let d = wait_titled(&mut el, &mut app, "rewrap");
+        app.into_inner();
+        let mut app = host.wrap(&mut rewrapped);
+        assert!(titled(&app, "rewrap").is_some(), "the dialog outlives the wrapper");
+        click(&mut el, &mut app, &d, 0);
+        pump(&mut el, &mut app, 2_000, &|_| worker.is_finished());
+        assert!(matches!(worker.join().unwrap(), Ok(XDialogResult::ButtonPressed(0))), "the new wrapper serves the dialog");
 
         let progress = show_progress("run 1 progress", "Run 1", "body", XDialogIcon::Information).unwrap();
         wait_titled(&mut el, &mut app, "run 1 progress");
@@ -185,14 +199,16 @@ fn run() {
         assert!(matches!(worker.join().unwrap(), Ok(XDialogResult::WindowClosed)), "the run's end closed the dialog");
         assert!(app.test_dialogs().is_empty());
     }
-    assert!(first.exited);
+    assert!(rewrapped.exited && !first.exited, "`exiting` reached the app wrapped at the end");
+    first.window = None; // winit: no window outlives a `run_app_on_demand` run
     assert!(!host.is_shut_down(), "the host outlives the run");
 
-    // Between runs: a request queues (its caller blocks); a wake-up is outstanding for the next
-    // run (this request's, or one coalesced with it: the closed dialog's proxy sent its close).
-    let between = message("between runs");
-    std::thread::sleep(Duration::from_millis(300));
-    assert!(!between.is_finished(), "queued until the next run");
+    // Between runs: a request (from the event-loop thread here: no blocking) queues and wakes the
+    // loop for the next run.
+    let wakes_before = wakes.load(Ordering::SeqCst);
+    let between = show_message(XDialogOptions { title: "between runs".into(), buttons: vec!["OK".into()], ..Default::default() });
+    assert!(between.try_result().is_none(), "queued until the next run");
+    assert!(wakes.load(Ordering::SeqCst) > wakes_before, "a request between runs wakes the loop");
 
     // Run 2 (`run_app_on_demand`, another app value; the only re-run path from here on: winit
     // 0.30's `pump_app_events` doesn't clear the exit on X11/Wayland). A worker's `show_progress`
@@ -212,18 +228,18 @@ fn run() {
     });
     el.run_app_on_demand(&mut host.wrap(&mut second)).expect("run 2");
     assert!(worker.join().unwrap(), "the progress dialog opened in run 2");
-    assert!(matches!(between.join().unwrap(), Ok(XDialogResult::WindowClosed)), "the queued dialog opened in run 2 and closed with it");
+    assert!(matches!(between.try_result(), Some(Ok(XDialogResult::WindowClosed))), "the queued dialog opened in run 2 and closed with it");
     assert!(second.exited);
     assert!(second.user_events > 0, "the wake-ups reached this run");
     assert!(host.test_dialogs().is_empty(), "the run's end closed the dialogs");
 
     // Shutdown between runs: the queue is rejected, later calls fail fast, and a run after that
     // only forwards (run 2's closed windows report `Destroyed` there, for the host to swallow).
-    let queued = message("queued at shutdown");
-    std::thread::sleep(Duration::from_millis(300));
+    let queued = show_message(XDialogOptions { title: "queued at shutdown".into(), ..Default::default() });
+    assert!(queued.try_result().is_none());
     host.shutdown();
     assert!(host.is_shut_down());
-    assert!(matches!(queued.join().unwrap(), Err(XDialogError::NoBackendAvailable)), "the queue is rejected");
+    assert!(matches!(queued.try_result(), Some(Err(XDialogError::NoBackendAvailable))), "the queue is rejected");
     assert!(matches!(show_progress("t", "a", "b", XDialogIcon::None), Err(XDialogError::NoBackendAvailable)));
     assert!(matches!(show_message_info_ok("t", "a", "b"), Err(XDialogError::NoBackendAvailable)), "not the UI thread any more");
     let done = Arc::new(AtomicBool::new(true));

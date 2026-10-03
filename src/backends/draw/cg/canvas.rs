@@ -25,12 +25,10 @@ fn cg_rect(r: Rect) -> CGRect {
     CGRect::new(CGPoint::new(r.x0, r.y0), CGSize::new(r.width(), r.height()))
 }
 
-/// Whether `v` is positive and finite (not NaN).
 fn positive(v: f64) -> bool {
     v > 0.0 && v.is_finite()
 }
 
-/// Whether `r` has a positive, finite area.
 fn drawable(r: Rect) -> bool {
     positive(r.width()) && positive(r.height())
 }
@@ -73,15 +71,24 @@ impl ImageCache {
 /// A `CGImage` over a copy of the image's premultiplied RGBA8 pixels.
 fn new_image(image: &Image, space: &CGColorSpace) -> Option<CFRetained<CGImage>> {
     let [w, h] = image.size();
-    let (w, h) = (w as usize, h as usize);
-    if w == 0 || h == 0 || image.rgba().len() != w * h * 4 {
+    // Byte order default + alpha last: R, G, B, A bytes, premultiplied.
+    cg_image(image.rgba(), w as usize, h as usize, space, CGBitmapInfo(CGImageAlphaInfo::PremultipliedLast.0), true)
+}
+
+/// A `w` x `h` `CGImage` of 32-bit pixels laid out as `info` says, over a copy of `bytes` (so the
+/// image owns its pixels whatever CG retains it for). `None` if `bytes` is not `w * h * 4` long.
+pub(super) fn cg_image(bytes: &[u8],
+                       w: usize,
+                       h: usize,
+                       space: &CGColorSpace,
+                       info: CGBitmapInfo,
+                       interpolate: bool)
+                       -> Option<CFRetained<CGImage>> {
+    if w == 0 || h == 0 || bytes.len() != w * h * 4 {
         return None;
     }
-    // CFData copies the bytes, so the image owns its pixels whatever CG retains it for.
-    let data = CFData::from_bytes(image.rgba());
+    let data = CFData::from_bytes(bytes);
     let provider = CGDataProvider::with_cf_data(Some(&data))?;
-    // Byte order default + alpha last: R, G, B, A bytes, premultiplied.
-    let info = CGBitmapInfo(CGImageAlphaInfo::PremultipliedLast.0);
     // SAFETY: 8 bits per component, 32 per pixel, `w * 4` bytes per row: exactly the `w * h * 4`
     // bytes the provider holds (checked above); `decode` may be null (no remapping).
     unsafe {
@@ -94,7 +101,7 @@ fn new_image(image: &Image, space: &CGColorSpace) -> Option<CFRetained<CGImage>>
                      info,
                      Some(&provider),
                      ptr::null(),
-                     true,
+                     interpolate,
                      CGColorRenderingIntent::RenderingIntentDefault)
     }
 }
@@ -144,8 +151,6 @@ impl Painter {
         let cx = unsafe { CGBitmapContextCreate(pixels.as_mut_ptr().cast::<c_void>(), w, h, 8, w * 4, Some(&self.space), info) }
             .ok_or_else(|| DrawError::Backend(format!("cg: CGBitmapContextCreate failed for {w}x{h}")))?;
         let c = Some(&*cx);
-        // Smoothing as decided at construction (offscreen: always on, independent of the user's
-        // font smoothing setting).
         CGContext::set_should_antialias(c, true);
         CGContext::set_allows_font_smoothing(c, self.smooth);
         CGContext::set_should_smooth_fonts(c, self.smooth);

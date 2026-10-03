@@ -7,9 +7,8 @@
 
 use std::rc::Rc;
 
-use super::{Canvas, Color, Image, Layout, Point, Rect};
+use super::{Canvas, Color, Image, Layout, Point, Rect, TextLayout};
 
-/// How the ends of a [`Shape::Line`] look.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LineCap {
     /// Ends exactly at the end points.
@@ -74,7 +73,34 @@ pub(crate) enum Shape {
     PopClip,
 }
 
-/// One frame to present.
+/// Same drawing: layouts and images compare by id (both are immutable).
+impl PartialEq for Shape {
+    fn eq(&self, other: &Shape) -> bool {
+        use Shape as S;
+        match (self, other) {
+            (S::Rect { rect, radius, color, snap }, S::Rect { rect: r, radius: ra, color: c, snap: s }) => {
+                (rect, radius, color, snap) == (r, ra, c, s)
+            }
+            (S::Gradient { rect, radius, top, bottom }, S::Gradient { rect: r, radius: ra, top: t, bottom: b }) => {
+                (rect, radius, top, bottom) == (r, ra, t, b)
+            }
+            (S::Polygon { points, color }, S::Polygon { points: p, color: c }) => (points, color) == (p, c),
+            (S::Stroke { rect, radius, width, color }, S::Stroke { rect: r, radius: ra, width: w, color: c }) => {
+                (rect, radius, width, color) == (r, ra, w, c)
+            }
+            (S::Circle { center, radius, color }, S::Circle { center: ce, radius: r, color: c }) => (center, radius, color) == (ce, r, c),
+            (S::Line { from, to, width, cap, color }, S::Line { from: f, to: t, width: w, cap: ca, color: c }) => {
+                (from, to, width, cap, color) == (f, t, w, ca, c)
+            }
+            (S::Text { layout, pos, color }, S::Text { layout: l, pos: p, color: c }) => layout.id() == l.id() && (pos, color) == (p, c),
+            (S::Image { image, rect }, S::Image { image: i, rect: r }) => image.id() == i.id() && rect == r,
+            (S::PushClip(a), S::PushClip(b)) => a == b,
+            (S::PopClip, S::PopClip) => true,
+            _ => false,
+        }
+    }
+}
+
 pub(crate) struct Frame<'a> {
     pub shapes: &'a [Shape],
     /// Physical px.
@@ -216,7 +242,6 @@ mod tests {
             replay_at(&[Shape::Stroke { rect: Rect::new(10.0, 10.0, 30.0, 30.0), radius: 0.0, width: 1.0, color: Color::BLACK }], 1.5);
         let e = |v: f64| ((v * 1.5 - 1.0f64).round() + 1.0) / 1.5;
         assert_eq!(calls[1], format!("stroke {} {} {} {} w{}", e(10.0), e(10.0), e(30.0), e(30.0), 2.0 / 1.5));
-        // Both edges of the stroke land on whole physical pixels.
         for v in [e(10.0), e(30.0)] {
             let (lo, hi) = (v * 1.5 - 1.0, v * 1.5 + 1.0);
             assert!((lo - lo.round()).abs() < 1e-9 && (hi - hi.round()).abs() < 1e-9, "{lo} {hi}");

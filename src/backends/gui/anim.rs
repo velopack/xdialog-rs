@@ -161,9 +161,9 @@ impl<T: Lerp> Tween<T> {
 }
 
 /// Travel position 0..1 of the indeterminate "stretchy capsule" (see
-/// [`indeterminate_capsule`](super::ui::indeterminate_capsule)) at normalized cycle time `n`:
-/// 0-40 % sweep right, 40-50 % hold, 50-90 % sweep back, 90-100 % hold; each sweep eases with
-/// smoothstep.
+/// [`Ui::indeterminate_capsule`](super::ui::Ui::indeterminate_capsule)) at normalized cycle
+/// time `n`: 0-40 % sweep right, 40-50 % hold, 50-90 % sweep back, 90-100 % hold; each sweep
+/// eases with smoothstep.
 pub(crate) fn capsule_pos(n: f32) -> f32 {
     let smooth = |t: f32| {
         let t = t.clamp(0.0, 1.0);

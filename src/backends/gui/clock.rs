@@ -6,11 +6,9 @@
 
 use std::time::{Duration, Instant};
 
-/// Frame cadence for ordinary animation and input (60 Hz, or the monitor's rate if that is lower):
-/// the soonest a dialog repaints after its previous frame. Every frame is a full theme pass plus a
-/// whole-window software rasterization, so fades, value animations and input (a continuously
-/// moving pointer, key repeat) are coalesced to it. Continuous motion that asked for smooth frames
-/// (`Ui::request_smooth_frame`) runs at the monitor's refresh rate instead.
+/// Frame cadence: 60 Hz, or the monitor's rate if lower. Each frame is a full theme pass plus a
+/// whole-window software rasterization, so animation and input (pointer motion, key repeat) are
+/// coalesced to it. Smooth motion (`Ui::request_smooth_frame`) runs at the monitor's rate instead.
 pub(crate) const FRAME_INTERVAL: Duration = Duration::from_micros(16_667);
 
 /// Seconds since the dialog was created (real time), or a fixed/injected value (tests).
@@ -40,7 +38,6 @@ impl DialogClock {
         }
     }
 
-    /// Fix the clock at `t` seconds.
     #[cfg(any(test, feature = "_test-hooks"))]
     pub(crate) fn freeze(&mut self, t: f64) {
         self.frozen = Some(t);
@@ -52,7 +49,6 @@ impl DialogClock {
 pub(crate) struct Schedule {
     /// When the dialog wants its next frame (`None` = idle).
     pub next: Option<Instant>,
-    /// When the last frame was painted.
     last_paint: Option<Instant>,
     /// The deadline that triggered the frame being painted: the next cadence frame is scheduled
     /// from it, not from the paint time, so wake-up latency and render time don't add up.
@@ -110,6 +106,18 @@ impl Schedule {
         self.anchor = self.next.take();
     }
 
+    /// The requested frame was not painted (window hidden): the next one counts as the window
+    /// system's.
+    pub(crate) fn skipped(&mut self) {
+        self.anchor = None;
+    }
+
+    /// The frame being painted is one this schedule asked for ([`Schedule::fired`]), not one the
+    /// window system needs (expose, resize, first show).
+    pub(crate) fn self_scheduled(&self) -> bool {
+        self.anchor.is_some()
+    }
+
     pub(crate) fn due(&self, now: Instant) -> bool {
         self.next.is_some_and(|t| t <= now)
     }
@@ -134,11 +142,13 @@ mod tests {
         s.after_frame(t0, Wants { repaint: true, smooth: false });
         assert_eq!(s.next, Some(t0 + FRAME_INTERVAL));
         assert!(s.due(t0 + FRAME_INTERVAL));
+        assert!(!s.self_scheduled());
         s.fired();
+        assert!(s.self_scheduled());
         assert!(!s.due(t0 + Duration::from_secs(5)));
-        // Idle.
         s.after_frame(t0, Wants::default());
         assert_eq!(s.next, None);
+        assert!(!s.self_scheduled());
         // Input right after a paint waits for the cadence.
         s.asap(t0);
         assert_eq!(s.next, Some(t0 + FRAME_INTERVAL));

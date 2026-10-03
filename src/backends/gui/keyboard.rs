@@ -26,7 +26,6 @@ const PAGE_FRACTION: f64 = 0.9;
 /// Home/End scroll: a large finite value (the theme clamps).
 const END_SCROLL: f64 = 1.0e6;
 
-/// Per-dialog keyboard state.
 #[derive(Clone, Debug)]
 pub(crate) struct KeyboardState {
     policy: KeyboardPolicy,
@@ -172,9 +171,14 @@ pub(crate) fn default_button(out: &DialogUiOutput) -> Option<usize> {
     out.buttons.iter().map(|b| b.index).max()
 }
 
+/// Whether button `index` (API index) is one of the last pass's buttons.
+pub(crate) fn has_button(out: &DialogUiOutput, index: usize) -> bool {
+    out.buttons.iter().any(|b| b.index == index)
+}
+
 /// `focus` if it is one of the last pass's buttons.
 pub(crate) fn focused_button(focus: Option<usize>, out: &DialogUiOutput) -> Option<usize> {
-    focus.filter(|f| out.buttons.iter().any(|b| b.index == *f))
+    focus.filter(|&f| has_button(out, f))
 }
 
 /// Next entry of `order` from `cur` in direction `dir` (±1); see [`KeyboardState::step`].
@@ -367,10 +371,9 @@ mod tests {
         assert_eq!(r.info().scroll_request, 0.0, "taken");
         r.key(Key::End, true, false);
         assert_eq!(r.info().scroll_request, 1.0e6);
-        // Linux: no scroll keys.
         let mut r = Rig::new(UBUNTU, vec![]);
         r.key(Key::PageDown, true, false);
-        assert_eq!(r.info().scroll_request, 0.0);
+        assert_eq!(r.info().scroll_request, 180.0);
         // The wheel is reported apart (applied under the pointer only).
         r.kb.wheel(30.0);
         let info = r.info();

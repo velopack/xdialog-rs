@@ -4,6 +4,7 @@
 //! which include this file with `#[path]`. `ubuntu.rs` / `fluent.rs` build `Vec<Variant>` from it.
 //!
 //! Coordinates are LOGICAL px (client-relative), like the `Event`s the runner builds.
+// Each of the two including crates uses a different subset.
 #![allow(dead_code)]
 
 use xdialog::__test::{Event, Key, OffscreenDialog, PointerButton, Point, TestAppearance, TestKind, TestMacStyle, TestProgress};
@@ -26,9 +27,7 @@ pub enum Action {
     Leave,
     /// Press and release a key.
     Key(Key),
-    /// Window focus change.
     WindowFocus(bool),
-    /// Change progress.
     Progress(TestProgress),
     /// Replace the body text.
     SetText(String),
@@ -104,8 +103,8 @@ pub fn opts(title: &str, heading: &str, body: &str, icon: XDialogIcon, buttons: 
                      main_instruction: heading.into(),
                      message: body.into(),
                      icon,
-                     icon_source: None,
-                     buttons: buttons.iter().map(|s| s.to_string()).collect() }
+                     buttons: buttons.iter().map(|s| s.to_string()).collect(),
+                     ..Default::default() }
 }
 
 /// Light/dark appearance without an accent.
@@ -130,11 +129,6 @@ pub struct Frame {
     pub h: u32,
     /// RGBA8, `w * h * 4`.
     pub rgba: Vec<u8>,
-}
-
-/// Lower-case name of a drawn backend (`"ubuntu"` / `"fluent"`): the gallery and golden dir.
-pub fn theme_name(backend: XDialogBackend) -> String {
-    format!("{backend:?}").to_lowercase()
 }
 
 /// A primary button press/release at `pos`.

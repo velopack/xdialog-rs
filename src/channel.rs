@@ -5,10 +5,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::*;
 
-/// Trait for dispatching dialog requests to a backend.
-/// Implementations must be thread-safe (`Send + Sync`).
+/// Dispatches dialog requests to a backend.
 pub(crate) trait DialogRequestHandler: Send + Sync {
-    /// Send a dialog message request to the backend.
     fn send(&self, message: DialogMessageRequest) -> Result<(), XDialogError>;
 
     /// Make the backend's event loop iterate, if it has one.
@@ -17,8 +15,7 @@ pub(crate) trait DialogRequestHandler: Send + Sync {
 
 static REQUEST_HANDLER: OnceLock<Box<dyn DialogRequestHandler>> = OnceLock::new();
 
-/// Install the process-wide request handler. Returns `true` if `handler` was installed, `false`
-/// if a handler already existed (the new one is dropped and a warning is logged).
+/// Install the process-wide request handler; `false` (and a warning) if one already exists.
 pub(crate) fn init_handler(handler: Box<dyn DialogRequestHandler>) -> bool {
     if REQUEST_HANDLER.set(handler).is_err() {
         warn!("xdialog: init_handler called more than once, ignoring");
@@ -27,7 +24,6 @@ pub(crate) fn init_handler(handler: Box<dyn DialogRequestHandler>) -> bool {
     true
 }
 
-/// Whether a request handler is installed.
 pub(crate) fn handler_installed() -> bool {
     REQUEST_HANDLER.get().is_some()
 }
@@ -55,6 +51,8 @@ pub(crate) type WakeFn = Box<dyn Fn() + Send>;
 pub(crate) struct Inbox {
     tx: Sender<DialogMessageRequest>,
     wake_pending: AtomicBool,
+    /// Nobody drains any more ([`Inbox::close`]): wakes are no-ops.
+    closed: AtomicBool,
     /// `Mutex`: wakers need only be `Send` (a Windows `EventLoopProxy` isn't `Sync`).
     waker: Mutex<WakeFn>,
 }
@@ -62,7 +60,7 @@ pub(crate) struct Inbox {
 impl Inbox {
     pub(crate) fn new(waker: WakeFn) -> (Arc<Inbox>, Receiver<DialogMessageRequest>) {
         let (tx, rx) = channel();
-        (Arc::new(Inbox { tx, wake_pending: AtomicBool::new(false), waker: Mutex::new(waker) }), rx)
+        (Arc::new(Inbox { tx, wake_pending: AtomicBool::new(false), closed: AtomicBool::new(false), waker: Mutex::new(waker) }), rx)
     }
 
     /// An inbox nobody serves (no backend can run): every request is answered with
@@ -71,11 +69,17 @@ impl Inbox {
         Inbox::new(Box::new(|| {})).0
     }
 
-    /// Call the waker unless a wake is already outstanding.
+    /// Call the waker unless a wake is already outstanding or the inbox is closed.
     pub(crate) fn wake(&self) {
-        if !self.wake_pending.swap(true, Ordering::SeqCst) {
+        if !self.closed.load(Ordering::SeqCst) && !self.wake_pending.swap(true, Ordering::SeqCst) {
             (self.waker.lock().unwrap_or_else(|e| e.into_inner()))();
         }
+    }
+
+    /// The backend stopped draining for good (rejected requests still notify their callers, which
+    /// must not wake a loop that no longer serves dialogs).
+    pub(crate) fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
     }
 
     /// Replace the waker (macOS builder mode: the event loop is built when the first dialog is
@@ -91,10 +95,9 @@ impl Inbox {
     }
 }
 
-/// The installed request handler of builder mode for the drawn (Fluent, Ubuntu, MacOS) and AppKit backends (and "no
-/// backend"), and of `into_host` / `into_host_app`; Win32 TaskDialog installs `TaskDialogManager`
-/// itself. Once the receiver is gone (host shut down or dropped, builder loop ended) requests are
-/// answered with `NoBackendAvailable`.
+/// The request handler of host mode and of builder mode (drawn and AppKit backends, or none);
+/// Win32 TaskDialog installs `TaskDialogManager` instead. Once the receiver is gone (host shut
+/// down, builder loop ended) requests get `NoBackendAvailable`.
 pub(crate) struct InboxHandler(pub Arc<Inbox>);
 
 impl DialogRequestHandler for InboxHandler {
@@ -177,5 +180,10 @@ mod tests {
         let opts = XDialogOptions::default();
         handler.send(DialogMessageRequest::ShowMessageWindow(1, opts, DialogReply::Message(tx))).unwrap();
         assert!(matches!(crx.try_recv(), Ok(Err(XDialogError::NoBackendAvailable))));
+
+        inbox.begin_drain();
+        inbox.close();
+        inbox.wake();
+        assert_eq!(calls.load(Ordering::SeqCst), 2, "a closed inbox never wakes");
     }
 }

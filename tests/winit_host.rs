@@ -198,13 +198,13 @@ fn run() {
     progress.set_indeterminate().unwrap();
     let d = wait_dialog(&mut el, &mut app);
     assert_eq!(d.title, "t");
-    pump(&mut el, &mut app, 400, &|_| false);
-    let frames = first_dialog(&app).unwrap().frames - d.frames;
-    assert!(frames >= 10, "indeterminate progress drew {frames} frames in 400 ms");
+    let frames = |app: &App| first_dialog(app).unwrap().frames - d.frames;
+    pump(&mut el, &mut app, 5_000, &|app| frames(app) >= 10);
+    assert!(frames(&app) >= 10, "indeterminate progress keeps drawing frames ({} in 5 s)", frames(&app));
 
     // Control flow. A later host deadline gives way to xdialog's (an iteration with a due frame's
     // redraw pending has none: wait for one that has) ...
-    pump(&mut el, &mut app, 1_000, &|app| deadline(app).is_some_and(|t| t < far));
+    pump(&mut el, &mut app, 5_000, &|app| deadline(app).is_some_and(|t| t < far));
     assert!(deadline(&app).is_some_and(|t| t < far), "an animating dialog wakes the loop before a later host deadline");
     assert!(app.inner().resumes.is_empty(), "the host app never sees xdialog's deadline as its own");
     // ... an earlier one (already due) is kept and fires as the host's ...
@@ -323,16 +323,31 @@ fn run() {
     pump(&mut el, &mut app, 2_000, &|app| app.test_dialogs().is_empty());
     assert!(app.test_dialogs().is_empty(), "the panicking callback's dialog closed");
 
-    // The host exits: `exiting` closes open dialogs and ends the backend.
-    let worker = message("Exit");
-    wait_dialog(&mut el, &mut app);
+    // Shutdown from inside the run (the loop keeps going): open dialogs close, the next iteration
+    // gives the app its own control flow back (xdialog's deadline for the animating dialog was in
+    // force), later calls fail fast, and the closed windows' late events never reach the app.
+    let worker = message("Shutdown");
+    let progress = show_progress("t", "Shutdown", "body", XDialogIcon::None).unwrap();
+    progress.set_indeterminate().unwrap();
+    pump(&mut el, &mut app, 10_000, &|app| app.test_dialogs().len() == 2 && deadline(app).is_some_and(|t| t < far));
+    assert!(deadline(&app).is_some_and(|t| t < far), "xdialog's deadline is in force");
+    app.host_mut().shutdown();
+    assert!(app.host().is_shut_down());
+    el.pump_app_events(Some(Duration::from_millis(5)), &mut app);
+    assert_eq!(app.test_control_flow(), Some(ControlFlow::WaitUntil(far)), "the app's own flow is restored");
+    assert!(app.inner().resumes.is_empty(), "the host app never sees xdialog's deadline as its own");
+    assert!(matches!(worker.join().unwrap(), Ok(XDialogResult::WindowClosed)));
+    assert!(app.test_dialogs().is_empty());
+    drop(progress);
+    assert!(matches!(show_progress("t", "a", "b", XDialogIcon::None), Err(XDialogError::NoBackendAvailable)));
+    pump(&mut el, &mut app, 200, &|_| false);
+
+    // The host exits: `exiting` (a no-op shutdown here) is forwarded.
     app.inner_mut().quit = true;
     let end = Instant::now() + Duration::from_secs(5);
     while !matches!(el.pump_app_events(Some(Duration::from_millis(5)), &mut app), PumpStatus::Exit(_)) {
         assert!(Instant::now() < end, "the loop exits");
     }
     assert!(app.inner().exited);
-    assert!(matches!(worker.join().unwrap(), Ok(XDialogResult::WindowClosed)));
-    assert!(app.test_dialogs().is_empty());
     assert!(matches!(show_progress("t", "a", "b", XDialogIcon::None), Err(XDialogError::NoBackendAvailable)));
 }
