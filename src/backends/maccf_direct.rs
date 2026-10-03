@@ -40,8 +40,8 @@ const INDETERMINATE_SEG: usize = 2;
 /// Filled / empty cell glyphs for the progress bar.
 const CELL_FILLED: char = '●';
 const CELL_EMPTY: char = '○';
-/// Seconds between animation frames. This is also the interval at which a progress dialog polls
-/// for button presses, so updates from `set_text`/`set_value` become visible within one tick.
+/// Seconds between animation frames; also the button-poll interval, so `set_text`/`set_value`
+/// show within one tick.
 const PROGRESS_TICK: f64 = 0.1;
 
 fn icon_to_alert_level(icon: &XDialogIcon) -> CFOptionFlags {
@@ -114,7 +114,6 @@ enum ProgressMode {
     Indeterminate,
 }
 
-/// Renders the unicode progress bar for the current mode and animation frame.
 fn render_bar(mode: ProgressMode, frame: usize) -> String {
     let lit = match mode {
         ProgressMode::Determinate(value) => 0..(value.clamp(0.0, 1.0) * BAR_WIDTH as f32).round() as usize,
@@ -130,7 +129,6 @@ fn render_bar(mode: ProgressMode, frame: usize) -> String {
     (0..BAR_WIDTH).map(|i| if lit.contains(&i) { CELL_FILLED } else { CELL_EMPTY }).collect()
 }
 
-/// Composes the dialog body: the caller's text, a blank line, then the progress bar.
 fn compose_progress_message(body: &str, bar: &str) -> String {
     if body.is_empty() {
         bar.to_string()
@@ -146,8 +144,8 @@ struct MessageSlot {
     closed: bool,
 }
 
-/// Mutable state shared between the animation thread that owns a progress dialog and the request
-/// handler, which mutates it in response to `SetProgress*`/`CloseWindow` from other threads.
+/// Shared by a progress dialog's animation thread and the request handler (`SetProgress*` /
+/// `CloseWindow` from other threads).
 struct ProgressState {
     /// The live notification. Replaced if the dialog has to be recreated (see the keep-open path).
     notification: NotificationPtr,
@@ -198,7 +196,6 @@ struct MacCfDirectHandler {
 }
 
 impl MacCfDirectHandler {
-    /// Applies `f` to the shared state of the progress dialog with the given id, if one exists.
     fn update_progress<F: FnOnce(&mut ProgressState)>(&self, id: usize, f: F) {
         let guard = self.active.lock().unwrap();
         if let Some(Active::Progress(shared)) = guard.get(&id) {
@@ -317,7 +314,6 @@ fn run_message_dialog(id: usize,
     unsafe { CFRelease(notification as *const _) };
 }
 
-/// Builds the notification dictionary for a progress dialog from its current state and frame.
 fn progress_dict(state: &ProgressState, frame: usize) -> CFDictionary<CFString, CFString> {
     let message = compose_progress_message(&state.body, &render_bar(state.mode, frame));
     alert_dict(&state.header, &message, &state.buttons)
@@ -453,16 +449,13 @@ fn recreate_progress_notification(st: &mut ProgressState, frame: usize) -> Resul
 }
 
 /// Initialize xdialog to use macOS CFUserNotification directly, without an event loop or
-/// [`XDialogBuilder`]. This must be called before any dialog functions.
-/// Can only be called once; subsequent calls will be ignored with a warning.
+/// [`XDialogBuilder`]. Call before any dialog function; later calls are ignored with a warning.
 ///
-/// Supports both message dialogs and progress dialogs. CFUserNotification alerts have at most
-/// three buttons: the last button of [`XDialogOptions::buttons`] is the default (Return) button
-/// and, with more than three buttons, only the last three are shown. A message dialog without
-/// buttons shows an OK button whose press is reported as [`XDialogResult::WindowClosed`]. Because
-/// CFUserNotification has no native progress control, progress is drawn as an animated unicode
-/// text bar in the dialog body (determinate fills the bar to the current value; indeterminate
-/// bounces a segment).
+/// Supports message and progress dialogs. Alerts have at most three buttons: the last of
+/// [`XDialogOptions::buttons`] is the default (Return) button, and only the last three are shown.
+/// A message dialog without buttons shows an OK button reported as [`XDialogResult::WindowClosed`].
+/// CFUserNotification has no progress control, so progress is an animated unicode text bar in the
+/// body (determinate fills it, indeterminate bounces a segment).
 pub fn init_maccf_direct() {
     crate::channel::init_handler(Box::new(MacCfDirectHandler { active: Arc::new(Mutex::new(HashMap::new())) }));
 }

@@ -3,8 +3,8 @@
 //!
 //! xdialog shows buttons in REVERSED API order (affirmative first, the last API index is the
 //! default/accent), so a WinUI display order `[A, B, C]` is the API list `[C, B, A]`.
-//! Stills are captured at `t = 1.0` (suffix ""); the 83 ms button transitions at the trigger
-//! (`_t0`), +40 ms and +120 ms.
+//! Stills are captured at `t = 1.0` (suffix ""); button transitions at the trigger (`_t0`),
+//! +40 ms and +120 ms.
 
 use super::*;
 
@@ -97,7 +97,7 @@ pub fn variants() -> Vec<Variant> {
         v.push(state("standard", "focused").at(1.0, Action::Key(Key::Tab)).capture(1.5, ""));
         v.push(state("standard", "focused_pointerover").at(1.0, Action::Key(Key::Tab)).at(1.0, Action::HoverButton(std_b)).capture(1.5, ""));
 
-        // ---- transitions (83 ms) ----
+        // ---- transitions ----
         for name in ["normal_to_pointerover", "pointerover_to_normal", "pointerover_to_pressed"] {
             for (kind, b) in [("standard", std_b), ("accent", acc_b)] {
                 let t = pointer_mode(Variant::message(format!("transition_{kind}_{name}_{th}"), yesno(), look.clone()));

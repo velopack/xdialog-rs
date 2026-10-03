@@ -50,7 +50,6 @@ pub(crate) struct UiState {
 }
 
 impl UiState {
-    /// Widget state laying out text with `text`.
     pub(crate) fn new(text: Rc<Text>) -> Self {
         UiState { pointer: None,
                   pressed: None,
@@ -229,7 +228,6 @@ impl<'a> Ui<'a> {
         self.shapes.push(Shape::Gradient { rect, radius, top, bottom });
     }
 
-    /// A filled closed polygon.
     pub(crate) fn polygon(&mut self, points: &[Point], color: Color) {
         self.shapes.push(Shape::Polygon { points: points.into(), color });
     }
@@ -403,11 +401,9 @@ pub(crate) fn caps_centered(outer: Rect, label: &TextBlock) -> Point {
 const CAPSULE_CYCLE: f64 = 3.0;
 const CAPSULE_STRETCH: f64 = 0.45;
 
-/// The indeterminate "stretchy capsule" in `track` at `elapsed` seconds into the animation: a
-/// capsule `CAPSULE_STRETCH` of the free track long (plus the track's height) that sweeps right
-/// over 0-40 % of `CAPSULE_CYCLE`, holds, sweeps back over 50-90 % and holds again (see
-/// [`capsule_pos`]), entering and leaving past the track's ends. Clipped to `track`; `None` while
-/// nothing of it is inside.
+/// The indeterminate "stretchy capsule" in `track` at `elapsed` seconds: `CAPSULE_STRETCH` of the
+/// free track long (plus the track's height), moving on the [`capsule_pos`] timeline and entering
+/// and leaving past the track's ends. Clipped to `track`; `None` while fully outside.
 fn indeterminate_capsule(track: Rect, elapsed: f64) -> Option<Rect> {
     let pos = capsule_pos((elapsed.rem_euclid(CAPSULE_CYCLE) / CAPSULE_CYCLE) as f32) as f64;
     let (w, d) = (track.width(), track.height());

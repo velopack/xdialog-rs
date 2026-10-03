@@ -150,13 +150,10 @@ impl Metrics {
                                       button_radius: 6.0,
                                       window_radius: 10.0 };
 
-    /// Tahoe (measured on macOS 26.6 at 2x): the icon at (20, 20), text at x = 22 wrapping at 216
-    /// (the longest unwrapped line measured 211, the shortest wrapped one 217), the first
-    /// baseline 29 below the icon, 26 between the title's last baseline and the body's first, 19
-    /// from the last baseline to the buttons; side-by-side buttons 110 wide (8 apart), stacked
-    /// ones 34 apart (6 gap); 14 pt capsule corners; a 26 pt continuous window corner (fitted to
-    /// the window's alpha). These reproduce the reference window heights (176 to 330) exactly. The
-    /// progress bar distances are not in the references: Sequoia's.
+    /// Tahoe, measured on macOS 26.6 at 2x. Wrap width 216: the longest unwrapped line measured 211,
+    /// the shortest wrapped one 217. The 26 pt continuous window corner is fitted to the window's
+    /// alpha. These reproduce the reference window heights (176 to 330) exactly. The progress bar
+    /// distances are not in the references: Sequoia's.
     const TAHOE: Metrics = Metrics { text_inset: 22.0,
                                      icon_top: 20.0,
                                      icon_left: Some(20.0),
@@ -182,7 +179,6 @@ pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: F
                                                              space: SpaceKey::ActivateOnRelease,
                                                              scroll_keys: true };
 
-/// The macOS theme.
 pub(crate) struct MacTheme {
     style: MacStyle,
     tokens: MacTokens,
@@ -361,7 +357,6 @@ impl Theme for MacTheme {
                            });
         }
         if let Some(p) = view.progress {
-            // As wide as the text column.
             let r = Rect::new(m.text_inset, anchor + m.text_to_progress, WIDTH - m.text_inset, anchor + m.text_to_progress + PROGRESS_H);
             widgets::progress(ui, r, p, &tk);
             out.parts.progress = Some(r);
@@ -373,7 +368,6 @@ impl Theme for MacTheme {
             let default_button = n - 1;
             let is_default = |i: usize| view.progress.is_none() && i == default_button;
             if stacked {
-                // Default on top, then the others in reversed API order.
                 let mut col = Column::new(PAD, WIDTH - PAD, top);
                 for k in 0..n {
                     let index = n - 1 - k;

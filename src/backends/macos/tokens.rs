@@ -8,9 +8,8 @@
 //! cleared with when the behind-window material is unavailable. Everything drawn on top of it is
 //! translucent, as AppKit's control fills are, so it reads the same over the material.
 //!
-//! Fonts ([`FONTS`]): the system UI font (SF Pro) on macOS: 13 pt bold title, 13 pt button
-//! labels, and an 11 pt (Sequoia) or 13 pt (Tahoe) body. Elsewhere (renders of this look on Windows and Linux) SF Pro when installed,
-//! else Segoe UI, else the platform UI font.
+//! Fonts ([`FONTS`]): SF Pro on macOS (13 pt bold title, 13 pt labels, 11 pt Sequoia / 13 pt
+//! Tahoe body); elsewhere SF Pro when installed, else Segoe UI, else the platform UI font.
 
 use crate::backends::draw::color::{argb, rgb};
 use crate::backends::draw::{Color, Weight};

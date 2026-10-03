@@ -1,6 +1,5 @@
 //! A softbuffer window surface (Linux/BSD: the software backend's frames; macOS: the CoreGraphics
-//! backend draws straight into the buffer). A failed present recreates the surface and retries
-//! once (surface lost).
+//! backend draws straight into the buffer).
 
 use std::num::NonZeroU32;
 use std::rc::Rc;
@@ -50,7 +49,6 @@ impl Surface {
                 if buffer.len() * 4 != rgba.len() {
                     return Err(DrawError::Backend(format!("{} bytes of RGBA for {} pixels", rgba.len(), buffer.len())));
                 }
-                // RGBA -> softbuffer's 0x00RRGGBB.
                 for (dst, p) in buffer.iter_mut().zip(rgba.as_chunks::<4>().0.iter()) {
                     *dst = u32::from_be_bytes([0, p[0], p[1], p[2]]);
                 }

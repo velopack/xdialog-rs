@@ -34,7 +34,6 @@ pub use xdialog::{XDialogBackend, XDialogIcon, XDialogOptions};
 /// A gallery theme: its output directory name, backend and variant list.
 type Theme = (&'static str, XDialogBackend, fn() -> Vec<Variant>);
 
-/// The gallery themes and their variant lists.
 const THEMES: [Theme; 4] = [("ubuntu", XDialogBackend::Ubuntu, ubuntu::variants),
                             ("fluent", XDialogBackend::Fluent, fluent::variants),
                             ("macos", XDialogBackend::MacOS, macos::variants),

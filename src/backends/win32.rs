@@ -26,7 +26,6 @@ use crate::{ProgressButtonCallback, ProgressDialogProxy, XDialogError, XDialogIc
 /// dialogs' runtime (Win32 routing / fallback). `ExitEventLoop` closes every TaskDialog; unknown
 /// ids are ignored.
 pub(crate) struct TaskDialogManager {
-    /// The request channel of each open dialog.
     open_dialogs: Arc<Mutex<HashMap<usize, Sender<DialogMessageRequest>>>>,
 }
 
@@ -86,7 +85,6 @@ impl TaskDialogManager {
         });
     }
 
-    /// Close every open dialog.
     pub(crate) fn close_all(&self) {
         for (&id, tx) in self.lock().iter() {
             let _ = tx.send(DialogMessageRequest::CloseWindow(id));
@@ -115,8 +113,8 @@ impl DialogRequestHandler for TaskDialogManager {
 }
 
 /// Initialize xdialog to use Win32 TaskDialog directly, without an event loop or
-/// [`XDialogBuilder`](crate::XDialogBuilder). This must be called before any dialog functions.
-/// Can only be called once; subsequent calls will be ignored with a warning.
+/// [`XDialogBuilder`](crate::XDialogBuilder). Call before any dialog function; later calls are
+/// ignored with a warning.
 ///
 /// TaskDialog is part of Common Controls v6. The executable needs no manifest for it: without
 /// one that selects v6, xdialog activates v6 for its own dialogs.
@@ -154,15 +152,14 @@ fn result_from_id(id: i32, n: usize) -> XDialogResult {
 
 struct TaskDialogConfig {
     options: XDialogOptions,
-    /// Show a progress bar.
     progress: bool,
     /// The progress bar is in marquee (indeterminate) mode.
     marquee: bool,
     x_dialog_id: usize,
     /// Requests for this dialog, applied on each timer tick.
     rx: Receiver<DialogMessageRequest>,
-    /// Optional callback invoked when a button is clicked. Returns `true` to keep the dialog open
-    /// (returns `S_FALSE` to the task dialog) or `false` to allow it to close.
+    /// On button click: `true` keeps the dialog open (`S_FALSE` to the task dialog), `false` lets
+    /// it close.
     button_callback: Option<ProgressButtonCallback>,
     /// Opened on `TDN_CREATED`; still here if the dialog never opened.
     reply: Option<DialogReply>,

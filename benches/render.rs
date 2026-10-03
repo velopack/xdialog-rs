@@ -53,7 +53,6 @@ fn bench(c: &mut Criterion) {
 
         // Static frame (nothing animating): time advances, output identical.
         frames(&mut g, BenchmarkId::new("static", "1x"), open(1.0, TestKind::Message));
-        // HiDPI static frame.
         frames(&mut g, BenchmarkId::new("static", "2x"), open(2.0, TestKind::Message));
 
         // Hover fade: alternate hover on/off every 10 frames so tweens are always running.

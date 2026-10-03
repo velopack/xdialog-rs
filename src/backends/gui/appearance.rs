@@ -41,9 +41,9 @@ impl Appearance {
     }
 }
 
-/// Read the cached platform appearance (never blocks, except up to 150 ms for the very first
-/// portal read on Linux), then apply the `XDialogTheme` override (forces `dark`, keeps the
-/// accent), then the test env overrides (test builds only).
+/// The cached platform appearance (blocks only up to 150 ms for the first Linux portal read),
+/// with the `XDialogTheme` override (forces `dark`, keeps the accent), then the test env overrides
+/// (test builds only).
 pub(crate) fn resolve_appearance(theme: XDialogTheme) -> Appearance {
     let mut a = platform::read();
     match theme {

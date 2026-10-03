@@ -136,8 +136,8 @@ impl FluentTokens {
                        separator: base.blend(card_stroke),
                        text,
                        std_rest: std(ctl_fill, true, text),
-                       // Pointer-over is more pronounced than WinUI's (FBFBFB -> F6F6F6 light,
-                       // 2D2D2D -> 323232 dark): the rest fill moved towards the text colour.
+                       // Stronger than WinUI's pointer-over (FBFBFB -> F6F6F6 light, 2D2D2D ->
+                       // 323232 dark); see HOVER_SHIFT.
                        std_hover: std(bar.blend(ctl_fill).lerp_to_gamma(t(0xFF000000, 0xFFFFFFFF), HOVER_SHIFT), true, text),
                        std_pressed: std(ctl_fill_3, false, text_2),
                        acc_rest: acc(accent, true, on_acc_text),
@@ -170,8 +170,8 @@ pub(crate) const LINE_RATIO: f64 = 2724.0 / 2048.0;
 pub(crate) const BODY_SIZE: f64 = 14.0;
 pub(crate) const TITLE_SIZE: f64 = 20.0;
 
-/// Segoe UI Variable (WinUI's `XamlAutoFontFamily`; DirectWrite names the text optical size
-/// "Segoe UI Variable Text"), else Segoe UI (Windows 10), else the platform UI font.
+/// See the module docs. DirectWrite names Segoe UI Variable's text optical size
+/// "Segoe UI Variable Text".
 pub(crate) static FONTS: ThemeFonts = ThemeFonts { families: &["Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", "Ubuntu"],
                                                    regular: Weight::REGULAR,
                                                    bold: Weight::SEMIBOLD,

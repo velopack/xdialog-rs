@@ -4,8 +4,8 @@ use std::rc::Rc;
 
 use super::color::mul_frac_round;
 
-/// Immutable premultiplied RGBA8 bitmap (custom icon). Cheap to clone. `id` is process-unique
-/// (global AtomicU64) and is what backends key their uploaded copies on.
+/// Immutable premultiplied RGBA8 bitmap (custom icon), cheap to clone. Backends key their
+/// uploaded copies on its process-unique `id`.
 #[derive(Clone)]
 pub(crate) struct Image {
     id: u64,

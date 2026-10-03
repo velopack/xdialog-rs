@@ -11,9 +11,8 @@
 //! └── buttons (Button, Click + Focus), Tab order
 //! ```
 //!
-//! The tree is built on demand: only while an assistive technology is active (the activation
-//! handler set the `active` flag, the deactivation handler cleared it) and published only when it
-//! changed. The adapter's handlers may run on any thread: they only update the shared state, queue
+//! The tree is built only while an assistive technology is active and published only when it
+//! changed. The adapter's handlers may run on any thread: they only update shared state, queue
 //! action requests and wake the event loop, which applies them on the UI thread through the
 //! keyboard paths (`Dialog::a11y_request`).
 

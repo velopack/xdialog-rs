@@ -62,13 +62,11 @@ fn reg_get(subkey: &str, value: &str, flags: REG_ROUTINE_FLAGS) -> Option<Vec<u8
     (err == ERROR_SUCCESS).then(|| buf[..size as usize].to_vec())
 }
 
-/// A DWORD under HKCU.
 pub(crate) fn read_hkcu_dword(subkey: &str, value: &str) -> Option<u32> {
     let b = reg_get(subkey, value, RRF_RT_REG_DWORD)?;
     Some(u32::from_le_bytes(b.get(..4)?.try_into().ok()?))
 }
 
-/// A REG_BINARY under HKCU.
 pub(crate) fn read_hkcu_binary(subkey: &str, value: &str) -> Option<Vec<u8>> {
     reg_get(subkey, value, RRF_RT_REG_BINARY)
 }

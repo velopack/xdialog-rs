@@ -48,8 +48,8 @@ mod progress;
 static SILENT: AtomicBool = AtomicBool::new(false);
 static NEXT_ID: AtomicUsize = AtomicUsize::new(1);
 
-/// Set the silent mode for the dialog. When silent mode is enabled, all dialog functions will
-/// return `XDialogResult::SilentMode` without showing any dialogs.
+/// Set silent mode. While it is on, dialog functions return `XDialogResult::SilentMode` without
+/// showing any dialog.
 pub fn set_silent_mode(silent: bool) {
     SILENT.store(silent, Ordering::Relaxed);
 }
@@ -58,7 +58,6 @@ fn get_silent() -> bool {
     SILENT.load(Ordering::Relaxed)
 }
 
-/// A new dialog id.
 fn get_next_id() -> usize {
     NEXT_ID.fetch_add(1, Ordering::Relaxed)
 }

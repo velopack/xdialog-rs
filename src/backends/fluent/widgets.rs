@@ -34,7 +34,7 @@ pub(crate) const ICON_SIZE: f64 = 32.0;
 /// A ContentDialog command button in `rect`: standard (DefaultButtonStyle) or accent
 /// (AccentButtonStyle).
 ///
-/// - Both styles: the background fades over 150 ms (linear); label and border switch instantly.
+/// - Both styles: the background fades (`FADE`); label and border switch instantly.
 /// - Standard border = ControlElevationBorderBrush (rest, pointer-over) or flat
 ///   ControlStrokeColorDefault (pressed).
 /// - Accent: no border when pressed.
@@ -62,10 +62,8 @@ pub(crate) fn button(ui: &mut Ui<'_>,
     let std_fill = ui.animate(button_id(index).with("fluent.bg"), std.fill, if accent { Transition::INSTANT } else { FADE });
     let acc_fill = ui.animate(button_id(index).with("fluent.acc_bg"), acc.fill, if accent { FADE } else { Transition::INSTANT });
     let colors = if accent { ButtonColors { fill: acc_fill, ..acc } } else { ButtonColors { fill: std_fill, ..std } };
-    // The elevation edge: top for the dark standard button, else bottom.
     paint_box(ui, rect, &colors, !accent && tk.std_elevation_top);
     if st.focus_visible {
-        // Both rings outside the button: 1 px inner, 2 px outer.
         ui.stroke_rect(rect.inflate(0.5, 0.5), CORNER + 0.5, 1.0, tk.focus_inner);
         ui.stroke_rect(rect.inflate(2.0, 2.0), CORNER + 2.0, 2.0, tk.focus_outer);
     }
@@ -194,8 +192,7 @@ pub(crate) fn icon(ui: &mut Ui<'_>, origin: Point, icon: &XDialogIcon, tk: &Flue
 // Scroll bar
 // ------------------------------------------------------------------------------------------------
 
-/// WinUI's overlay scroll bar (ScrollBar): a 2 px thumb (`FluentTokens::scroll_thumb`), 6 px
-/// while hovered, 2 px from the viewport's right edge, at least 12 tall.
+/// WinUI's overlay scroll bar (ScrollBar), in `FluentTokens::scroll_thumb`.
 pub(crate) const SCROLL_BAR: ScrollBarSpec = ScrollBarSpec { thin: 2.0,
                                                              wide: 6.0,
                                                              inset: 2.0,
@@ -215,7 +212,6 @@ mod tests {
         assert_eq!(indeterminate_bars(0.0, w), vec![(-120.0, 120.0)]);
         // Both visible between 0.75 and 1.5 s.
         assert_eq!(indeterminate_bars(1.0, w).len(), 2);
-        // Bar 2 ends at 0.996 w.
         let end = indeterminate_bars(1.9999, w);
         assert_eq!(end.len(), 1);
         assert!((end[0].0 - 0.996 * w).abs() < 0.5, "{end:?}");

@@ -25,12 +25,10 @@ fn cg_rect(r: Rect) -> CGRect {
     CGRect::new(CGPoint::new(r.x0, r.y0), CGSize::new(r.width(), r.height()))
 }
 
-/// Whether `v` is positive and finite (not NaN).
 fn positive(v: f64) -> bool {
     v > 0.0 && v.is_finite()
 }
 
-/// Whether `r` has a positive, finite area.
 fn drawable(r: Rect) -> bool {
     positive(r.width()) && positive(r.height())
 }
@@ -153,8 +151,6 @@ impl Painter {
         let cx = unsafe { CGBitmapContextCreate(pixels.as_mut_ptr().cast::<c_void>(), w, h, 8, w * 4, Some(&self.space), info) }
             .ok_or_else(|| DrawError::Backend(format!("cg: CGBitmapContextCreate failed for {w}x{h}")))?;
         let c = Some(&*cx);
-        // Smoothing as decided at construction (offscreen: always on, independent of the user's
-        // font smoothing setting).
         CGContext::set_should_antialias(c, true);
         CGContext::set_allows_font_smoothing(c, self.smooth);
         CGContext::set_should_smooth_fonts(c, self.smooth);

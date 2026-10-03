@@ -25,7 +25,6 @@ use crate::backends::gui::runtime::wake_all;
 pub(crate) const UBUNTU_REGULAR: &[u8] = include_bytes!("fonts/Ubuntu-Regular.ttf");
 pub(crate) const UBUNTU_BOLD: &[u8] = include_bytes!("fonts/Ubuntu-Bold.ttf");
 
-/// The bundled family.
 pub(crate) const BUNDLED_FAMILY: &str = "Ubuntu";
 
 /// A face ready for drawing: the font data (shared with cosmic-text) and its normalized variation
@@ -110,7 +109,6 @@ impl Fonts {
                 weights: HashMap::new() }
     }
 
-    /// Whether the database has a face of `family`.
     pub(crate) fn has_family(&self, family: &str) -> bool {
         self.system.db().faces().any(|f| f.families.iter().any(|(n, _)| n == family))
     }

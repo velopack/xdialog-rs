@@ -74,10 +74,9 @@ fn parse_backend(value: &str) -> Option<XDialogBackend> {
     found
 }
 
-/// `XDialogBuilder::run_loop`: install the request handler of the backend `requested` resolves
-/// to, run `main` on a new thread, serve the requests on this thread until `main` returns (drawn:
-/// the winit loop; AppKit: its loop; Win32 TaskDialog and "no backend" need no loop) and return
-/// `main`'s result. A panic in `main` is resumed here once the backend stopped.
+/// `XDialogBuilder::run_loop`: install the handler of the backend `requested` resolves to, run
+/// `main` on a new thread and serve requests here until it returns (drawn: the winit loop; AppKit:
+/// its loop; TaskDialog and no backend: none). A panic in `main` is resumed after the backend stops.
 pub(crate) fn run_builder<T: Send + 'static>(requested: XDialogBackend, theme: XDialogTheme, main: fn() -> T) -> T {
     if crate::channel::handler_installed() {
         // `into_host_app` / `init_win32_direct` / ... ran first: their handler serves the requests.
