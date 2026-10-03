@@ -33,7 +33,6 @@ struct FamilyInner {
     key: u32,
 }
 
-/// A laid-out paragraph.
 pub(crate) struct DwLayout {
     #[allow(dead_code)] // `TextLayout::id`, used by the soft backend only
     id: u64,
@@ -99,7 +98,6 @@ pub(crate) struct Text {
     families: RefCell<Vec<Family>>,
 }
 
-/// `s` as a NUL-terminated UTF-16 string.
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
 }

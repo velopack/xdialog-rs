@@ -27,9 +27,8 @@ use crate::model::{XDialogIcon, XDialogIconSource};
 /// dark by the window's appearance).
 const MATERIAL: NSVisualEffectMaterial = NSVisualEffectMaterial::Popover;
 
-/// Liquid Glass is available (macOS 26 and later): AppKit has `NSGlassEffectView`. Checked once.
-/// (The class rather than the OS version: binaries linked against an SDK older than 26 see
-/// version 16.0.)
+/// Liquid Glass is available (macOS 26+). Checks for the `NSGlassEffectView` class, not the OS
+/// version: binaries linked against a pre-26 SDK see version 16.0.
 pub(crate) fn has_liquid_glass() -> bool {
     static GLASS: OnceLock<bool> = OnceLock::new();
     *GLASS.get_or_init(|| objc2::runtime::AnyClass::get(c"NSGlassEffectView").is_some())

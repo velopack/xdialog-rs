@@ -27,9 +27,7 @@ pub enum Action {
     Leave,
     /// Press and release a key.
     Key(Key),
-    /// Window focus change.
     WindowFocus(bool),
-    /// Change progress.
     Progress(TestProgress),
     /// Replace the body text.
     SetText(String),

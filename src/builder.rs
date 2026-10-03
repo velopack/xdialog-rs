@@ -1,8 +1,8 @@
 use crate::model::*;
 
 #[derive(Debug, Default)]
-/// Builder pattern to configure/initialise the XDialog library. Must be configured and `run` in
-/// the main thread before any other XDialog functions are called.
+/// Configures and starts xdialog. Must be `run` on the main thread before any other xdialog
+/// function is called.
 pub struct XDialogBuilder {
     theme: XDialogTheme,
     backend: XDialogBackend,
@@ -14,7 +14,7 @@ impl XDialogBuilder {
         XDialogBuilder::default()
     }
 
-    /// Set the theme to use for the dialog. By default, the theme is chosen automatically.
+    /// Set the dialog theme (default [`XDialogTheme::SystemDefault`]).
     pub fn with_theme(mut self, theme: XDialogTheme) -> XDialogBuilder {
         self.theme = theme;
         self
@@ -26,33 +26,24 @@ impl XDialogBuilder {
         self
     }
 
-    /// Run with no return value. This is the simplest way to use xdialog when your application
-    /// logic does not need to return an exit code or result.
-    /// See [`run_loop`](Self::run_loop).
+    /// [`run_loop`](Self::run_loop) for a `main` with no return value.
     pub fn run(self, main: fn()) {
         self.run_loop(main);
     }
 
-    /// Run and return an `i32` exit code. This is useful for applications that want to return
-    /// a process exit code from their main function.
-    /// See [`run_loop`](Self::run_loop).
+    /// [`run_loop`](Self::run_loop) for a `main` returning a process exit code.
     pub fn run_i32(self, main: fn() -> i32) -> i32 {
         self.run_loop(main)
     }
 
-    /// Run and return a `Result`. This is useful for applications that use `Result`-based error
-    /// handling in their main function.
-    /// See [`run_loop`](Self::run_loop).
+    /// [`run_loop`](Self::run_loop) for a `main` returning a `Result`.
     pub fn run_result<T: Send + 'static, E: Send + 'static>(self, main: fn() -> Result<T, E>) -> Result<T, E> {
         self.run_loop(main)
     }
 
-    /// Run the XDialog library with the specified configuration, returning an arbitrary type.
-    /// For most use cases, prefer [`run`](Self::run), [`run_i32`](Self::run_i32), or
-    /// [`run_result`](Self::run_result) instead.
-    ///
-    /// This function will block the main thread and run the specified `main` function in a
-    /// separate thread.
+    /// Run `main` on a separate thread while this (main) thread runs xdialog's event loop, and
+    /// return `main`'s result. [`run`](Self::run), [`run_i32`](Self::run_i32) and
+    /// [`run_result`](Self::run_result) are the usual shorthands.
     pub fn run_loop<T: Send + 'static>(self, main: fn() -> T) -> T {
         crate::backends::run_builder(self.backend, self.theme, main)
     }

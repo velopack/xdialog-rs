@@ -42,7 +42,6 @@ fn wic() -> Result<IWICImagingFactory, DrawError> {
        })
 }
 
-/// A WIC bitmap and its render target.
 struct Target {
     bitmap: IWICBitmap,
     dc: ID2D1DeviceContext,

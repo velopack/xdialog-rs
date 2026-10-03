@@ -11,9 +11,10 @@
 //! OutCubic, the indeterminate capsule loops every 3 s.
 //!
 //! Keyboard: Tab / Left / Right move focus with wrapping, Enter / Space activate the focused
-//! button on press, Escape closes. The last button is focused on open and its focus ring is drawn
-//! also while the window is inactive. Hovering any button hides the focus ring until focus moves,
-//! the pointer moves off the buttons or leaves the window (a hovered button then fades to idle).
+//! button on press, Escape closes, PageUp / PageDown / Home / End scroll the body. The last
+//! button is focused on open and its focus ring is drawn also while the window is inactive.
+//! Hovering any button hides the focus ring until focus moves, the pointer moves off the buttons
+//! or leaves the window (a hovered button then fades to idle).
 
 use crate::backends::draw::{Color, Point, Rect, Size};
 use crate::backends::gui::appearance::Appearance;
@@ -35,7 +36,6 @@ pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: F
                                                              space: SpaceKey::ActivateOnPress,
                                                              scroll_keys: false };
 
-/// The Ubuntu theme.
 pub(crate) struct UbuntuTheme {
     tokens: UbuntuTokens,
     /// The focus ring is hidden (the pointer moved over a button).

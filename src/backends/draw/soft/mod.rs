@@ -24,7 +24,6 @@ use super::{DrawError, Frame};
 /// Names the golden directory.
 pub const NAME: &str = "soft";
 
-/// Presents into a window through softbuffer.
 pub(crate) struct WindowSurface {
     surface: softbuffer_surface::Surface,
     painter: Painter,

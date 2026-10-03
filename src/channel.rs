@@ -5,10 +5,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::*;
 
-/// Trait for dispatching dialog requests to a backend.
-/// Implementations must be thread-safe (`Send + Sync`).
+/// Dispatches dialog requests to a backend.
 pub(crate) trait DialogRequestHandler: Send + Sync {
-    /// Send a dialog message request to the backend.
     fn send(&self, message: DialogMessageRequest) -> Result<(), XDialogError>;
 
     /// Make the backend's event loop iterate, if it has one.
@@ -17,8 +15,7 @@ pub(crate) trait DialogRequestHandler: Send + Sync {
 
 static REQUEST_HANDLER: OnceLock<Box<dyn DialogRequestHandler>> = OnceLock::new();
 
-/// Install the process-wide request handler. Returns `true` if `handler` was installed, `false`
-/// if a handler already existed (the new one is dropped and a warning is logged).
+/// Install the process-wide request handler; `false` (and a warning) if one already exists.
 pub(crate) fn init_handler(handler: Box<dyn DialogRequestHandler>) -> bool {
     if REQUEST_HANDLER.set(handler).is_err() {
         warn!("xdialog: init_handler called more than once, ignoring");
@@ -27,7 +24,6 @@ pub(crate) fn init_handler(handler: Box<dyn DialogRequestHandler>) -> bool {
     true
 }
 
-/// Whether a request handler is installed.
 pub(crate) fn handler_installed() -> bool {
     REQUEST_HANDLER.get().is_some()
 }
@@ -99,10 +95,9 @@ impl Inbox {
     }
 }
 
-/// The installed request handler of builder mode for the drawn (Fluent, Ubuntu, MacOS) and AppKit backends (and "no
-/// backend"), and of `into_host` / `into_host_app`; Win32 TaskDialog installs `TaskDialogManager`
-/// itself. Once the receiver is gone (host shut down or dropped, builder loop ended) requests are
-/// answered with `NoBackendAvailable`.
+/// The request handler of host mode and of builder mode (drawn and AppKit backends, or none);
+/// Win32 TaskDialog installs `TaskDialogManager` instead. Once the receiver is gone (host shut
+/// down, builder loop ended) requests get `NoBackendAvailable`.
 pub(crate) struct InboxHandler(pub Arc<Inbox>);
 
 impl DialogRequestHandler for InboxHandler {

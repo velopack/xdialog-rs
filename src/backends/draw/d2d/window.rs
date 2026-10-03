@@ -24,7 +24,6 @@ const PRESENT_OPTIONS: D2D1_PRESENT_OPTIONS = D2D1_PRESENT_OPTIONS_IMMEDIATELY;
 const PRESENT_OPTIONS: D2D1_PRESENT_OPTIONS =
     D2D1_PRESENT_OPTIONS(D2D1_PRESENT_OPTIONS_IMMEDIATELY.0 | D2D1_PRESENT_OPTIONS_RETAIN_CONTENTS.0);
 
-/// A render target on the window and what is bound to its device.
 struct Target {
     rt: ID2D1HwndRenderTarget,
     dc: ID2D1DeviceContext,
@@ -82,7 +81,6 @@ impl HwndSurface {
     }
 }
 
-/// Presents into a window.
 pub(crate) struct WindowSurface {
     surface: HwndSurface,
     /// Keeps the HWND alive (dropped after the render target).

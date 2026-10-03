@@ -146,8 +146,8 @@ pub(crate) struct MemorySurface {
 #[cfg(any(test, feature = "_test-hooks"))]
 impl crate::backends::draw::MemoryTarget for MemorySurface {
     fn new(text: &Rc<Text>) -> Result<Self, DrawError> {
-        // Smoothing always on (AppKit's default, what a window shows unless the user turned it
-        // off): renders look like the real dialog and do not depend on the user's setting.
+        // Smoothing always on (AppKit's default), so renders match a default window whatever the
+        // user's setting.
         Ok(MemorySurface { painter: Painter::new(text.color_space.clone(), true), pixels: Vec::new(), rgba: Vec::new(), size: [0, 0] })
     }
 

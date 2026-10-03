@@ -33,6 +33,8 @@ fn show_message_returns_silent_mode() {
     assert!(matches!(dialog.wait_timeout(std::time::Duration::from_millis(1)), Ok(XDialogResult::SilentMode)));
 }
 
+/// Without a backend (none is initialized here), only silent mode lets this return `Ok`; the
+/// proxy's calls and its drop are no-ops.
 #[test]
 fn progress_callback_never_runs_in_silent_mode() {
     use std::sync::Arc;

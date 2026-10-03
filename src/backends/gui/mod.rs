@@ -1,8 +1,7 @@
-//! The core of the drawn backends (Fluent, Ubuntu, MacOS): runtime and event loop, windows, input,
-//! appearance/DPI, accessibility (AccessKit), request handling and test hooks, plus the measure
-//! pass, the keyboard policy, text layout and a small widget API ([`ui::Ui`]). It draws through
-//! the `draw` layer (a display list replayed by the one drawing backend of the target). Look,
-//! layout and widgets live in the themes.
+//! The core of the drawn backends (Fluent, Ubuntu, MacOS): runtime, event loop, windows, input,
+//! appearance/DPI, accessibility (AccessKit), the measure pass, keyboard policy, text layout and a
+//! small widget API ([`ui::Ui`]). Draws through the `draw` layer; look, layout and widgets live in
+//! the themes.
 
 pub(crate) mod a11y;
 pub(crate) mod anim;

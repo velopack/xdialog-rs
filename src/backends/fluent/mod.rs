@@ -73,7 +73,6 @@ pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: F
                                                              space: SpaceKey::ActivateOnRelease,
                                                              scroll_keys: true };
 
-/// The Fluent theme.
 pub(crate) struct FluentTheme {
     tokens: FluentTokens,
     /// Body scroll offset, logical px.
@@ -224,8 +223,7 @@ impl Theme for FluentTheme {
             let focused = ui.focused_button();
             let accent =
                 |i: usize| view.progress.is_none() && i == default_button && (focused.is_none() || focused == Some(default_button));
-            // Equal columns (ContentDialog CommandSpace): the buttons fill the last `n` slots, so
-            // one button sits in the right half.
+            // ContentDialog CommandSpace (see `slots` above).
             let cells = columns(row, slots, BUTTON_GAP);
             for k in 0..n {
                 let index = n - 1 - k;
@@ -276,7 +274,6 @@ mod tests {
         st.pointer = Some(out.buttons[0].rect.center());
         pass_with(&mut theme, &wheel, &mut st, 0.0);
         assert_eq!(theme.scroll, 0.0);
-        // Over the body.
         st.pointer = Some(body_r.center());
         pass_with(&mut theme, &wheel, &mut st, 0.0);
         assert_eq!(theme.scroll, 40.0);

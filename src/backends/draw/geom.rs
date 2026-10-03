@@ -18,7 +18,6 @@ pub struct Vec2 {
     pub y: f64,
 }
 
-/// A width and height.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Size {
     pub width: f64,

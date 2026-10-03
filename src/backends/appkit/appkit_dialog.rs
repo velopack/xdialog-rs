@@ -7,7 +7,6 @@ use objc2_foundation::*;
 
 use crate::model::*;
 
-// Layout constants
 const WINDOW_MIN_WIDTH: f64 = 350.0;
 const WINDOW_MAX_WIDTH: f64 = 500.0;
 const WINDOW_PADDING: f64 = 16.0;
@@ -58,7 +57,6 @@ impl AppKitDialog {
 
         let content_view = window.contentView().unwrap();
 
-        // Icon
         let icon_image = get_icon_image(&options.icon);
         let icon_view = icon_image.map(|image| {
             let size = if has_progress { ICON_PROGRESS_SIZE } else { ICON_SIZE };
@@ -70,7 +68,6 @@ impl AppKitDialog {
             iv
         });
 
-        // Title
         let title_field = if !options.main_instruction.is_empty() {
             let field = create_label(&options.main_instruction, true, mtm);
             content_view.addSubview(&field);
@@ -79,7 +76,6 @@ impl AppKitDialog {
             None
         };
 
-        // Progress bar
         let progress = if has_progress {
             let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(100.0, PROGRESS_HEIGHT));
             let p = NSProgressIndicator::initWithFrame(
@@ -97,7 +93,6 @@ impl AppKitDialog {
             None
         };
 
-        // Body text
         let body_field = if !options.message.is_empty() {
             let field = create_label(&options.message, false, mtm);
             content_view.addSubview(&field);
@@ -135,7 +130,7 @@ impl AppKitDialog {
             content_view.addSubview(&btn);
             buttons.push(btn);
         }
-        buttons.reverse(); // put back in original order
+        buttons.reverse(); // back to API order: `buttons[i]` is button `i`
 
         let dialog = Self { mtm, window, title_field, body_field, progress, icon_view, buttons };
         dialog.layout();
@@ -147,7 +142,6 @@ impl AppKitDialog {
         let has_progress = self.progress.is_some();
         let icon_size = if has_progress { ICON_PROGRESS_SIZE } else { ICON_SIZE };
 
-        // When icon is present (any dialog type), text area is narrower
         let text_width = |content_width: f64| if has_icon { content_width - icon_size - WINDOW_PADDING } else { content_width };
         // Title and body heights at a text width, measured with the actual field cells (accounts
         // for wrapping/padding)
@@ -165,7 +159,6 @@ impl AppKitDialog {
         let text_area_width = text_width(content_width);
         let (title_height, body_height) = measure(text_area_width);
 
-        // Compute text block height
         let mut text_block_height = 0.0;
         if title_height > 0.0 {
             text_block_height += title_height + TEXT_SPACING;
@@ -177,7 +170,6 @@ impl AppKitDialog {
             text_block_height += body_height + TEXT_SPACING;
         }
 
-        // Main area is the taller of icon or text block
         let main_area_height = if has_icon {
             text_block_height.max(icon_size)
         } else {
@@ -219,19 +211,16 @@ impl AppKitDialog {
             ));
         }
 
-        // Text starts to the right of the icon (or at left padding if no icon)
         let text_x = if has_icon {
             WINDOW_PADDING + icon_size + WINDOW_PADDING
         } else {
             WINDOW_PADDING
         };
 
-        // Vertically center text block if shorter than icon
         if has_icon && text_block_height < main_area_height {
             y -= (main_area_height - text_block_height) / 2.0;
         }
 
-        // Title
         if let Some(ref tf) = self.title_field {
             y -= title_height;
             tf.setFrame(NSRect::new(
@@ -241,7 +230,6 @@ impl AppKitDialog {
             y -= TEXT_SPACING;
         }
 
-        // Progress bar
         if let Some(ref p) = self.progress {
             y -= PROGRESS_HEIGHT;
             p.setFrame(NSRect::new(
@@ -251,7 +239,6 @@ impl AppKitDialog {
             y -= TEXT_SPACING;
         }
 
-        // Body text
         if let Some(ref bf) = self.body_field {
             y -= body_height;
             bf.setFrame(NSRect::new(
@@ -305,9 +292,8 @@ impl AppKitDialog {
 
     pub fn set_progress_indeterminate(&self) {
         if let Some(ref p) = self.progress {
-            // Reset to 0 first - the indeterminate animation won't start
-            // if the bar was previously at a high value. We need a
-            // display cycle between resetting and switching modes.
+            // Reset to 0 and display first: the indeterminate animation won't start from a high value
+            // without a display cycle between the reset and the mode switch.
             p.setIndeterminate(false);
             unsafe { p.stopAnimation(None) };
             p.setDoubleValue(0.0);
@@ -356,7 +342,6 @@ fn create_label(text: &str, bold: bool, mtm: MainThreadMarker) -> Retained<NSTex
         field.setFont(Some(&NSFont::systemFontOfSize(BODY_FONT_SIZE)));
     }
 
-    // Enable word wrapping
     if let Some(cell) = field.cell() {
         cell.setWraps(true);
         cell.setLineBreakMode(NSLineBreakMode::ByWordWrapping);

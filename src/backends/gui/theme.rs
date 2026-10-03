@@ -53,9 +53,9 @@ pub(crate) struct FrameInfo {
     /// API index of the button that shows the keyboard-pressed look (Space held on it,
     /// [`SpaceKey::ActivateOnRelease`]).
     pub key_pressed: Option<usize>,
-    /// Keyboard scroll request for the body viewport (logical px; positive = reveal content
-    /// further down): PageUp/PageDown/Home/End when [`KeyboardPolicy::scroll_keys`]. A theme with
-    /// a scrolling body applies it; otherwise it ignores it.
+    /// Keyboard scroll request for the body viewport (logical px; positive = reveal content further
+    /// down), from the scroll keys when [`KeyboardPolicy::scroll_keys`]. Themes without a scrolling
+    /// body ignore it.
     pub scroll_request: f64,
     /// Mouse wheel scroll since the last pass (same units and sign as `scroll_request`). A theme
     /// applies it only while the pointer is over its scrolling viewport, as a native scroll view.

@@ -87,7 +87,6 @@ fn lf_newlines(text: String) -> String {
     }
 }
 
-/// Construction parameters.
 pub(crate) struct DialogParams {
     /// Request id (the `ProgressDialogProxy` id handed to callbacks).
     pub id: usize,
@@ -220,8 +219,7 @@ impl Dialog {
     }
 
     /// The icon's image at the current scale (rendered on first use and when the scale changes):
-    /// `Custom`'s icon file, or the theme's system image of a severity icon; nothing to do
-    /// without either.
+    /// `Custom`'s icon file, or the theme's system image of a severity icon.
     fn update_icon(&mut self) {
         let file = match self.content.icon {
             XDialogIcon::None => return,
@@ -418,7 +416,6 @@ impl Dialog {
         self.schedule.asap(Instant::now());
     }
 
-    /// Run the keyboard policy for one event and apply its action.
     fn keyboard_event(&mut self, ev: &Event) {
         let client_h = self.client_logical().height;
         match self.keyboard.on_event(ev, &mut self.st.focus, &self.out, client_h) {
@@ -530,7 +527,7 @@ impl Dialog {
         self.invalidate();
     }
 
-    /// Re-resolve the platform appearance (portal change); no-op for a fixed appearance.
+    /// Re-resolve the platform appearance; no-op for a fixed (injected) appearance.
     pub(crate) fn refresh_appearance(&mut self) {
         if let Some(xt) = self.system_appearance {
             let a = resolve_appearance(xt);

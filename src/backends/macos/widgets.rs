@@ -27,10 +27,10 @@ const PROGRESS_VALUE: Transition = Transition::new(0.2, Easing::CubicBezier(0.25
 // Push button
 // ------------------------------------------------------------------------------------------------
 
-/// A push button in `rect` with corners of `radius`: the default button (accent gradient, flat on
-/// Tahoe; white label) or a standard one (translucent fill). Under the pointer the fill fades to its hover shade (no hover while another
-/// button is held); the pressed look shows at once while the pointer is held inside, or Space is
-/// held. The focus ring shows only with keyboard focus visibility.
+/// A push button in `rect`: the default button (accent gradient, flat on Tahoe; white label) or
+/// a standard one (translucent fill). Under the pointer the fill fades to its hover shade (no
+/// hover while another button is held); the pressed look shows at once while the pointer is held
+/// inside or Space is held. The focus ring shows only with keyboard focus visibility.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn button(ui: &mut Ui<'_>,
                      rect: Rect,
@@ -190,8 +190,7 @@ fn inset_vertex(prev: Point, at: Point, next: Point, r: f64) -> Point {
 // Overlay scroller
 // ------------------------------------------------------------------------------------------------
 
-/// The overlay scroller (`MacTokens::scroll_thumb`): a rounded knob 6 wide, 9 under the pointer
-/// or while dragged, inset 2 from the viewport's right edge, top and bottom, at least 18 tall.
+/// The overlay scroller, in `MacTokens::scroll_thumb`.
 pub(crate) const SCROLL_BAR: ScrollBarSpec = ScrollBarSpec { thin: 6.0,
                                                              wide: 9.0,
                                                              inset: 2.0,

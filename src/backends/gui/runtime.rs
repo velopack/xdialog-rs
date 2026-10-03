@@ -51,7 +51,6 @@ const DEFAULT_MAX_HEIGHT: f64 = 800.0;
 /// How long a dialog that needs fallback fonts waits for the system font scan when it opens.
 const FONT_WAIT: Duration = Duration::from_millis(300);
 
-/// One dialog and its window.
 struct DialogWindow {
     dialog: Dialog,
     /// `Rc`: the drawing surface holds a clone.
@@ -337,7 +336,6 @@ impl Runtime {
         }
     }
 
-    /// The runtime's text system (created on first use).
     fn text(&mut self) -> Result<Rc<Text>, XDialogError> {
         if let Some(t) = &self.text {
             return Ok(t.clone());
@@ -405,13 +403,12 @@ impl Runtime {
         }
         #[cfg(windows)]
         {
-            // No title bar and no close button: the dialog draws its whole client area and is
-            // moved by dragging its background (`dialog_event`). The title still names the window
-            // in the taskbar, Alt+Tab and to screen readers; Alt+F4 still closes it (WS_SYSMENU
-            // stays). The DWM shadow and rounded corners (Windows 11) keep it looking like a
-            // window. No drag and drop: winit's default registers an OLE drop target, which needs
-            // (and on an uninitialised host thread silently makes) an STA thread and aborts on an
-            // MTA one. Dialogs take no drops.
+            // No title bar or close button: the dialog draws its whole client area and is moved by
+            // dragging its background (`dialog_event`). The title still names the window in the
+            // taskbar, Alt+Tab and to screen readers; Alt+F4 still closes it (WS_SYSMENU stays).
+            // DWM shadow and Windows 11 rounded corners keep it looking like a window. No drag and
+            // drop: winit's default registers an OLE drop target, which needs (and on an
+            // uninitialised host thread silently makes) an STA thread and aborts on an MTA one.
             use winit::platform::windows::{CornerPreference, WindowAttributesExtWindows};
             attrs = attrs.with_decorations(false)
                          .with_undecorated_shadow(true)

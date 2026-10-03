@@ -4,10 +4,9 @@
 //! A [`TextBlock`] is one layout per paragraph (ended by `\n`, `\r\n`, `\r` or U+2029), stacked.
 //! Each paragraph is laid out in its own direction: a right-to-left paragraph (first strong
 //! character) is laid out at its own width with its lines right-aligned, and right-aligned within
-//! the block. A centred style
-//! ([`TextStyle::centered`]) centres every line and paragraph in the block instead. The block itself records
-//! whether it starts right-to-left, so painters can right-align it in its column. `max_lines`
-//! elides the text (with `…`) until it fits.
+//! the block. A centred style ([`TextStyle::centered`]) centres every line and paragraph in the
+//! block instead. The block itself records whether it starts right-to-left, so painters can
+//! right-align it in its column. `max_lines` elides the text (with `…`) until it fits.
 //!
 //! Layouts carry no colour (it is chosen when a block is painted), so a block is laid out once
 //! and painted in any colour. [`TextCache`] keeps blocks and paragraph layouts across passes.
@@ -253,7 +252,8 @@ impl TextCache {
         let wrap = wrap_width.is_finite().then_some(wrap_width);
         let mut paras = Vec::new();
         let (mut y, mut width, mut lines) = (0.0f64, 0.0f64, 0usize);
-        // A separator left in a paragraph would be one more paragraph to DirectWrite.
+        // Every separator DirectWrite honours ends a paragraph here too (one left inside would be an
+        // extra line there); `\r\n` is a single break, not two.
         let text = if text.contains("\r\n") { std::borrow::Cow::Owned(text.replace("\r\n", "\n")) } else { text.into() };
         for para in text.split(['\n', '\r', '\u{2029}']) {
             let rtl = starts_rtl(para);

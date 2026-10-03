@@ -47,9 +47,9 @@ fn split_tag(tag: isize) -> (usize, usize) {
 }
 
 thread_local! {
-    /// The open dialogs, keyed by dialog id, on the AppKit loop thread. Not passed around because
-    /// the buttonClicked: handler is an extern "C" callback that can't capture Rust state: it looks
-    /// the dialog up by the id in the button's tag.
+    /// Open dialogs by id, on the AppKit loop thread. Global because the `buttonClicked:`
+    /// handler is an extern "C" callback that can't capture Rust state: it finds the dialog by
+    /// the button's tag.
     static OPEN: RefCell<HashMap<usize, Open>> = RefCell::new(HashMap::new());
 }
 
@@ -119,12 +119,10 @@ pub(crate) fn run_loop(receiver: Receiver<DialogMessageRequest>) {
         }
         return;
     };
-    // Headless phase: do not touch AppKit until a dialog is actually requested.
-    // Connecting to the window server registers the process with LaunchServices —
-    // when the executable lives inside another app's bundle (e.g. an updater in
-    // Contents/MacOS) it checks in as a second instance of that app, which can
-    // surface in the Dock and steal focus. Most invocations of such tools never
-    // show any UI, so stay completely invisible until one does.
+    // Don't touch AppKit until a dialog is requested: connecting to the window server registers
+    // with LaunchServices, and an executable inside another app's bundle (e.g. an updater in
+    // Contents/MacOS) checks in as a second instance of that app, which can appear in the Dock
+    // and steal focus.
     let first_message = loop {
         match receiver.recv() {
             Err(_) => return,
@@ -177,7 +175,6 @@ pub(crate) fn run_loop(receiver: Receiver<DialogMessageRequest>) {
                     })
             });
 
-        // Drain all pending messages
         loop {
             let message = match receiver.try_recv() {
                 Ok(msg) => msg,

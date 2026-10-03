@@ -1,7 +1,5 @@
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
-/// The theme to use for the dialog. The concrete colors and fonts are chosen by each backend;
-/// this only selects light vs dark. `SystemDefault` follows the OS/desktop preference where the
-/// backend can detect it, otherwise falls back to a light theme.
+/// Light or dark dialog theme; the concrete colors and fonts are chosen by each backend.
 pub enum XDialogTheme {
     /// Follow the OS/desktop light-or-dark preference (falls back to light if unknown)
     #[default]
@@ -48,8 +46,8 @@ pub enum XDialogIcon {
     Warning,
     /// Information icon
     Information,
-    /// The image of [`XDialogOptions::icon_source`] (the drawn backends; the others show no icon).
-    /// Without an icon source (or if it can't be loaded) the dialog shows no icon.
+    /// The image of [`XDialogOptions::icon_source`], with the drawn backends. Other backends, or a
+    /// missing or unloadable icon source, show no icon.
     Custom,
 }
 
@@ -91,9 +89,9 @@ pub struct XDialogOptions {
     /// frame of an `.ico`) must be 8-bit RGB, RGBA, gray or gray + alpha: palette (indexed) and
     /// 16-bit PNGs are not supported. Frames over 1024 px are skipped.
     pub icon_source: Option<XDialogIconSource>,
-    /// The buttons to display in the dialog. This can be an empty array to collapse the button panel.
-    /// For progress dialogs the buttons are shown on every platform; an empty array shows no button
-    /// except with Win32 TaskDialog, which shows a default button.
+    /// The dialog's buttons. Empty hides the button panel, except with Win32 TaskDialog (message or
+    /// progress) and a maccf-direct message dialog, which then show an OK button that reports
+    /// [`XDialogResult::WindowClosed`].
     pub buttons: Vec<String>,
 }
 

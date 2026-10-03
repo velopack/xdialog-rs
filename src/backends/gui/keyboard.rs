@@ -26,7 +26,6 @@ const PAGE_FRACTION: f64 = 0.9;
 /// Home/End scroll: a large finite value (the theme clamps).
 const END_SCROLL: f64 = 1.0e6;
 
-/// Per-dialog keyboard state.
 #[derive(Clone, Debug)]
 pub(crate) struct KeyboardState {
     policy: KeyboardPolicy,
@@ -372,7 +371,6 @@ mod tests {
         assert_eq!(r.info().scroll_request, 0.0, "taken");
         r.key(Key::End, true, false);
         assert_eq!(r.info().scroll_request, 1.0e6);
-        // Linux: no scroll keys.
         let mut r = Rig::new(UBUNTU, vec![]);
         r.key(Key::PageDown, true, false);
         assert_eq!(r.info().scroll_request, 0.0);

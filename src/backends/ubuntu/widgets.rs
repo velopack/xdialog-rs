@@ -12,9 +12,7 @@ use crate::backends::gui::theme::{button_id, ButtonInteraction, DialogView, Prog
 use crate::backends::gui::ui::{caps_centered, Id, ScrollBarSpec, Ui};
 use crate::model::XDialogIcon;
 
-/// Button colour fade: 150 ms linear.
 const FADE: Transition = Transition::linear(0.15);
-/// Progress value animation: 300 ms OutCubic.
 const VALUE_ANIM: Transition = Transition::new(0.3, Easing::OutCubic);
 
 // ------------------------------------------------------------------------------------------------
@@ -29,14 +27,14 @@ impl Lerp for ButtonLook {
     }
 }
 
-/// Natural width of a button with `label`: label + 2 x 24 (no minimum).
+/// Natural width of a button with `label` (no minimum).
 pub(crate) fn button_width(label: &TextBlock) -> f64 {
     label.size.width + 2.0 * BUTTON_PAD_X
 }
 
-/// Outlined rounded button in `rect`: radius 6, a 2 px border centred on the edge, the label
-/// centred (capitals centred vertically). State priority `Pressed > Hovered > Focused > Idle`; every change fades all three
-/// colours linearly over 150 ms from the displayed value. The focus border is hidden while
+/// Outlined rounded button in `rect`: the border centred on the edge, the label centred
+/// (capitals centred vertically). State priority `Pressed > Hovered > Focused > Idle`; every
+/// change fades all three colours from the displayed value. The focus border is hidden while
 /// `focus_suppressed` (the pointer is over a button).
 pub(crate) fn button(ui: &mut Ui<'_>,
                      rect: Rect,
@@ -77,9 +75,8 @@ fn progress_id() -> Id {
     Id::new("ubuntu.progress.value")
 }
 
-/// The progress bar in `rect` (`PROGRESS_H` tall): a radius-2 track + bar animating to each new
-/// value over 300 ms OutCubic; indeterminate = a pill track with the shared "stretchy capsule"
-/// (`Ui::indeterminate_capsule`) on a 3 s loop.
+/// The progress bar in `rect`: a rounded track + bar animating to each new value;
+/// indeterminate = a pill track with the shared "stretchy capsule" (`Ui::indeterminate_capsule`).
 pub(crate) fn progress(ui: &mut Ui<'_>, rect: Rect, progress: ProgressView, tk: &UbuntuTokens) {
     match progress {
         ProgressView::Determinate { value } => {
@@ -104,8 +101,7 @@ pub(crate) fn progress(ui: &mut Ui<'_>, rect: Rect, progress: ProgressView, tk: 
 // Scroll bar
 // ------------------------------------------------------------------------------------------------
 
-/// GTK's overlay scroll bar (Yaru): a 3 px slider (`UbuntuTokens::scroll_thumb`), 8 px while
-/// hovered or dragged, inset 3 from the viewport's right edge, top and bottom, at least 40 tall.
+/// GTK's overlay scroll bar (Yaru), in `UbuntuTokens::scroll_thumb`.
 pub(crate) const SCROLL_BAR: ScrollBarSpec = ScrollBarSpec { thin: 3.0,
                                                              wide: 8.0,
                                                              inset: 3.0,

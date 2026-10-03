@@ -37,8 +37,8 @@ pub(crate) use geom::*;
 pub(crate) use image::Image;
 pub(crate) use list::{Frame, LineCap, Shape};
 
-/// soft only: start the background system font scan (idempotent; the runtime calls it early so
-/// fallback fonts are usually ready before a dialog needs them).
+/// Start the background system font scan (idempotent); called early so fallback fonts are
+/// usually ready before a dialog needs them.
 #[cfg(draw_soft)]
 pub(crate) use backend::fonts::start_scan as start_font_scan;
 
@@ -65,29 +65,26 @@ pub(crate) struct TextParams<'a> {
     #[cfg_attr(not(windows), allow(dead_code))] // D2D only
     pub optical_size: Option<f64>,
     /// Uniform line pitch in logical px (Fluent size*2724/2048, Ubuntu size*1.2); None = font's
-    /// natural. The difference to the font's ascent + descent is split evenly above and below the
-    /// glyphs (CSS half-leading): baseline = ascent + (line_height - ascent - descent) / 2, so text
-    /// centred by its layout box is centred visually whatever the font's own metrics.
+    /// natural. The surplus over ascent + descent is split evenly above and below (CSS half-leading),
+    /// so text centred by its layout box is centred visually.
     pub line_height: Option<f64>,
     /// None = no wrapping. Some(w) = wrap at whitespace, emergency-break over-long words.
     pub max_width: Option<f64>,
-    /// Paragraph base direction (shared code computes it with unicode_bidi::get_base_direction).
-    /// Lines are start-aligned in that direction (right-aligned within max_width when true).
+    /// Paragraph base direction (from unicode_bidi::get_base_direction); true = lines right-aligned
+    /// within max_width.
     pub rtl: bool,
     /// Centre every line within `max_width` (unwrapped: within the widest line) instead of
     /// start-aligning it.
     pub center: bool,
 }
 
-/// Per-thread text/font service. Obtained with `Text::shared()`; the runtime keeps an Rc,
-/// offscreen/tests use the same thread-local instance. Not Send. `&self` everywhere
-/// (backends use interior mutability for their caches).
+/// Per-thread text/font service (not Send) from `Text::shared()`, used by the runtime, offscreen
+/// rendering and tests alike. `&self` everywhere: backends cache behind interior mutability.
 pub(crate) trait TextSystem: Sized + 'static {
     type Family: Clone + PartialEq + core::fmt::Debug;
     type Layout: TextLayout;
-    /// Thread-local shared instance (created on first use; warm D2D/DWrite factories matter:
-    /// spike f7fa4b8 measured ~160 ms vs ~10 ms first emoji frame). Err = backend unavailable
-    /// (→ `Auto` falls back to Win32 on Windows).
+    /// Thread-local instance, created on first use (warm D2D/DWrite factories: ~160 ms vs ~10 ms
+    /// first emoji frame, spike f7fa4b8). Err = backend unavailable (`Auto` falls back to Win32).
     fn shared() -> Result<std::rc::Rc<Self>, DrawError>;
     /// First of `candidates` the platform has, else the platform UI font
     /// (Segoe UI / SF via CTFontCreateUIFontForLanguage / bundled Ubuntu).
@@ -114,8 +111,8 @@ pub(crate) trait TextLayout: Clone + 'static {
     /// Cap height of the paragraph's primary font (logical px): with `first_baseline`, what
     /// centres a label's capitals optically.
     fn cap_height(&self) -> f64;
-    /// Process-unique monotonic id assigned at creation (NOT a pointer — no ABA). The soft
-    /// backend's text rasters key on (id, scale).
+    /// Process-unique monotonic id assigned at creation (NOT a pointer — no ABA). Display lists
+    /// compare text by it (`Shape::eq`); the soft backend's text rasters key on (id, scale).
     fn id(&self) -> u64;
 }
 
@@ -130,8 +127,7 @@ pub(crate) trait Canvas {
     fn stroke_rect(&mut self, rect: Rect, radius: f64, width: f64, color: Color);
     fn fill_circle(&mut self, center: Point, radius: f64, color: Color);
     fn line(&mut self, from: Point, to: Point, width: f64, cap: LineCap, color: Color);
-    /// Anti-aliased fill of a (rounded) rect with a vertical linear gradient, `top` at its top
-    /// edge to `bottom` at its bottom edge.
+    /// Anti-aliased (rounded) rect fill, vertical linear gradient from `top` to `bottom`.
     fn fill_rect_gradient(&mut self, rect: Rect, radius: f64, top: Color, bottom: Color);
     /// Anti-aliased fill of the closed polygon through `points` (non-zero winding).
     fn fill_polygon(&mut self, points: &[Point], color: Color);
@@ -177,7 +173,6 @@ pub(crate) enum DrawError {
     Backend(String),
 }
 
-// ---- the concrete cfg-selected types all other code uses ----
 pub(crate) type Text = backend::Text;
 pub(crate) type Family = <Text as TextSystem>::Family;
 pub(crate) type Layout = <Text as TextSystem>::Layout;

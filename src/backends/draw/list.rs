@@ -9,7 +9,6 @@ use std::rc::Rc;
 
 use super::{Canvas, Color, Image, Layout, Point, Rect, TextLayout};
 
-/// How the ends of a [`Shape::Line`] look.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum LineCap {
     /// Ends exactly at the end points.
@@ -102,7 +101,6 @@ impl PartialEq for Shape {
     }
 }
 
-/// One frame to present.
 pub(crate) struct Frame<'a> {
     pub shapes: &'a [Shape],
     /// Physical px.
@@ -244,7 +242,6 @@ mod tests {
             replay_at(&[Shape::Stroke { rect: Rect::new(10.0, 10.0, 30.0, 30.0), radius: 0.0, width: 1.0, color: Color::BLACK }], 1.5);
         let e = |v: f64| ((v * 1.5 - 1.0f64).round() + 1.0) / 1.5;
         assert_eq!(calls[1], format!("stroke {} {} {} {} w{}", e(10.0), e(10.0), e(30.0), e(30.0), 2.0 / 1.5));
-        // Both edges of the stroke land on whole physical pixels.
         for v in [e(10.0), e(30.0)] {
             let (lo, hi) = (v * 1.5 - 1.0, v * 1.5 + 1.0);
             assert!((lo - lo.round()).abs() < 1e-9 && (hi - hi.round()).abs() < 1e-9, "{lo} {hi}");

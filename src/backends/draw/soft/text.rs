@@ -25,7 +25,6 @@ pub(crate) struct GlyphRun {
     pub glyphs: Vec<Glyph>,
 }
 
-/// A shaped paragraph.
 #[derive(Debug)]
 pub(crate) struct Shaped {
     id: u64,

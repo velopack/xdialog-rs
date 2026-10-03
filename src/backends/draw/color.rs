@@ -1,12 +1,12 @@
 //! Colours: a bit-for-bit port of `ecolor::Color32` 0.36.2 (the representation and maths the
 //! themes' tokens were written against).
 
-/// Premultiplied, sRGB-encoded (gamma space) RGBA8 — identical representation and maths to
-/// ecolor::Color32 0.36.2. All blending on every backend is gamma-space source-over.
+/// Premultiplied, sRGB-encoded (gamma space) RGBA8. All blending on every backend is gamma-space
+/// source-over.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Color([u8; 4]);
 
-/// `(r + 0.5) as u8`: rounds, saturating (ecolor's `fast_round`).
+/// Rounds, saturating (ecolor's `fast_round`).
 const fn fast_round(r: f32) -> u8 {
     (r + 0.5) as u8
 }
@@ -21,7 +21,7 @@ impl Color {
     pub const TRANSPARENT: Color = Color::from_rgba_premultiplied(0, 0, 0, 0);
     pub const BLACK: Color = Color::from_rgb(0, 0, 0);
     pub const WHITE: Color = Color::from_rgb(255, 255, 255);
-    /// (160, 160, 160), as `Color32::GRAY`.
+    /// As `Color32::GRAY`.
     #[cfg(test)]
     pub const GRAY: Color = Color::from_rgb(160, 160, 160);
     #[cfg(test)]
@@ -60,7 +60,6 @@ impl Color {
         self.0[2]
     }
 
-    /// Alpha (opacity).
     pub const fn a(self) -> u8 {
         self.0[3]
     }
@@ -115,7 +114,6 @@ impl Color {
 impl core::ops::Add for Color {
     type Output = Color;
 
-    /// Saturating per channel.
     fn add(self, o: Color) -> Color {
         Color([self.0[0].saturating_add(o.0[0]),
                self.0[1].saturating_add(o.0[1]),
@@ -166,7 +164,6 @@ mod tests {
         let additive = Color::from_rgba_premultiplied(255, 127, 10, 0);
         assert_eq!(additive.blend(opaque), opaque);
         assert_eq!(opaque.blend(additive), Color::from_rgb(255, 177, 70));
-        // Half-transparent black over white.
         assert_eq!(Color::WHITE.blend(Color::from_rgba_unmultiplied(0, 0, 0, 128)), Color::from_rgb(127, 127, 127));
         assert_eq!(Color::WHITE.gamma_multiply_u8(128).to_array(), [128, 128, 128, 128]);
     }

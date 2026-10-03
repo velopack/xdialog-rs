@@ -8,21 +8,16 @@ use crate::backends::gui::text::ThemeFonts;
 
 /// Outer padding, vertical gap between stacked items and icon/text gap.
 pub(super) const MARGIN: f64 = 16.0;
-/// Icon size.
 pub(super) const ICON_SIZE: f64 = 48.0;
-/// Footer strip height.
 pub(super) const FOOTER_H: f64 = 48.0;
 /// Button inset from the footer top/bottom and the right edge.
 pub(super) const FOOTER_MARGIN: f64 = 7.0;
-/// Gap between buttons.
 pub(super) const BUTTON_GAP: f64 = 7.0;
 /// Horizontal label padding on each side.
 pub(super) const BUTTON_PAD_X: f64 = 24.0;
-/// Button height (`48 - 2 * 7`).
 pub(super) const BUTTON_H: f64 = FOOTER_H - 2.0 * FOOTER_MARGIN;
 pub(super) const BUTTON_RADIUS: f64 = 6.0;
 pub(super) const BUTTON_BORDER: f64 = 2.0;
-/// Progress bar height.
 pub(super) const PROGRESS_H: f64 = 6.0;
 /// Determinate track/bar corner radius (logical; not a pill).
 pub(super) const PROGRESS_RADIUS: f64 = 2.0;
@@ -30,7 +25,6 @@ pub(super) const PROGRESS_RADIUS: f64 = 2.0;
 /// overlay scroll bar sits in the margin, next to the text).
 pub(super) const MIN_VIEWPORT: f64 = 40.0;
 pub(super) const SCROLLBAR_INSET: f64 = 4.0;
-/// Window width bounds.
 pub(super) const MIN_WIDTH: f64 = 350.0;
 pub(super) const MAX_WIDTH: f64 = 600.0;
 /// Title (main instruction): Ubuntu Bold 18. Body and button labels: Ubuntu Regular 14.
@@ -113,7 +107,7 @@ impl UbuntuTokens {
     fn apply_accent(&mut self, accent: Color) {
         let pressed = accent.lerp_to_gamma(Color::BLACK, 0.25);
         self.progress_fg = accent;
-        // blend(accent, bg, 0.65): 35% accent + 65% background.
+        // 35% accent + 65% background.
         self.progress_bg = accent.lerp_to_gamma(self.bg, 0.65);
         self.hover = ButtonLook { border: accent, fill: accent, text: contrasting_text(accent) };
         self.pressed = ButtonLook { border: pressed, fill: pressed, text: contrasting_text(pressed) };

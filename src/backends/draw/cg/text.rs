@@ -36,7 +36,6 @@ pub(crate) struct Line {
     pub(crate) baseline: f64,
 }
 
-/// A laid out paragraph.
 pub(crate) struct CtLayout {
     #[allow(dead_code)] // `TextLayout::id`, used by the soft backend only
     id: u64,

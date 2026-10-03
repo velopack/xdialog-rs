@@ -70,8 +70,7 @@ fn run(el: EventLoop<()>, rt: &mut Runtime) {
 /// Build the event loop: `with_any_thread(true)` (tests and `XDialogBuilder` run on arbitrary
 /// threads), Windows `with_dpi_aware(false)` (the thread sets per-monitor-v2 itself; a library
 /// must not change process DPI state), macOS an accessory app (no Dock icon or menu bar, like
-/// CFUserNotification alerts; windows still take focus) without winit's default menu. A panic
-/// inside `build()` is caught.
+/// CFUserNotification alerts; windows still take focus) without winit's default menu.
 fn build() -> Result<EventLoop<()>, String> {
     let built = catch_unwind(AssertUnwindSafe(|| {
                                  let mut b = EventLoop::<()>::with_user_event();
