@@ -373,7 +373,7 @@ mod tests {
         assert_eq!(r.info().scroll_request, 1.0e6);
         let mut r = Rig::new(UBUNTU, vec![]);
         r.key(Key::PageDown, true, false);
-        assert_eq!(r.info().scroll_request, 0.0);
+        assert_eq!(r.info().scroll_request, 180.0);
         // The wheel is reported apart (applied under the pointer only).
         r.kb.wheel(30.0);
         let info = r.info();

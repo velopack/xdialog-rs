@@ -34,7 +34,6 @@ struct FamilyInner {
 }
 
 pub(crate) struct DwLayout {
-    #[allow(dead_code)] // `TextLayout::id`, used by the soft backend only
     id: u64,
     /// `None`: DirectWrite failed (logged); nothing is drawn.
     pub(crate) layout: Option<IDWriteTextLayout>,

@@ -106,6 +106,12 @@ impl Schedule {
         self.anchor = self.next.take();
     }
 
+    /// The requested frame was not painted (window hidden): the next one counts as the window
+    /// system's.
+    pub(crate) fn skipped(&mut self) {
+        self.anchor = None;
+    }
+
     /// The frame being painted is one this schedule asked for ([`Schedule::fired`]), not one the
     /// window system needs (expose, resize, first show).
     pub(crate) fn self_scheduled(&self) -> bool {

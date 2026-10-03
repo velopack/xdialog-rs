@@ -4,19 +4,14 @@
 //! first builder of a process runs in a child, `<exe> panic`). `harness = false`: macOS wants the
 //! UI on the main thread, and one winit loop per process.
 
+mod common;
+
 use std::panic::catch_unwind;
 use std::time::Duration;
 use xdialog::*;
 
 fn main() {
-    // A hung loop must fail the test, not stall CI.
-    std::thread::spawn(|| {
-        std::thread::sleep(Duration::from_secs(30));
-        eprintln!("builder: timed out");
-        std::process::exit(1);
-    });
-    std::env::set_var("XDIALOG_TEST_NO_ACTIVATE", "1");
-    std::env::set_var("XDIALOG_TEST_POS", "offscreen");
+    common::harness("builder", Duration::from_secs(30));
     std::env::remove_var("XDIALOG_BACKEND");
 
     if std::env::args().nth(1).as_deref() == Some("panic") {

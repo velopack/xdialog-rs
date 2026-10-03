@@ -34,7 +34,7 @@ pub(crate) const KEYBOARD: KeyboardPolicy = KeyboardPolicy { focus_visibility: F
                                                              enter_falls_back_to_default: false,
                                                              enter_activates_default: false,
                                                              space: SpaceKey::ActivateOnPress,
-                                                             scroll_keys: false };
+                                                             scroll_keys: true };
 
 pub(crate) struct UbuntuTheme {
     tokens: UbuntuTokens,
@@ -251,6 +251,11 @@ mod tests {
         let wheel = DialogView { frame: FrameInfo { wheel_request: 40.0, ..v.frame }, ..v };
         pass_with(&mut theme, &wheel, &mut st, 0.0);
         assert_eq!(theme.scroll, 40.0);
+        // The scroll keys scroll it wherever the pointer is.
+        st.pointer = None;
+        let keys = DialogView { frame: FrameInfo { scroll_request: 10.0, ..v.frame }, ..v };
+        pass_with(&mut theme, &keys, &mut st, 0.0);
+        assert_eq!(theme.scroll, 50.0);
     }
 
     /// Hovering a button hides the focus border of the focused one; a focus move shows it again
