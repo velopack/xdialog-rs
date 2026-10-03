@@ -42,8 +42,7 @@ pub(crate) fn button(ui: &mut Ui<'_>,
                      label: &Rc<TextBlock>,
                      view: &DialogView<'_>,
                      tk: &UbuntuTokens,
-                     focus_suppressed: bool)
-                     -> ButtonInteraction {
+                     focus_suppressed: bool) {
     let st = ButtonInteraction::interact(ui, rect, index, view);
     // The focus ring shows whether or not the window is active.
     let focused = view.frame.focus_visible && st.focused;
@@ -62,7 +61,6 @@ pub(crate) fn button(ui: &mut Ui<'_>,
     ui.fill_rect(rect, BUTTON_RADIUS, look.fill);
     ui.stroke_rect(rect, BUTTON_RADIUS, BUTTON_BORDER, look.border);
     ui.text(label, caps_centered(rect, label), look.text);
-    st
 }
 
 // ------------------------------------------------------------------------------------------------

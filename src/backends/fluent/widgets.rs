@@ -47,8 +47,7 @@ pub(crate) fn button(ui: &mut Ui<'_>,
                      label: &Rc<TextBlock>,
                      accent: bool,
                      view: &DialogView<'_>,
-                     tk: &FluentTokens)
-                     -> ButtonInteraction {
+                     tk: &FluentTokens) {
     let st = ButtonInteraction::interact(ui, rect, index, view);
     let (std, acc) = if st.pointer_down && st.contains_pointer || st.key_pressed {
         (tk.std_pressed, tk.acc_pressed)
@@ -68,7 +67,6 @@ pub(crate) fn button(ui: &mut Ui<'_>,
         ui.stroke_rect(rect.inflate(2.0, 2.0), CORNER + 2.0, 2.0, tk.focus_outer);
     }
     ui.text(label, centered(rect, label.size).origin(), colors.text);
-    st
 }
 
 /// Button background: a 1 px border (`stroke`, with the `stroke_2` elevation edge at the top or

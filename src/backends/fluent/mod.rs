@@ -227,8 +227,7 @@ impl Theme for FluentTheme {
             let cells = columns(row, slots, BUTTON_GAP);
             for k in 0..n {
                 let index = n - 1 - k;
-                let st = widgets::button(ui, cells[slots - n + k], index, &labels[index], accent(index), view, &tk);
-                out.push_button(&st);
+                widgets::button(ui, cells[slots - n + k], index, &labels[index], accent(index), view, &tk);
             }
             win_h = row.y1 + PAD;
         }

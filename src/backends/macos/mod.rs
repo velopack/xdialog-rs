@@ -375,15 +375,13 @@ impl Theme for MacTheme {
                         col.space(m.stack_gap);
                     }
                     let r = col.row(BUTTON_H);
-                    let st = widgets::button(ui, r, index, &labels[index], m.button_radius, is_default(index), view, &tk);
-                    out.push_button(&st);
+                    widgets::button(ui, r, index, &labels[index], m.button_radius, is_default(index), view, &tk);
                 }
             } else {
                 // Side by side in API order; one button spans the row.
                 let cells = columns(Rect::new(PAD, top, WIDTH - PAD, top + BUTTON_H), n, m.row_gap);
                 for (index, cell) in cells.into_iter().enumerate() {
-                    let st = widgets::button(ui, cell, index, &labels[index], m.button_radius, is_default(index), view, &tk);
-                    out.push_button(&st);
+                    widgets::button(ui, cell, index, &labels[index], m.button_radius, is_default(index), view, &tk);
                 }
             }
         }

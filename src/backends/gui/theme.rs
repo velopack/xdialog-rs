@@ -101,7 +101,7 @@ impl DialogView<'_> {
 // What the theme built (theme -> core)
 // ------------------------------------------------------------------------------------------------
 
-/// One focusable button as laid out this pass.
+/// One focusable button as laid out this pass (recorded by [`ButtonInteraction::interact`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ButtonInfo {
     /// API index (into `view.buttons`).
@@ -127,16 +127,10 @@ pub(crate) struct DialogUiOutput {
     /// `request_inner_size` (top-left kept). Must be independent of the current window size.
     pub desired_size: Size,
     /// Every button in on-screen order, left to right: the Tab order (Tab moves forward through
-    /// this Vec, Shift+Tab backward) and the Left/Right arrow order.
+    /// this Vec, Shift+Tab backward) and the Left/Right arrow order. Core fills it from the pass's
+    /// [`ButtonInteraction::interact`] calls (in call order); the theme leaves it empty.
     pub buttons: Vec<ButtonInfo>,
     pub parts: Parts,
-}
-
-impl DialogUiOutput {
-    /// Record a button laid out this pass (Tab order = call order).
-    pub(crate) fn push_button(&mut self, b: &ButtonInteraction) {
-        self.buttons.push(ButtonInfo { index: b.index, rect: b.rect });
-    }
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -238,7 +232,8 @@ pub(crate) trait Theme {
     }
 
     /// Build the whole dialog into `ui` (origin top-left of the client area). Buttons MUST use
-    /// [`ButtonInteraction::interact`], so core can hit-test and focus them.
+    /// [`ButtonInteraction::interact`], in on-screen order: that is all core needs to hit-test,
+    /// focus, Tab through and expose them to assistive technology.
     ///
     /// The first call is the **measure pass**: an ordinary pass without input and before
     /// anything has focus, whose drawing core discards; the window is then created at
@@ -315,9 +310,11 @@ pub(crate) struct ButtonInteraction {
 }
 
 impl ButtonInteraction {
-    /// Register button `index` at `rect` for this pass and derive its states.
+    /// Register button `index` at `rect` for this pass (hit testing, and its place in
+    /// [`DialogUiOutput::buttons`]) and derive its states.
     pub(crate) fn interact(ui: &mut Ui<'_>, rect: Rect, index: usize, view: &DialogView<'_>) -> Self {
         let it = ui.interact(button_id(index), rect);
+        ui.buttons.push(ButtonInfo { index, rect });
         let focused = ui.focused_button() == Some(index);
         ButtonInteraction { index,
                             rect,
@@ -364,9 +361,10 @@ pub(crate) mod test_support {
     pub(crate) fn pass_with(theme: &mut dyn Theme, view: &DialogView<'_>, st: &mut UiState, t: f64) -> (DialogUiOutput, Vec<Shape>) {
         st.texts.begin_pass(theme.fonts());
         let mut ui = Ui::new(st, t);
-        let out = theme.ui(view, &mut ui);
-        let shapes = std::mem::take(&mut ui.shapes);
+        let mut out = theme.ui(view, &mut ui);
+        let pass = ui.finish();
+        out.buttons = pass.buttons;
         st.end_pass();
-        (out, shapes)
+        (out, pass.shapes)
     }
 }
