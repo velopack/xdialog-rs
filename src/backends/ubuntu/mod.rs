@@ -175,8 +175,7 @@ impl Theme for UbuntuTheme {
             self.update_focus_suppression(ui, &rects);
             // Tab order = on-screen order = API order.
             for (i, label) in labels.iter().enumerate() {
-                let st = widgets::button(ui, rects[i], i, label, view, &tk, self.focus_suppressed);
-                out.push_button(&st);
+                widgets::button(ui, rects[i], i, label, view, &tk, self.focus_suppressed);
             }
             bottom += footer_h;
         }

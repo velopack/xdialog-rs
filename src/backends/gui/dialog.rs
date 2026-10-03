@@ -234,7 +234,8 @@ impl Dialog {
         }
     }
 
-    /// One theme pass; stores the output, drawing and interactive rects.
+    /// One theme pass; stores the output (its buttons from the pass's `interact` calls), drawing
+    /// and interactive rects.
     fn run_pass(&mut self, sizing: bool) -> super::clock::Wants {
         let frame = if sizing { Default::default() } else { self.keyboard.frame_info(self.st.focus, &self.out) };
         self.update_icon();
@@ -251,11 +252,12 @@ impl Dialog {
                                 frame };
         let mut ui = Ui::with_buffers(&mut self.st, self.clock.now(), std::mem::take(&mut self.shapes), std::mem::take(&mut self.hits));
         self.out = self.theme.ui(&view, &mut ui);
-        let (shapes, hits, wants) = ui.finish();
-        self.shapes = shapes;
-        self.hits = hits;
+        let pass = ui.finish();
+        self.out.buttons = pass.buttons;
+        self.shapes = pass.shapes;
+        self.hits = pass.hits;
         self.st.end_pass();
-        wants
+        pass.wants
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -752,7 +754,6 @@ mod tests {
                 let fill =
                     ui.animate(button_id(i), if st.hovered { Color::from_rgb(255, 0, 0) } else { Color::GRAY }, Transition::linear(0.15));
                 ui.fill_rect(rect, 0.0, fill);
-                out.push_button(&st);
             }
             out.desired_size = Size::new(220.0 + 90.0 * view.buttons.len().saturating_sub(2) as f64, top + 40.0);
             out
@@ -838,6 +839,19 @@ mod tests {
         assert_eq!(r.d.take_resize(), None);
         // Default (last) button focused on open.
         assert_eq!(r.d.st.focus, Some(1));
+    }
+
+    /// `ButtonInteraction::interact` alone puts a button into the pass's `buttons` (keyboard
+    /// order, accessibility), in call order, with its rect.
+    #[test]
+    fn interact_records_the_buttons_in_call_order() {
+        let mut r = Rig::new(DialogKind::Message, &["A", "B", "C"], None);
+        r.at(0.0);
+        assert_eq!(r.d.out.buttons.iter().map(|b| b.index).collect::<Vec<_>>(), vec![0, 1, 2]);
+        for b in &r.d.out.buttons {
+            assert_eq!((b.rect.x0, b.rect.width(), b.rect.height()), (10.0 + 90.0 * b.index as f64, 80.0, 30.0));
+        }
+        assert_eq!(r.d.a11y_tree().nodes.iter().filter(|(_, n)| n.role() == accesskit::Role::Button).count(), 3);
     }
 
     #[test]

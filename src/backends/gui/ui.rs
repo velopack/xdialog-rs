@@ -8,7 +8,7 @@ use std::rc::Rc;
 use super::anim::{capsule_pos, Lerp, Transition, Tweens};
 use super::clock::Wants;
 use super::text::{TextBlock, TextCache, TextStyle};
-use super::theme::FrameInfo;
+use super::theme::{ButtonInfo, FrameInfo};
 use crate::backends::draw::{Color, Image, LineCap, Point, Rect, Shape, Size, Text, Vec2};
 
 /// A stable widget identity (tweens, hit testing, focus).
@@ -82,6 +82,15 @@ pub(crate) struct Interaction {
     pub pointer_down: bool,
 }
 
+/// What a pass produced ([`Ui::finish`]): the drawing, the interactive rects, the buttons in
+/// Tab order and what the next frame should be.
+pub(crate) struct PassOutput {
+    pub shapes: Vec<Shape>,
+    pub hits: Vec<(Id, Rect)>,
+    pub buttons: Vec<ButtonInfo>,
+    pub wants: Wants,
+}
+
 /// One pass: the theme's view of core (see the module docs).
 pub(crate) struct Ui<'a> {
     st: &'a mut UiState,
@@ -89,6 +98,8 @@ pub(crate) struct Ui<'a> {
     pub(crate) shapes: Vec<Shape>,
     /// Interactive rects in paint order (core hit-tests the next input against them).
     pub(crate) hits: Vec<(Id, Rect)>,
+    /// The buttons in `ButtonInteraction::interact` order (the Tab order).
+    pub(crate) buttons: Vec<ButtonInfo>,
     /// A tween is running: another frame at the cadence.
     pub(crate) repaint: bool,
     /// Continuous motion: frames at the monitor's refresh rate.
@@ -106,12 +117,13 @@ impl<'a> Ui<'a> {
     pub(crate) fn with_buffers(st: &'a mut UiState, time: f64, mut shapes: Vec<Shape>, mut hits: Vec<(Id, Rect)>) -> Self {
         shapes.clear();
         hits.clear();
-        Ui { st, time, shapes, hits, repaint: false, smooth: false }
+        Ui { st, time, shapes, hits, buttons: Vec::new(), repaint: false, smooth: false }
     }
 
-    /// End the pass: the drawing, the interactive rects and what the next frame should be.
-    pub(crate) fn finish(self) -> (Vec<Shape>, Vec<(Id, Rect)>, Wants) {
-        (self.shapes, self.hits, Wants { repaint: self.repaint, smooth: self.smooth })
+    /// End the pass.
+    pub(crate) fn finish(self) -> PassOutput {
+        let wants = Wants { repaint: self.repaint, smooth: self.smooth };
+        PassOutput { shapes: self.shapes, hits: self.hits, buttons: self.buttons, wants }
     }
 
     // ---- time and animation ---------------------------------------------------------------------

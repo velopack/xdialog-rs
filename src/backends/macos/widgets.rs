@@ -39,8 +39,7 @@ pub(crate) fn button(ui: &mut Ui<'_>,
                      radius: f64,
                      default: bool,
                      view: &DialogView<'_>,
-                     tk: &MacTokens)
-                     -> ButtonInteraction {
+                     tk: &MacTokens) {
     let st = ButtonInteraction::interact(ui, rect, index, view);
     let pressed = st.pointer_down && st.contains_pointer || st.key_pressed;
     let fade = if pressed { Transition::INSTANT } else { HOVER_FADE };
@@ -78,7 +77,6 @@ pub(crate) fn button(ui: &mut Ui<'_>,
         ui.stroke_rect(rect.inflate(d, d), radius + d, RING_W, tk.focus_ring);
     }
     ui.text(label, caps_centered(rect, label), text);
-    st
 }
 
 // ------------------------------------------------------------------------------------------------
