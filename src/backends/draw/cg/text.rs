@@ -37,7 +37,6 @@ pub(crate) struct Line {
 }
 
 pub(crate) struct CtLayout {
-    #[allow(dead_code)] // `TextLayout::id`, used by the soft backend only
     id: u64,
     size: Size,
     line_count: usize,

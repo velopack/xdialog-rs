@@ -541,7 +541,9 @@ mod tests {
         assert_eq!(wakes.load(Ordering::SeqCst), 2, "a request between runs wakes the next run");
 
         // Shutdown: the queue is rejected, later requests fail fast, nothing wakes any more; a
-        // second shutdown is a no-op.
+        // second shutdown is a no-op. Rearmed first, so only the closed inbox keeps the rejections
+        // from waking.
+        host.rt.as_ref().unwrap().rearm_wake();
         host.shutdown();
         assert!(host.is_shut_down());
         for queued in [&a, &b, &c, &d] {

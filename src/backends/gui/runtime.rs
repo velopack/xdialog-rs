@@ -591,13 +591,17 @@ impl DialogWindow {
     fn redraw(&mut self) {
         let size = self.window.inner_size();
         if self.occluded || size.width == 0 || size.height == 0 {
+            // The frame that reveals the window must present.
+            self.dialog.schedule_mut().skipped();
             return;
         }
         let period = self.monitor_period();
         self.dialog.schedule_mut().set_monitor_period(period);
-        // Wayland: requests the frame callback that throttles redraws of a hidden surface.
-        self.window.pre_present_notify();
-        if let Err(e) = self.dialog.frame() {
+        // Wayland: requests the frame callback that throttles redraws of a hidden surface. Only
+        // before an actual present: winit withholds redraws until the callback, which only a
+        // commit brings.
+        let window = &self.window;
+        if let Err(e) = self.dialog.frame_with(|| window.pre_present_notify()) {
             warn!("xdialog: present failed: {e}");
         }
         self.publish_a11y();

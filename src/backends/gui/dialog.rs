@@ -284,6 +284,12 @@ impl Dialog {
     /// screen; one the window system asked for always is (its content may be gone).
     /// `Err`: presenting failed (the frame is otherwise complete).
     pub(crate) fn frame(&mut self) -> Result<(), DrawError> {
+        self.frame_with(|| {})
+    }
+
+    /// [`Dialog::frame`], calling `before_present` right before presenting (not when the frame is
+    /// skipped).
+    pub(crate) fn frame_with(&mut self, before_present: impl FnOnce()) -> Result<(), DrawError> {
         if self.is_closed() {
             return Ok(());
         }
@@ -301,6 +307,7 @@ impl Dialog {
         let with = (self.size_px, self.ppp, clear);
         let unchanged = self.schedule.self_scheduled() && self.presented_with == Some(with) && self.presented == self.shapes;
         if let Some(target) = self.target.as_mut().filter(|_| !unchanged) {
+            before_present();
             presented = target.present(&Frame { shapes: &self.shapes, size_px: self.size_px, ppp: self.ppp, clear });
             self.presented_with = presented.is_ok().then_some(with);
             // The next pass records into the old buffer.

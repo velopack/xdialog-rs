@@ -43,7 +43,8 @@ jobs:
         run: sed -i '0,/^xdialog = ".*"/s//xdialog = "${{ inputs.version }}"/' README.md
 
       - name: Name the Unreleased section of the CHANGELOG
-        run: sed -i 's/^## Unreleased$/## ${{ inputs.version }}/' CHANGELOG.md
+        # A new, empty `## Unreleased` goes above it for the next release.
+        run: sed -i 's/^## Unreleased$/## Unreleased\n\n## ${{ inputs.version }}/' CHANGELOG.md
 
       - name: Verify version was updated
         run: |
