@@ -234,7 +234,8 @@ impl Runtime {
         match ev {
             WindowEvent::RedrawRequested => w.redraw(),
             WindowEvent::Occluded(occluded) => {
-                w.occluded = *occluded;
+                // A window placed by `XDIALOG_TEST_POS` may be off every monitor, which X11 reports as occluded.
+                w.occluded = *occluded && test_position_raw().is_none();
                 if !occluded {
                     w.window.request_redraw(); // the schedule went idle while hidden
                 }
@@ -671,13 +672,18 @@ pub(super) fn no_activate() -> bool {
     std::env::var_os("XDIALOG_TEST_NO_ACTIVATE").is_some_and(|v| !v.is_empty() && v != "0")
 }
 
-/// `XDIALOG_TEST_POS=x,y|offscreen` (test builds only): physical top-left of a new window of
-/// `size_px`; `virtual_left` is the left edge of the whole virtual desktop (physical px).
-fn test_position(size_px: [u32; 2], virtual_left: impl FnOnce() -> i32) -> Option<[i32; 2]> {
+/// `XDIALOG_TEST_POS`, when test env vars are honoured.
+fn test_position_raw() -> Option<String> {
     if !test_env_enabled() {
         return None;
     }
-    let v = std::env::var("XDIALOG_TEST_POS").ok()?;
+    std::env::var("XDIALOG_TEST_POS").ok()
+}
+
+/// `XDIALOG_TEST_POS=x,y|offscreen` (test builds only): physical top-left of a new window of
+/// `size_px`; `virtual_left` is the left edge of the whole virtual desktop (physical px).
+fn test_position(size_px: [u32; 2], virtual_left: impl FnOnce() -> i32) -> Option<[i32; 2]> {
+    let v = test_position_raw()?;
     let v = v.trim();
     if v.eq_ignore_ascii_case("offscreen") {
         // Left of the whole virtual desktop: never on a real monitor.
