@@ -33,7 +33,12 @@
     },
     {
       "groupName": "windows crates",
-      "matchPackageNames": ["windows", "widestring"]
+      "matchPackageNames": ["windows", "windows-numerics", "widestring"]
+    },
+    {
+      "description": "windows 0.62 APIs take windows-numerics 0.3 types; lift this once a windows 0.100 release exists.",
+      "matchPackageNames": ["windows-numerics"],
+      "allowedVersions": "<0.100"
     },
     {
       "groupName": "linux crates",
