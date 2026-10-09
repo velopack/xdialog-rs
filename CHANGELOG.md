@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 4.1.1
+
 ### Changed
 
 - `ProgressDialogProxy` is `#[must_use]` (dropping it closes the dialog, so `show_progress(..)?;`
