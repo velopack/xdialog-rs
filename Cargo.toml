@@ -111,7 +111,7 @@ core-foundation-sys = { version = "0.8", optional = true }
 # Win32 Backend; Direct2D + DirectWrite drawing backend (`backends/draw/d2d`).
 [target.'cfg(windows)'.dependencies]
 # DrawLine / DrawTextLayout take `windows_numerics::Vector2` (not re-exported by `windows`).
-windows-numerics = "0.3.1"
+windows-numerics = "0.100.0"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_UI_Controls",
