@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 4.1.2
+
 ### Fixed
 
 - Windows: an executable linking the drawn backend starts on Windows 7 and 8 again. xdialog
