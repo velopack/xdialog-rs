@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixed
+
+- Windows: an executable linking the drawn backend starts on Windows 7 and 8 again. xdialog
+  imported `SetThreadDpiAwarenessContext` (Windows 10 1607+) statically, so the loader refused the
+  executable with `STATUS_ENTRYPOINT_NOT_FOUND` (0xC0000139); it is now resolved at run time and
+  skipped where missing.
+
 ## 4.1.1
 
 ### Changed

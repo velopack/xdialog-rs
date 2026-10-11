@@ -4,11 +4,31 @@
 //! Never mutates process-wide state: DPI awareness is set per thread and restored by a guard.
 //! No WinRT (see the MTA factory-cache crash note), so the accent comes from the registry.
 
-use windows::core::HSTRING;
+use std::sync::OnceLock;
+
+use windows::core::{s, w, HSTRING};
 use windows::Win32::Foundation::{ERROR_SUCCESS, HWND};
 use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
+use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, REG_ROUTINE_FLAGS, RRF_RT_REG_BINARY, RRF_RT_REG_DWORD};
-use windows::Win32::UI::HiDpi::{SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2};
+use windows::Win32::UI::HiDpi::{DPI_AWARENESS_CONTEXT, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2};
+
+type SetThreadDpiAwarenessContextFn = unsafe extern "system" fn(DPI_AWARENESS_CONTEXT) -> DPI_AWARENESS_CONTEXT;
+
+/// `SetThreadDpiAwarenessContext` (Windows 10 1607+), resolved at run time rather than imported so
+/// the binary still loads on older Windows, where it is `None`. Resolved once per process.
+fn set_thread_dpi_awareness_context() -> Option<SetThreadDpiAwarenessContextFn> {
+    static F: OnceLock<Option<SetThreadDpiAwarenessContextFn>> = OnceLock::new();
+    *F.get_or_init(|| {
+          // SAFETY: plain loader calls; user32 stays loaded for the life of the process.
+          unsafe {
+              let module = LoadLibraryW(w!("user32.dll")).ok()?;
+              let f = GetProcAddress(module, s!("SetThreadDpiAwarenessContext"))?;
+              // SAFETY: the documented signature of `SetThreadDpiAwarenessContext`.
+              Some(std::mem::transmute::<unsafe extern "system" fn() -> isize, SetThreadDpiAwarenessContextFn>(f))
+          }
+      })
+}
 
 /// Sets the calling thread's DPI awareness to per-monitor v2 and restores the previous context
 /// when dropped (builder mode runs on the user's main thread).
@@ -18,9 +38,12 @@ pub(crate) struct ThreadDpiGuard {
 
 impl ThreadDpiGuard {
     pub(crate) fn per_monitor_v2() -> Self {
-        // SAFETY: plain Win32 call on the current thread; a null return (unsupported or invalid)
-        // is handled by not restoring.
-        let prev = unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+        // A null `prev` (no such function, or an invalid return) is handled by not restoring.
+        let prev = match set_thread_dpi_awareness_context() {
+            // SAFETY: plain Win32 call on the current thread.
+            Some(f) => unsafe { f(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) },
+            None => DPI_AWARENESS_CONTEXT::default(),
+        };
         ThreadDpiGuard { prev }
     }
 }
@@ -29,8 +52,8 @@ impl Drop for ThreadDpiGuard {
     fn drop(&mut self) {
         if !self.prev.0.is_null() {
             // SAFETY: restores the context returned by the matching Set call on this thread.
-            unsafe {
-                SetThreadDpiAwarenessContext(self.prev);
+            if let Some(f) = set_thread_dpi_awareness_context() {
+                unsafe { f(self.prev) };
             }
         }
     }
@@ -73,12 +96,12 @@ pub(crate) fn read_hkcu_binary(subkey: &str, value: &str) -> Option<Vec<u8>> {
 
 /// Windows 10 or later, from `RtlGetVersion` (not subject to the manifest's version lie). Cached.
 pub(crate) fn windows_10_or_later() -> bool {
-    static WIN10: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    static WIN10: OnceLock<bool> = OnceLock::new();
     *WIN10.get_or_init(|| {
               let mut info = windows::Win32::System::SystemInformation::OSVERSIONINFOW {
-                  dwOSVersionInfoSize: size_of::<windows::Win32::System::SystemInformation::OSVERSIONINFOW>() as u32,
-                  ..Default::default()
-              };
+            dwOSVersionInfoSize: size_of::<windows::Win32::System::SystemInformation::OSVERSIONINFOW>() as u32,
+            ..Default::default()
+        };
               // SAFETY: `info` is a writable OSVERSIONINFOW with its size field set, as required.
               // On failure the struct stays zeroed (reads as < 10: the TaskDialog side).
               let _ = unsafe { windows::Wdk::System::SystemServices::RtlGetVersion(&mut info) };
