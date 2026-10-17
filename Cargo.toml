@@ -52,7 +52,7 @@ softbuffer = "0.4.8"
 # fontconfig). This cfg mirrors the `mod backend` switch in `backends/draw/mod.rs` literally:
 # Windows and macOS never compile these crates.
 [target.'cfg(not(any(windows, target_os = "macos")))'.dependencies]
-vello_cpu = { version = "0.2", default-features = false, features = ["std", "text", "u8_pipeline", "png"] }
+vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "u8_pipeline", "png"] }
 # `Tint` for vello_cpu's `set_tint` (vello_cpu does not re-export it).
 vello_common = { version = "0.2", default-features = false }
 cosmic-text = { version = "0.19", default-features = false, features = ["std", "peniko"] }
