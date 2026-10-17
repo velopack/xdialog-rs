@@ -54,7 +54,7 @@ softbuffer = "0.4.8"
 [target.'cfg(not(any(windows, target_os = "macos")))'.dependencies]
 vello_cpu = { version = "0.2", default-features = false, features = ["std", "text", "u8_pipeline", "png"] }
 # `Tint` for vello_cpu's `set_tint` (vello_cpu does not re-export it).
-vello_common = { version = "0.2", default-features = false }
+vello_common = { version = "0.3", default-features = false }
 cosmic-text = { version = "0.19", default-features = false, features = ["std", "peniko"] }
 skrifa = { version = "0.48.0", default-features = false, features = ["std"] }
 sys-locale = "0.3"
