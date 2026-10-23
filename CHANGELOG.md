@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- Linux/BSD: the software renderer uses vello_cpu 0.3; `vello_common` is no longer a direct
+  dependency.
+
 ## 4.1.2
 
 ### Fixed
