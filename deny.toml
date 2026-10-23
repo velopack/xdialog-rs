@@ -10,6 +10,12 @@ ignore = [
     # fontdb (the system font scan of the software renderer). xdialog's own glyph code uses
     # skrifa. No replacement upstream yet.
     "RUSTSEC-2026-0192",
+    # zvariant, zbus_names and zvariant_derive unmaintained: merged into zbus 6. Linux/BSD only:
+    # pulled in by zbus 5 (xdialog's dark-mode watcher, appearance.rs) and accesskit_unix ->
+    # atspi 0.29, which still requires zbus 5. Drop these once accesskit moves to zbus 6.
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0372",
 ]
 
 [licenses]
