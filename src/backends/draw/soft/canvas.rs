@@ -12,11 +12,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use vello_common::paint::{Tint, TintMode};
-use vello_cpu::color::PremulRgba8;
 use vello_cpu::kurbo::{self as vk, Affine, Shape as _};
-use vello_cpu::peniko::{ImageQuality, ImageSampler};
-use vello_cpu::{Glyph, ImageSource, Pixmap, RenderContext, Resources};
+use vello_cpu::peniko::{ImageAlphaType, ImageQuality, ImageSampler};
+use vello_cpu::{Glyph, ImageSource, PixelMetadata, Pixmap, RenderContext, Resources, Tint, TintMode};
 
 use super::text::Shaped;
 use crate::backends::draw::{list, Color, DrawError, Frame, Image, LineCap, Point, Rect, TextLayout};
@@ -59,10 +57,14 @@ impl TextRaster {
                     run.glyphs
                        .iter()
                        .map(|g| Glyph { id: g.id, x: (pad + g.x as f64 * scale) as f32, y: (pad + (g.y as f64 * scale).round()) as f32 });
-                ctx.glyph_run(resources, &run.face.data)
-                   .font_size(run.font_size * scale as f32)
-                   .normalized_coords(&run.face.coords)
-                   .fill_glyphs(glyphs);
+                // A failed glyph is skipped; the rest of the run still renders.
+                if let Err(e) = ctx.glyph_run(resources, &run.face.data)
+                                   .font_size(run.font_size * scale as f32)
+                                   .normalized_coords(&run.face.coords)
+                                   .fill_glyphs(glyphs)
+                {
+                    warn!("xdialog: some glyphs failed to render: {e}");
+                }
             }
             ctx.flush();
             let mut pixmap = Pixmap::new(w, h);
@@ -81,8 +83,8 @@ struct CachedImage {
 
 impl CachedImage {
     fn new(image: &Image, w: u16, h: u16) -> Self {
-        let data = image.rgba().as_chunks::<4>().0.iter().map(|p| PremulRgba8 { r: p[0], g: p[1], b: p[2], a: p[3] }).collect();
-        CachedImage { pixmap: Arc::new(Pixmap::from_parts(data, w, h)), used: true }
+        let meta = PixelMetadata::new(ImageAlphaType::AlphaPremultiplied, true);
+        CachedImage { pixmap: Arc::new(Pixmap::from_parts(image.rgba().to_vec(), w, h, meta)), used: true }
     }
 }
 
