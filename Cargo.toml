@@ -59,7 +59,7 @@ sys-locale = "0.3"
 
 # Linux: the XDG desktop portal (appearance).
 [target.'cfg(target_os = "linux")'.dependencies]
-zbus = "5"
+zbus = "6"
 
 # AppKit Backend; CoreGraphics + CoreText drawing backend (`backends/draw/cg`).
 [target.'cfg(target_os = "macos")'.dependencies]
