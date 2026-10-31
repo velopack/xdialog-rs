@@ -40,7 +40,7 @@ accesskit_winit = { version = "0.34", default-features = false, features = ["rwh
 # Paragraph base direction only (`get_base_direction`); every drawing backend does bidi itself.
 unicode-bidi = "0.3.18"
 # `XDialogOptions::icon_source`: .ico / .png (ico) and .icns (icns) decoding.
-ico = "0.5.0"
+ico = "0.6.0"
 icns = { version = "0.5.0", default-features = false, features = ["pngio"] }
 
 # Presenting drawn frames through a window buffer: the software backend (Linux and other Unix)
