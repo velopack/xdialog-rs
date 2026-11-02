@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 4.1.4
+
 ### Changed
 
 - Dependencies: `ico` 0.6, `skrifa` 0.49 and the lock file (accesskit 0.25.2, smallvec 1.16.4).
