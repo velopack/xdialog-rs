@@ -60,7 +60,7 @@ impl IconFile {
 
     pub(crate) fn parse(bytes: &[u8]) -> Result<IconFile, String> {
         let file = if bytes.starts_with(PNG_SIGNATURE) {
-            IconFile::Png(ico::IconImage::read_png(bytes).map_err(|e| format!("PNG: {e}"))?)
+            IconFile::Png(ico::IconImage::read_png(std::io::Cursor::new(bytes)).map_err(|e| format!("PNG: {e}"))?)
         } else if bytes.starts_with(b"icns") {
             IconFile::Icns(IconFamily::read(bytes).map_err(|e| format!("ICNS: {e}"))?)
         } else if bytes.starts_with(&[0, 0, 1, 0]) {

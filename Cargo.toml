@@ -40,7 +40,7 @@ accesskit_winit = { version = "0.34", default-features = false, features = ["rwh
 # Paragraph base direction only (`get_base_direction`); every drawing backend does bidi itself.
 unicode-bidi = "0.3.18"
 # `XDialogOptions::icon_source`: .ico / .png (ico) and .icns (icns) decoding.
-ico = "0.5.0"
+ico = "0.6.0"
 icns = { version = "0.5.0", default-features = false, features = ["pngio"] }
 
 # Presenting drawn frames through a window buffer: the software backend (Linux and other Unix)
@@ -54,7 +54,7 @@ softbuffer = "0.4.8"
 [target.'cfg(not(any(windows, target_os = "macos")))'.dependencies]
 vello_cpu = { version = "0.3", default-features = false, features = ["std", "text", "u8_pipeline", "png"] }
 cosmic-text = { version = "0.19", default-features = false, features = ["std", "peniko"] }
-skrifa = { version = "0.48.0", default-features = false, features = ["std"] }
+skrifa = { version = "0.49.0", default-features = false, features = ["std"] }
 sys-locale = "0.3"
 
 # Linux: the XDG desktop portal (appearance).
