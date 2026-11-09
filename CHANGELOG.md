@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- Dependencies: the lock file, including async-executor 1.14.1 (1.14.0 was yanked for a
+  use-after-free), log 0.4.35, rustix 1.1.6 and wasm-bindgen 0.2.130.
+
 ## 4.1.4
 
 ### Changed
