@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- Dependencies: the lock file (patch and minor releases of transitive crates: cc, flate2, itoa,
+  smallvec, syn, the toml family, uuid and winnow).
+
 ## 4.1.5
 
 ### Changed
