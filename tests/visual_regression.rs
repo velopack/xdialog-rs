@@ -8,7 +8,7 @@
 //!
 //! Linux: X11 captures the dialog's client area (by title); Wayland captures the whole output with
 //! `grim` (the compositor needs wlr-screencopy, e.g. headless sway), so the reference includes the
-//! compositor's decoration.
+//! compositor's decoration and background (set to a solid colour when the compositor is sway).
 
 use std::path::Path;
 use std::thread;
@@ -139,6 +139,28 @@ mod capture {
         Ok(RgbaImage::from_raw(width.into(), height.into(), rgba))
     }
 
+    /// Paints sway's background in the references' solid colour (sway 1.9's clear colour, #3f3f3f)
+    /// when sway is the compositor: the default background differs between sway versions and
+    /// packages, and the Wayland capture includes it. Best effort: without sway this does nothing.
+    pub fn prepare() {
+        if std::env::var_os("WAYLAND_DISPLAY").is_none() {
+            return;
+        }
+        // SWAYSOCK, or the socket sway creates in XDG_RUNTIME_DIR (sway-ipc.<uid>.<pid>.sock).
+        let socket = std::env::var_os("SWAYSOCK").map(std::path::PathBuf::from).or_else(|| {
+            std::fs::read_dir(std::env::var_os("XDG_RUNTIME_DIR")?).ok()?
+                                                                   .flatten()
+                                                                   .map(|e| e.path())
+                                                                   .find(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("sway-ipc.")))
+        });
+        let Some(socket) = socket else { return };
+        match std::process::Command::new("swaymsg").arg("-s").arg(&socket).args(["output", "*", "bg", "#3f3f3f", "solid_color"]).output() {
+            Ok(o) if o.status.success() => thread::sleep(Duration::from_millis(500)), // swaybg restarts
+            Ok(o) => eprintln!("swaymsg failed: {}", String::from_utf8_lossy(&o.stderr)),
+            Err(e) => eprintln!("swaymsg: {e}"),
+        }
+    }
+
     /// The whole compositor output, through `grim`.
     fn try_capture_wayland() -> Option<RgbaImage> {
         let file = Path::new(env!("CARGO_TARGET_TMPDIR")).join("wayland_capture.png");
@@ -231,6 +253,8 @@ fn main() {
     } else {
         XDialogBackend::Auto
     };
+    #[cfg(target_os = "linux")]
+    capture::prepare();
     let captures = XDialogBuilder::new().with_backend(backend).run_loop(run_all_captures);
 
     let platform = match () {
