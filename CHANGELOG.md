@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed
+
+- Linux/BSD: the software renderer uses vello_cpu 0.4. Its glyph cache (glifo) now uses the same
+  skrifa (0.49) as xdialog, so builds compile one fewer copy of skrifa and read-fonts.
+- Dependencies: the lock file, including bumpalo 3.20.4 (a fix for undefined behaviour when
+  zero-sized types are allocated on several threads, GHSA-j7wg-xg3h-2pr6), flate2 1.1.11 and
+  syn 3.0.10.
+
 ## 4.1.5
 
 ### Changed
