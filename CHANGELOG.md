@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 4.1.6
+
 ### Changed
 
 - Linux/BSD: the software renderer uses vello_cpu 0.4. Its glyph cache (glifo) now uses the same
